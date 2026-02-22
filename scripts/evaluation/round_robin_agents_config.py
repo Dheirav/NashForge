@@ -243,55 +243,65 @@ def run_tournament_multitable(agents, hands, table_size=6, min_encounters=1):
     Returns:
         Results dict with agent statistics
     """
-    print(f"\nGenerating {table_size}-player table combinations...")
+    print(f"\nGenerating {table_size}-player table combinations (round-robin)...")
     print(f"Target: Each pair of agents meets at least {min_encounters} time(s)")
-    
-    # Generate all possible table combinations
-    all_tables = list(combinations(range(len(agents)), table_size))
-    
-    # Track how many times each pair has been covered
-    from collections import defaultdict
-    pair_encounter_count = defaultdict(int)
+
+    import random as _random
+    n = len(agents)
+    total_pairs = n * (n - 1) // 2
+
+    # Use a numpy matrix for fast pairwise encounter tracking
+    encounter_matrix = np.zeros((n, n), dtype=np.int32)
+
     tables_to_play = []
-    
-    total_pairs = len(agents) * (len(agents) - 1) // 2
-    target_encounters = total_pairs * min_encounters
-    
-    # Greedy algorithm to select minimal tables ensuring all pairs meet min_encounters times
-    while sum(pair_encounter_count.values()) < target_encounters:
-        best_table = None
-        best_score = 0
-        
-        for table in all_tables:
-            # Count how many under-covered pairs this table would help
-            score = 0
-            table_pairs = list(combinations(table, 2))
-            for pair in table_pairs:
-                if pair_encounter_count[pair] < min_encounters:
-                    # Prioritize pairs that haven't met enough times
-                    score += (min_encounters - pair_encounter_count[pair])
-            
-            if score > best_score:
-                best_score = score
-                best_table = table
-        
-        if best_table is None or best_score == 0:
+
+    # Round-robin: each round, shuffle agents and partition into tables of table_size.
+    # Pad with a dummy agent index if not divisible.
+    # Repeat rounds until all pairs meet min_encounters.
+    round_num = 0
+    max_rounds = min_encounters * (n + table_size)  # Safety cap to prevent infinite loops
+
+    while True:
+        # Check if all pairs have met min_encounters
+        # Only check the upper triangle (pairs)
+        upper = encounter_matrix[np.triu_indices(n, k=1)]
+        if np.all(upper >= min_encounters):
             break
-        
-        tables_to_play.append(best_table)
-        # Update encounter counts
-        for pair in combinations(best_table, 2):
-            pair_encounter_count[pair] += 1
-    
-    # Count how many pairs have met the minimum
-    pairs_meeting_target = sum(1 for count in pair_encounter_count.values() if count >= min_encounters)
-    print(f"Selected {len(tables_to_play)} tables")
+        if round_num >= max_rounds:
+            print(f"  Warning: Reached max rounds ({max_rounds}), some pairs may not meet target.")
+            break
+
+        # Shuffle agent indices for this round
+        indices = list(range(n))
+        _random.shuffle(indices)
+
+        # Pad to be divisible by table_size
+        remainder = len(indices) % table_size
+        if remainder != 0:
+            # Add dummy padding (will be filtered out when assigning tables)
+            indices += [-1] * (table_size - remainder)
+
+        # Partition into tables
+        for i in range(0, len(indices), table_size):
+            table = [idx for idx in indices[i:i + table_size] if idx != -1]
+            if len(table) < 2:
+                continue
+            tables_to_play.append(tuple(table))
+            # Update encounter matrix for all pairs in this table
+            for a, b in combinations(table, 2):
+                encounter_matrix[a, b] += 1
+                encounter_matrix[b, a] += 1
+
+        round_num += 1
+
+    upper = encounter_matrix[np.triu_indices(n, k=1)]
+    pairs_meeting_target = int(np.sum(upper >= min_encounters))
+    print(f"Selected {len(tables_to_play)} tables over {round_num} rounds")
     print(f"Coverage: {pairs_meeting_target}/{total_pairs} pairs meet {min_encounters}+ times")
-    
-    # Show encounter distribution
-    min_count = min(pair_encounter_count.values()) if pair_encounter_count else 0
-    max_count = max(pair_encounter_count.values()) if pair_encounter_count else 0
-    avg_count = sum(pair_encounter_count.values()) / len(pair_encounter_count) if pair_encounter_count else 0
+
+    min_count = int(np.min(upper)) if len(upper) > 0 else 0
+    max_count = int(np.max(upper)) if len(upper) > 0 else 0
+    avg_count = float(np.mean(upper)) if len(upper) > 0 else 0.0
     print(f"Encounter distribution: min={min_count}, max={max_count}, avg={avg_count:.1f}")
     
     # Load all agents into memory

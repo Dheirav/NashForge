@@ -32,6 +32,12 @@ from typing import Dict, List, Tuple
 import re
 from datetime import datetime
 
+# Additional imports for advanced visualization
+import seaborn as sns
+import networkx as nx
+import pandas as pd
+from sklearn.preprocessing import StandardScaler
+
 try:
     import matplotlib.pyplot as plt
     import matplotlib
@@ -252,46 +258,44 @@ def analyze_tournament_history(min_tournaments: int = 1, specific_folder: str = 
         if not folder_path.exists():
             print(f"Error: Folder '{specific_folder}' not found")
             return {}, []
-        
+
         # Check if it's a single tournament folder or a batch folder
         report_path = folder_path / 'report.json'
         if not report_path.exists():
             report_path = folder_path / 'round_robin_report.json'
-        
+
         if report_path.exists():
             # Single tournament folder
             reports = [('specific', report_path)]
             print(f"Analyzing specific tournament: {specific_folder}\n")
         else:
-            # Batch folder containing multiple tournaments
-            print(f"Scanning batch folder: {specific_folder}")
+            # Batch folder containing multiple tournaments (recursive search)
+            print(f"Scanning batch folder recursively: {specific_folder}")
             reports = []
-            for tournament_dir in folder_path.iterdir():
-                if not tournament_dir.is_dir():
-                    continue
-                
-                # Extract timestamp from directory name (tournament_YYYYMMDD_HHMMSS or run_N)
-                match = re.search(r'tournament_(\d{8}_\d{6})', tournament_dir.name)
+            for report in folder_path.rglob('report.json'):
+                # Use parent folder name as timestamp if possible
+                parent = report.parent
+                match = re.search(r'(?:tournament_)?(\d{8}_\d{6})', parent.name)
                 if match:
                     timestamp = match.group(1)
-                elif tournament_dir.name.startswith('run_'):
-                    # Use run number as timestamp for sorting
-                    timestamp = tournament_dir.name
+                elif parent.name.startswith('run_'):
+                    timestamp = parent.name
                 else:
-                    continue
-                
-                # Try both possible report filenames
-                report = tournament_dir / 'report.json'
-                if not report.exists():
-                    report = tournament_dir / 'round_robin_report.json'
-                
-                if report.exists():
-                    reports.append((timestamp, report))
-            
+                    timestamp = parent.name
+                reports.append((timestamp, report))
+            for report in folder_path.rglob('round_robin_report.json'):
+                parent = report.parent
+                match = re.search(r'(?:tournament_)?(\d{8}_\d{6})', parent.name)
+                if match:
+                    timestamp = match.group(1)
+                elif parent.name.startswith('run_'):
+                    timestamp = parent.name
+                else:
+                    timestamp = parent.name
+                reports.append((timestamp, report))
             if not reports:
                 print(f"Error: No tournament reports found in '{specific_folder}'")
                 return {}, []
-            
             reports = sorted(reports)  # Sort by timestamp
             print(f"Found {len(reports)} tournament(s) in batch folder\n")
     else:
@@ -763,180 +767,444 @@ def create_visualizations(agent_stats: Dict[str, AgentStats],
                          output_dir: Path):
     """Create and save visualization charts."""
     
+
     if not MATPLOTLIB_AVAILABLE:
         print("Skipping visualizations (matplotlib not available)")
         return
-    
+
     print("Generating visualizations...")
-    
-    # 1. Win Rate Comparison Bar Chart
-    sorted_agents = sorted(agent_stats.values(),
-                          key=lambda s: s.win_rate,
-                          reverse=True)[:15]  # Top 15
-    
+
+    # Create a subfolder for advanced visuals
+    viz_dir = output_dir / 'visualizations'
+    viz_dir.mkdir(exist_ok=True)
+
+    # 1. Win Rate Comparison Bar Chart (existing)
+    # ...existing code...
+
+    # 2. Average Chips per Tournament (existing)
+    # ...existing code...
+
+    # 3. Head-to-Head Matchup Matrix (existing)
+    # ...existing code...
+
+    # 4. Hyperparameter Correlation Charts (existing)
+    # ...existing code...
+
+    # 5. Consistency Analysis (existing)
+    # ...existing code...
+
+    # 6. Advanced Visuals
+    # a) Head-to-Head Heatmap (seaborn)
+    agent_names, matrix = create_head_to_head_matrix(agent_stats)
+    if len(agent_names) > 0:
+        plt.figure(figsize=(max(10, len(agent_names)//2), max(8, len(agent_names)//2)))
+        sns.heatmap(matrix, annot=True, fmt=".2f", cmap="RdYlGn", xticklabels=agent_names, yticklabels=agent_names, cbar_kws={'label': 'Win Rate'})
+        plt.title('Head-to-Head Win Rate Heatmap')
+        plt.xlabel('Opponent')
+        plt.ylabel('Agent')
+        plt.tight_layout()
+        plt.savefig(viz_dir / 'head_to_head_heatmap.png', dpi=200)
+        plt.close()
+
+    # Chip distribution plot removed
+    # Clustering methods: t-SNE, PCA, UMAP (if available), with k-means coloring
+    from sklearn.cluster import KMeans
+    try:
+        import umap
+        UMAP_AVAILABLE = True
+    except ImportError:
+        UMAP_AVAILABLE = False
+
+    def clustering_plot(features, agent_labels, method, color_by_cluster=True, suffix=''):
+        from scipy.spatial import ConvexHull
+        scaler = StandardScaler()
+        features_scaled = scaler.fit_transform(features)
+        n_clusters = min(5, len(features_scaled))
+        kmeans = KMeans(n_clusters=n_clusters, random_state=42)
+        cluster_labels = kmeans.fit_predict(features_scaled) if color_by_cluster else None
+        if method == 'pca':
+            from sklearn.decomposition import PCA
+            reducer = PCA(n_components=2)
+            reduced = reducer.fit_transform(features_scaled)
+        elif method == 'umap' and UMAP_AVAILABLE:
+            reducer = umap.UMAP(n_components=2, random_state=42)
+            reduced = reducer.fit_transform(features_scaled)
+        else:
+            return
+        plt.figure(figsize=(10, 8))
+        if color_by_cluster:
+            palette = sns.color_palette('Set1', n_clusters)  # More distinct colors
+            for i in range(n_clusters):
+                idxs = np.where(cluster_labels == i)[0]
+                plt.scatter(reduced[idxs, 0], reduced[idxs, 1], c=[palette[i]]*len(idxs), label=f'Cluster {i+1}', alpha=0.95, edgecolors='black', linewidths=1)
+                # Draw convex hull outline for cluster (only if at least 3 non-collinear points)
+                if len(idxs) > 2:
+                    points = reduced[idxs]
+                    try:
+                        hull = ConvexHull(points)
+                        hull_pts = points[hull.vertices]
+                        from matplotlib.patches import Polygon
+                        poly = Polygon(hull_pts, closed=True, edgecolor=palette[i], facecolor=palette[i], alpha=0.35, linewidth=2)
+                        plt.gca().add_patch(poly)
+                    except Exception:
+                        # Skip hull if points are collinear or QhullError occurs
+                        pass
+                # Add cluster label at centroid if cluster has >1 point
+                if len(idxs) > 1:
+                    centroid = np.mean(reduced[idxs], axis=0)
+                    plt.text(centroid[0], centroid[1], f'C{i+1}', fontsize=14, color=palette[i], weight='bold', alpha=0.95, bbox=dict(facecolor='white', alpha=0.5, edgecolor=palette[i]))
+        else:
+            plt.scatter(reduced[:, 0], reduced[:, 1], c='blue', alpha=0.7)
+        for i, label in enumerate(agent_labels):
+            plt.text(reduced[i, 0], reduced[i, 1], label, fontsize=8, alpha=0.7)
+        plt.title(f'Agent Clustering ({method.upper()}) {suffix}')
+        plt.xlabel(f'{method.upper()} Dimension 1')
+        plt.ylabel(f'{method.upper()} Dimension 2')
+        if color_by_cluster:
+            plt.legend()
+        plt.tight_layout()
+        plt.savefig(viz_dir / f'agent_clustering_{suffix}_{method}.png', dpi=200)
+        plt.close()
+
+    # Performance-based clustering
+    features_perf = []
+    agent_labels_perf = []
+    for s in agent_stats.values():
+        features_perf.append([
+            s.win_rate,
+            s.avg_chips_per_tournament,
+            s.total_wins - s.total_losses
+        ])
+        agent_labels_perf.append(s.name)
+    features_perf = np.array(features_perf)
+    if len(features_perf) > 2:
+        clustering_plot(features_perf, agent_labels_perf, 'pca', True, 'performance')
+        if UMAP_AVAILABLE:
+            clustering_plot(features_perf, agent_labels_perf, 'umap', True, 'performance')
+
+    # Hyperparameter-based clustering
+    features_hyper = []
+    agent_labels_hyper = []
+    for name, s in agent_stats.items():
+        spec = parse_genome_spec(name)
+        if spec:
+            features_hyper.append([
+                spec.get('population', 0),
+                spec.get('matchups', 0),
+                spec.get('hands', 0),
+                spec.get('sigma', 0)
+            ])
+            agent_labels_hyper.append(name)
+    features_hyper = np.array(features_hyper)
+    if len(features_hyper) > 2:
+        clustering_plot(features_hyper, agent_labels_hyper, 'pca', True, 'hyperparams')
+        if UMAP_AVAILABLE:
+            clustering_plot(features_hyper, agent_labels_hyper, 'umap', True, 'hyperparams')
+
+    # Only keep the head-to-head win rate heatmap
+
+    # d) Dominance Network (with node/edge stats)
+    try:
+        G = nx.DiGraph()
+        for agent in agent_names:
+            G.add_node(agent)
+        for i, a1 in enumerate(agent_names):
+            for j, a2 in enumerate(agent_names):
+                if i != j and matrix[i, j] > 0.5:
+                    G.add_edge(a1, a2, weight=matrix[i, j])
+        plt.figure(figsize=(max(10, len(agent_names)//2), max(8, len(agent_names)//2)))
+        pos = nx.spring_layout(G, seed=42)
+        edges = G.edges()
+        weights = [G[u][v]['weight'] for u,v in edges]
+        nx.draw(G, pos, with_labels=True, node_color='lightblue', edge_color=weights, edge_cmap=plt.cm.RdYlGn, width=2, arrowsize=20)
+        # Annotate top nodes by out-degree (most dominant)
+        out_degrees = dict(G.out_degree())
+        top_nodes = sorted(out_degrees, key=out_degrees.get, reverse=True)[:5]
+        for node in top_nodes:
+            x, y = pos[node]
+            plt.text(x, y+0.05, f"Top Dominant: {node}", color='red', fontsize=10, ha='center')
+        plt.title('Dominance Network (Edges: Win Rate > 0.5)\nTop nodes are most dominant agents')
+        plt.tight_layout()
+        plt.savefig(viz_dir / 'dominance_network.png', dpi=200)
+        plt.close()
+    except Exception as e:
+        print(f"Could not generate dominance network: {e}")
+
+    # e) Parameter Interaction Heatmaps (if possible)
+    try:
+        pop_matchup = defaultdict(lambda: defaultdict(list))
+        for name, stats in agent_stats.items():
+            spec = parse_genome_spec(name)
+            if spec and 'population' in spec and 'matchups' in spec:
+                pop_matchup[spec['population']][spec['matchups']].append(stats.win_rate)
+        if pop_matchup:
+            pop_vals = sorted(pop_matchup.keys())
+            matchup_vals = sorted({m for d in pop_matchup.values() for m in d.keys()})
+            heatmap_data = []
+            for p in pop_vals:
+                row = []
+                for m in matchup_vals:
+                    vals = pop_matchup[p][m]
+                    row.append(np.mean(vals) if vals else np.nan)
+                heatmap_data.append(row)
+            plt.figure(figsize=(10, 8))
+            sns.heatmap(heatmap_data, annot=True, fmt=".2f", cmap="YlGnBu", xticklabels=matchup_vals, yticklabels=pop_vals, cbar_kws={'label': 'Avg Win Rate'})
+            plt.title('Population vs Matchups: Avg Win Rate\nShows how win rate varies with population and matchups')
+            plt.xlabel('Matchups')
+            plt.ylabel('Population')
+            plt.tight_layout()
+            plt.savefig(viz_dir / 'population_vs_matchups_heatmap.png', dpi=200)
+            plt.close()
+    except Exception as e:
+        print(f"Could not generate parameter interaction heatmap: {e}")
+
+    # Restore and enhance top 15 visuals
+    # Win Rate Comparison Bar Chart (top 15)
+    sorted_agents = sorted(agent_stats.values(), key=lambda s: s.win_rate, reverse=True)[:15]
     names = [s.name for s in sorted_agents]
     win_rates = [s.win_rate * 100 for s in sorted_agents]
-    
-    fig, ax = plt.subplots(figsize=(12, 8))
-    bars = ax.barh(range(len(names)), win_rates, color='steelblue')
-    ax.set_yticks(range(len(names)))
-    ax.set_yticklabels(names, fontsize=9)
-    ax.set_xlabel('Win Rate (%)', fontsize=12)
-    ax.set_title('Top 15 Agents by Win Rate', fontsize=14, fontweight='bold')
-    ax.grid(axis='x', alpha=0.3)
-    
-    # Add value labels
+    plt.figure(figsize=(12, 8))
+    bars = plt.barh(range(len(names)), win_rates, color=plt.cm.viridis(np.linspace(0, 1, len(names))))
+    plt.xlabel('Win Rate (%)', fontsize=12)
+    plt.title('Top 15 Agents by Win Rate\nSorted by win rate, color-coded')
+    plt.yticks(range(len(names)), names, fontsize=9)
+    plt.grid(axis='x', alpha=0.3)
     for i, (bar, rate) in enumerate(zip(bars, win_rates)):
-        ax.text(rate + 0.5, i, f'{rate:.1f}%', va='center', fontsize=9)
-    
+        plt.text(rate + 0.5, i, f'{rate:.1f}%', va='center', fontsize=9)
     plt.tight_layout()
-    plt.savefig(output_dir / 'win_rate_comparison.png', dpi=150, bbox_inches='tight')
+    plt.savefig(viz_dir / 'win_rate_comparison.png', dpi=150, bbox_inches='tight')
     plt.close()
-    
-    # 2. Average Chips per Tournament
-    sorted_by_chips = sorted(agent_stats.values(),
-                            key=lambda s: s.avg_chips_per_tournament,
-                            reverse=True)[:15]
-    
+
+    # Average Chips per Tournament (top 15)
+    sorted_by_chips = sorted(agent_stats.values(), key=lambda s: s.avg_chips_per_tournament, reverse=True)[:15]
     names_chips = [s.name for s in sorted_by_chips]
     avg_chips = [s.avg_chips_per_tournament for s in sorted_by_chips]
-    
-    fig, ax = plt.subplots(figsize=(12, 8))
-    bars = ax.barh(range(len(names_chips)), avg_chips, color='green', alpha=0.7)
-    ax.set_yticks(range(len(names_chips)))
-    ax.set_yticklabels(names_chips, fontsize=9)
-    ax.set_xlabel('Average Chips per Tournament', fontsize=12)
-    ax.set_title('Top 15 Agents by Average Chips', fontsize=14, fontweight='bold')
-    ax.grid(axis='x', alpha=0.3)
-    
-    # Add value labels
+    plt.figure(figsize=(12, 8))
+    bars = plt.barh(range(len(names_chips)), avg_chips, color='green', alpha=0.7)
+    plt.xlabel('Average Chips per Tournament', fontsize=12)
+    plt.title('Top 15 Agents by Average Chips\nSorted by average chips, green bars')
+    plt.yticks(range(len(names_chips)), names_chips, fontsize=9)
+    plt.grid(axis='x', alpha=0.3)
     for i, (bar, chips) in enumerate(zip(bars, avg_chips)):
-        ax.text(chips + max(avg_chips)*0.01, i, f'{chips:,.0f}', va='center', fontsize=9)
-    
+        plt.text(chips + max(avg_chips)*0.01, i, f'{chips:,.0f}', va='center', fontsize=9)
     plt.tight_layout()
-    plt.savefig(output_dir / 'avg_chips_comparison.png', dpi=150, bbox_inches='tight')
+    plt.savefig(viz_dir / 'avg_chips_comparison.png', dpi=150, bbox_inches='tight')
     plt.close()
-    
-    # 3. Head-to-Head Matchup Matrix
-    agent_names, matrix = create_head_to_head_matrix(agent_stats)
-    
-    if len(agent_names) > 0:
-        fig, ax = plt.subplots(figsize=(14, 12))
-        im = ax.imshow(matrix, cmap='RdYlGn', aspect='auto', vmin=0, vmax=1)
-        
-        ax.set_xticks(range(len(agent_names)))
-        ax.set_yticks(range(len(agent_names)))
-        ax.set_xticklabels(agent_names, rotation=45, ha='right', fontsize=8)
-        ax.set_yticklabels(agent_names, fontsize=8)
-        
-        ax.set_xlabel('Opponent', fontsize=12)
-        ax.set_ylabel('Agent', fontsize=12)
-        ax.set_title('Head-to-Head Win Rate Matrix\n(Row agent vs Column opponent)',
-                    fontsize=14, fontweight='bold')
-        
-        # Add colorbar
-        cbar = plt.colorbar(im, ax=ax)
-        cbar.set_label('Win Rate', rotation=270, labelpad=20)
-        
-        # Add text annotations for all matchups
-        # Adjust font size based on matrix size
-        n_agents = len(agent_names)
-        if n_agents <= 10:
-            fontsize = 7
-        elif n_agents <= 15:
-            fontsize = 6
-        elif n_agents <= 20:
-            fontsize = 5
-        else:
-            fontsize = 4
-            
-        for i in range(len(agent_names)):
-            for j in range(len(agent_names)):
-                if i != j:
-                    # Choose text color based on background for better contrast
-                    text_color = "white" if matrix[i, j] < 0.4 or matrix[i, j] > 0.6 else "black"
-                    text = ax.text(j, i, f'{matrix[i, j]:.2f}',
-                                 ha="center", va="center", color=text_color, fontsize=fontsize)
-        
-        plt.tight_layout()
-        plt.savefig(output_dir / 'head_to_head_matrix.png', dpi=150, bbox_inches='tight')
-        plt.close()
-    
-    # 4. Hyperparameter Correlation Charts
+
+    # Consistency Analysis (top 15)
+    agents_with_multiple = [s for s in agent_stats.values() if s.total_tournaments >= 2]
+    sorted_consistency = sorted(agents_with_multiple, key=lambda s: s.chip_consistency)[:15]
+    names_cons = [s.name for s in sorted_consistency]
+    consistency = [s.chip_consistency for s in sorted_consistency]
+    plt.figure(figsize=(12, 8))
+    bars = plt.barh(range(len(names_cons)), consistency, color='purple', alpha=0.6)
+    plt.xlabel('Chip Standard Deviation (Lower = More Consistent)', fontsize=12)
+    plt.title('Top 15 Most Consistent Agents\nSorted by chip std dev, purple bars')
+    plt.yticks(range(len(names_cons)), names_cons, fontsize=9)
+    plt.grid(axis='x', alpha=0.3)
+    plt.tight_layout()
+    plt.savefig(viz_dir / 'consistency_analysis.png', dpi=150, bbox_inches='tight')
+    plt.close()
+
+    # Hyperparameter Impact (bar charts)
     fig, axes = plt.subplots(2, 2, figsize=(14, 10))
     fig.suptitle('Hyperparameter Impact on Performance', fontsize=16, fontweight='bold')
-    
     param_names = ['population', 'matchups', 'hands', 'sigma']
     titles = ['Population Size', 'Matchups per Agent', 'Hands per Matchup', 'Sigma (Mutation Strength)']
-    
     for idx, (param, title) in enumerate(zip(param_names, titles)):
         ax = axes[idx // 2, idx % 2]
-        
         if param in correlations and correlations[param]:
             data = correlations[param]
             values = sorted(data.keys())
             win_rates = [data[v]['avg_win_rate'] * 100 for v in values]
             counts = [data[v]['count'] for v in values]
-            
-            # Create bar chart with counts as labels
             bars = ax.bar(range(len(values)), win_rates, color='coral', alpha=0.7)
             ax.set_xticks(range(len(values)))
             ax.set_xticklabels([str(v) for v in values])
             ax.set_xlabel(title, fontsize=11)
             ax.set_ylabel('Avg Win Rate (%)', fontsize=11)
-            ax.set_title(f'{title} vs Performance', fontsize=12)
+            ax.set_title(f'{title} vs Performance\nBar height = avg win rate, label = sample size')
             ax.grid(axis='y', alpha=0.3)
-            
-            # Add count labels
             for i, (bar, count) in enumerate(zip(bars, counts)):
                 height = bar.get_height()
-                ax.text(bar.get_x() + bar.get_width()/2., height + 0.5,
-                       f'n={count}', ha='center', va='bottom', fontsize=9)
-    
+                ax.text(bar.get_x() + bar.get_width()/2., height + 0.5, f'n={count}', ha='center', va='bottom', fontsize=9)
     plt.tight_layout()
-    plt.savefig(output_dir / 'hyperparameter_impact.png', dpi=150, bbox_inches='tight')
+    plt.savefig(viz_dir / 'hyperparameter_impact.png', dpi=150, bbox_inches='tight')
     plt.close()
-    
-    # 5. Consistency Analysis
-    agents_with_multiple = [s for s in agent_stats.values() if s.total_tournaments >= 2]
-    if agents_with_multiple:
-        sorted_consistency = sorted(agents_with_multiple,
-                                   key=lambda s: s.chip_consistency)[:15]
-        
-        names_cons = [s.name for s in sorted_consistency]
-        consistency = [s.chip_consistency for s in sorted_consistency]
-        
-        fig, ax = plt.subplots(figsize=(12, 8))
-        bars = ax.barh(range(len(names_cons)), consistency, color='purple', alpha=0.6)
-        ax.set_yticks(range(len(names_cons)))
-        ax.set_yticklabels(names_cons, fontsize=9)
-        ax.set_xlabel('Chip Standard Deviation (Lower = More Consistent)', fontsize=12)
-        ax.set_title('Top 15 Most Consistent Agents', fontsize=14, fontweight='bold')
-        ax.grid(axis='x', alpha=0.3)
-        
-        plt.tight_layout()
-        plt.savefig(output_dir / 'consistency_analysis.png', dpi=150, bbox_inches='tight')
-        plt.close()
-    
-    print(f"Visualizations saved to {output_dir}/")
-    
-    # Write a visualizations index with short descriptions
-    visuals = {
-        'win_rate_comparison.png': 'Top 15 agents by overall win rate (bar chart).',
-        'avg_chips_comparison.png': 'Top 15 agents by average chips per tournament (bar chart).',
-        'head_to_head_matrix.png': 'Head-to-head win rate matrix (rows = agent, cols = opponent).',
-        'hyperparameter_impact.png': 'Hyperparameter impact on performance (multiple bar charts).',
-        'consistency_analysis.png': 'Top 15 most consistent agents by chip std dev (horizontal bar chart).'
-    }
 
+    # 8. Correlation Matrix
     try:
-        with open(output_dir / 'visuals_index.txt', 'w') as vf:
-            vf.write('Visualizations index\n')
-            vf.write('====================\n\n')
-            for fname, desc in visuals.items():
-                vf.write(f"{fname}: {desc}\n")
-    except Exception:
-        pass
+        df = pd.DataFrame({
+            'win_rate': [s.win_rate for s in agent_stats.values()],
+            'avg_chips': [s.avg_chips_per_tournament for s in agent_stats.values()],
+            'chip_consistency': [s.chip_consistency for s in agent_stats.values()],
+            'avg_elo': [s.avg_elo_rating for s in agent_stats.values()],
+            'avg_consistency': [s.avg_consistency for s in agent_stats.values()],
+        }, index=[s.name for s in agent_stats.values()])
+        corr = df.corr()
+        plt.figure(figsize=(8, 6))
+        sns.heatmap(corr, annot=True, cmap='coolwarm', fmt='.2f')
+        plt.title('Correlation Matrix of Agent Metrics')
+        plt.tight_layout()
+        plt.savefig(viz_dir / 'correlation_matrix.png', dpi=200)
+        plt.close()
+    except Exception as e:
+        print(f"Could not generate correlation matrix: {e}")
+
+    # 8b. Correlation Matrix (Hyperparameters)
+    try:
+        hyper_df = pd.DataFrame([
+            parse_genome_spec(name) for name in agent_stats.keys() if parse_genome_spec(name)
+        ], index=[name for name in agent_stats.keys() if parse_genome_spec(name)])
+        if not hyper_df.empty:
+            corr_hyper = hyper_df.corr()
+            plt.figure(figsize=(8, 6))
+            sns.heatmap(corr_hyper, annot=True, cmap='viridis', fmt='.2f')
+            plt.title('Correlation Matrix of Hyperparameters')
+            plt.tight_layout()
+            plt.savefig(viz_dir / 'correlation_matrix_hyperparameters.png', dpi=200)
+            plt.close()
+    except Exception as e:
+        print(f"Could not generate correlation matrix (hyperparameters): {e}")
+
+    # 9. Parameter Sensitivity Plots (encode all other hyperparameters visually)
+    try:
+        param_names = ['population', 'matchups', 'hands', 'sigma']
+        for param in param_names:
+            param_vals = []
+            win_rates = []
+            other_params = {p: [] for p in param_names if p != param}
+            for name, stats in agent_stats.items():
+                spec = parse_genome_spec(name)
+                if spec and param in spec:
+                    param_vals.append(spec[param])
+                    win_rates.append(stats.win_rate)
+                    for p in other_params:
+                        other_params[p].append(spec.get(p, 0))
+            if param_vals:
+                plt.figure(figsize=(8, 6))
+                # Use seaborn.scatterplot to encode up to 3 other params: hue, style, size
+                plot_kwargs = dict(x=param_vals, y=win_rates)
+                keys = list(other_params.keys())
+                legend_labels = []
+                if len(keys) > 0:
+                    plot_kwargs['hue'] = other_params[keys[0]]
+                    legend_labels.append(f"Color: {keys[0].capitalize()}")
+                if len(keys) > 1:
+                    plot_kwargs['style'] = other_params[keys[1]]
+                    legend_labels.append(f"Marker: {keys[1].capitalize()}")
+                if len(keys) > 2:
+                    plot_kwargs['size'] = other_params[keys[2]]
+                    legend_labels.append(f"Size: {keys[2].capitalize()}")
+                # Use a more distinct palette for hue
+                palette = 'tab10' if 'hue' in plot_kwargs else None
+                ax = sns.scatterplot(**plot_kwargs, palette=palette, edgecolor='black', alpha=0.8, legend='full')
+                # Add colorbar if hue is present
+                if 'hue' in plot_kwargs:
+                    # For categorical/discrete hues, create a custom legend
+                    unique_vals = sorted(set(plot_kwargs['hue']))
+                    handles = [plt.Line2D([0], [0], marker='o', color='w', label=str(val),
+                                          markerfacecolor=sns.color_palette('tab10')[i % 10], markersize=10)
+                               for i, val in enumerate(unique_vals)]
+                    ax.legend(handles=handles, title=f"{keys[0].capitalize()} (Color)", loc='best')
+                plt.title(f'Parameter Sensitivity: {param} vs Win Rate')
+                plt.xlabel(param.capitalize())
+                plt.ylabel('Win Rate')
+                # Add a custom legend for what each visual encoding means
+                if legend_labels:
+                    plt.legend(title="Visual Encoding", labels=legend_labels, loc='best')
+                plt.tight_layout()
+                plt.savefig(viz_dir / f'parameter_sensitivity_{param}.png', dpi=200)
+                plt.close()
+    except Exception as e:
+        print(f"Could not generate parameter sensitivity plots: {e}")
+
+    # 10. Streak Analysis (winning/losing streaks)
+    try:
+        win_streaks = {}
+        lose_streaks = {}
+        for s in agent_stats.values():
+            win_streak = 0
+            lose_streak = 0
+            max_win_streak = 0
+            max_lose_streak = 0
+            last_result = None
+            for chips in s.chip_counts:
+                result = chips > 0
+                if result:
+                    if last_result is True:
+                        win_streak += 1
+                    else:
+                        win_streak = 1
+                    max_win_streak = max(max_win_streak, win_streak)
+                    lose_streak = 0
+                else:
+                    if last_result is False:
+                        lose_streak += 1
+                    else:
+                        lose_streak = 1
+                    max_lose_streak = max(max_lose_streak, lose_streak)
+                    win_streak = 0
+                last_result = result
+            win_streaks[s.name] = max_win_streak
+            lose_streaks[s.name] = max_lose_streak
+        plt.figure(figsize=(12, 7))
+        agents = list(agent_stats.keys())
+        win_vals = [win_streaks.get(a, 0) for a in agents]
+        lose_vals = [lose_streaks.get(a, 0) for a in agents]
+        bar1 = plt.bar(np.arange(len(agents)), win_vals, color='green', label='Longest Win Streak')
+        bar2 = plt.bar(np.arange(len(agents)), [-v for v in lose_vals], color='red', label='Longest Lose Streak')
+        plt.axhline(0, color='black', linewidth=0.8)
+        plt.xticks(np.arange(len(agents)), agents, rotation=45, ha='right')
+        plt.ylabel('Streak Length')
+        plt.title('Longest Win (Green) and Lose (Red) Streak per Agent')
+        plt.legend()
+        plt.tight_layout()
+        plt.savefig(viz_dir / 'streak_analysis.png', dpi=200)
+        plt.close()
+    except Exception as e:
+        print(f"Could not generate streak analysis: {e}")
+
+    # 11. Upset Maps (lower-ranked agent beats higher-ranked)
+    try:
+        # Use all_matches if available
+        if 'all_matches' in locals():
+            sorted_agents = sorted(agent_stats.values(), key=lambda s: s.win_rate, reverse=True)
+            rank = {s.name: i for i, s in enumerate(sorted_agents)}
+            upsets = []
+            for match in all_matches:
+                winner = match['winner']
+                loser = match['loser']
+                if rank[winner] > rank[loser]:
+                    upsets.append((winner, loser))
+            if upsets:
+                upset_df = pd.DataFrame(upsets, columns=['Winner', 'Loser'])
+                plt.figure(figsize=(8, 6))
+                sns.countplot(data=upset_df, x='Winner', order=upset_df['Winner'].value_counts().index)
+                plt.title('Upset Map: Lower-Ranked Agents Beating Higher-Ranked')
+                plt.xlabel('Agent (Upset Winner)')
+                plt.ylabel('Upset Count')
+                plt.xticks(rotation=45, ha='right')
+                plt.tight_layout()
+                plt.savefig(viz_dir / 'upset_map.png', dpi=200)
+                plt.close()
+    except Exception as e:
+        print(f"Could not generate upset map: {e}")
+
+    # 12. Survival Analysis (how long agents remain competitive)
+    try:
+        survival = {s.name: sum(1 for c in s.chip_counts if c > 0) for s in agent_stats.values()}
+        plt.figure(figsize=(10, 6))
+        sns.barplot(x=list(survival.keys()), y=list(survival.values()))
+        plt.title('Agent Survival Analysis (Tournaments with Positive Chips)')
+        plt.xlabel('Agent')
+        plt.ylabel('Tournaments Survived')
+        plt.xticks(rotation=45, ha='right')
+        plt.tight_layout()
+        plt.savefig(viz_dir / 'survival_analysis.png', dpi=200)
+        plt.close()
+    except Exception as e:
+        print(f"Could not generate survival analysis: {e}")
 
 def save_json_report(agent_stats: Dict[str, AgentStats],
                     correlations: Dict,
@@ -1212,14 +1480,19 @@ Examples:
                        help='Minimum tournaments an agent must participate in (default: 1)')
     parser.add_argument('--top-n', type=int, default=10,
                        help='Number of top agents to show (default: 10)')
+    parser.add_argument('--output-dir', type=str, default=None,
+                       help='Output directory for results/visualizations (default: tournament_reports/overall_reports/analysis_<timestamp>)')
     
     args = parser.parse_args()
     
-    # Create output directory with timestamp
-    timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
-    output_dir = Path('tournament_reports') / 'overall_reports' / f'analysis_{timestamp}'
+    # Create output directory (user-specified or default with timestamp)
+    if args.output_dir:
+        output_dir = Path(args.output_dir)
+    else:
+        timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+        output_dir = Path('tournament_reports') / 'overall_reports' / f'analysis_{timestamp}'
     output_dir.mkdir(parents=True, exist_ok=True)
-    
+
     print(f"Output directory: {output_dir}\n")
     
     # Analyze tournament history

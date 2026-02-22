@@ -96,6 +96,8 @@ else:
     configs = load_tournament_data(tournament_reports_dir)
 
 # Parse configs
+
+# Parse and sort configs
 parsed = []
 for name, wr in configs:
     result = extract_config_from_name(name)
@@ -113,7 +115,10 @@ if not parsed:
     print("Error: No valid configurations found!")
     exit(1)
 
-print(f"\nParsed {len(parsed)} valid configurations for visualization")
+# Sort by pop, matchups, hands, sigma
+parsed.sort(key=lambda x: (x[0], x[1], x[2], x[3]))
+
+print(f"\nParsed {len(parsed)} valid configurations for visualization (ordered by pop, matchups, hands, sigma)")
 print("=" * 80)
 
 # Set style
@@ -386,6 +391,8 @@ ax2.grid(True, alpha=0.3, axis='y')
 ax2.set_ylim(30, 100)
 
 # Top right: Sigma distribution
+
+import random
 ax3 = fig.add_subplot(gs[0, 2])
 sigma_groups = {}
 for p, m, h, s, wr, n in parsed:
@@ -393,14 +400,23 @@ for p, m, h, s, wr, n in parsed:
         sigma_groups[s] = []
     sigma_groups[s].append(wr)
 
-positions = list(sorted(sigma_groups.keys()))
-data_to_plot = [sigma_groups[s] for s in positions]
+raw_positions = list(sorted(sigma_groups.keys()))
+# Scale the x positions to increase spacing
+scale_factor = 25.0
+positions = [x * scale_factor for x in raw_positions]
+data_to_plot = [sigma_groups[s] for s in raw_positions]
 
-bp = ax3.boxplot(data_to_plot, positions=positions, widths=0.01, patch_artist=True,
+# Increase width and add jitter to spread out points
+box_width = 0.03 * scale_factor/np.sqrt(scale_factor)  # Adjust width based on scale
+bp = ax3.boxplot(data_to_plot, positions=positions, widths=box_width, patch_artist=True,
                  showmeans=True, meanline=True)
 for patch in bp['boxes']:
     patch.set_facecolor('#9b59b6')
     patch.set_alpha(0.7)
+
+# Set custom x-ticks to show actual sigma values
+ax3.set_xticks(positions)
+ax3.set_xticklabels([f"{s:.2f}" for s in raw_positions])
 
 ax3.set_xlabel('Mutation Sigma', fontsize=11, fontweight='bold')
 ax3.set_ylabel('Win Rate (%)', fontsize=11, fontweight='bold')
