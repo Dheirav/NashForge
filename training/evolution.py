@@ -25,9 +25,11 @@ class EvolutionTrainer:
     def get_behavior_metrics(self, genome, num_hands=500, num_players=2, seed=42):
         """
         Simulate hands and return a dict of advanced behavior metrics for a genome.
+        Uses FeatureCache (same feature layout the network was trained on).
         """
         from training.policy_network import PolicyNetwork
-        from engine import PokerGame, get_state_vector
+        from engine import PokerGame
+        from engine.features import FeatureCache
         import numpy as np
         net = PolicyNetwork(self.config.network)
         net.set_weights_from_genome(genome.weights)
@@ -49,47 +51,43 @@ class EvolutionTrainer:
         win_by_hand_strength = []
         for _ in range(num_hands):
             stacks = [self.config.fitness.starting_stack] * num_players
-            game = PokerGame(player_stacks=stacks, small_blind=self.config.fitness.small_blind, big_blind=self.config.fitness.big_blind, ante=self.config.fitness.ante, seed=int(rng.integers(0, 2**31)))
+            game = PokerGame(
+                player_stacks=stacks,
+                small_blind=self.config.fitness.small_blind,
+                big_blind=self.config.fitness.big_blind,
+                ante=self.config.fitness.ante,
+                seed=int(rng.integers(0, 2**31)),
+            )
             hero_pos = 0
-            # Preflop
-            features = np.array(get_state_vector(game, hero_pos), dtype=np.float32)
+            # Use FeatureCache — same feature layout the network is trained on
+            cache = FeatureCache(game, hero_pos)
+            features = cache.get_features(game)
             mask = create_action_mask(game, hero_pos)
             action = net.select_action(features, mask, rng)
             action_counts[action] += 1
-            position_action_counts[hero_pos, action] += 1
-            if action in [2,3,4,5]:
+            position_action_counts[hero_pos % num_players, action] += 1
+            if action in [2, 3, 4, 5]:
                 aggression_actions += 1
-                bet_sizes.append(game.state.big_blind)  # Approximate
+                bet_sizes.append(game.state.big_blind)
                 if action == 5:
                     allin_count += 1
             else:
                 passive_actions += 1
-            # Simulate rest of hand for some stats
-            # (For brevity, only partial simulation; for full, use play_hand logic)
-            # Showdown/bluff/cbet/fold-to-aggr metrics are approximated
-            # Showdown: if both players don't fold preflop
             if action != 0:
                 showdown_count += 1
-                # Randomly assign win for demonstration
                 if rng.random() < 0.5:
                     showdown_wins += 1
                 win_by_hand_strength.append(rng.random())
-            # Bluff: aggressive action with weak hand (simulate)
-            if action in [2,3,4,5]:
+            if action in [2, 3, 4, 5]:
                 bluff_opps += 1
                 if rng.random() < 0.2:
                     bluff_count += 1
-            # C-bet: if raised preflop, bet again on flop (simulate)
-            if action in [2,3,4,5]:
                 cbet_opps += 1
                 if rng.random() < 0.7:
                     cbet_count += 1
-            # Fold to aggression: if faced with a bet, fold (simulate)
             fold_opps += 1
             if rng.random() < 0.3:
                 fold_to_aggr += 1
-            # Pot size control: bet size vs. stack
-            # Already in bet_sizes
         metrics = {
             'action_counts': action_counts,
             'position_action_counts': position_action_counts,
@@ -142,7 +140,7 @@ class EvolutionTrainer:
         results = {}
         for genome in self.population.genomes:
             # Use the same opponent selection as in training
-            opponent_groups, _ = self.evaluator.create_opponent_groups(self.population.genomes, self.population.hall_of_fame)
+            opponent_groups, _, player_counts = self.evaluator.create_opponent_groups(self.population.genomes, self.population.hall_of_fame)
             total_delta = 0
             total_hands = 0
             for matchup_idx, opponent_weights in enumerate(opponent_groups):
@@ -319,17 +317,46 @@ class EvolutionTrainer:
             self.best_fitness = current_best.fitness
             self.best_genome = current_best.copy()
         
-        # 3. Hall of Fame tracking disabled - only track at initialization
-        # (to see pre-seeded HOF members, not updated per generation)
+        # 3. Hall of Fame: diversity-gated per-generation update
+        # Only add current best if it is genuinely different from all existing
+        # HoF entries (L2 distance > 1.0) and better than the weakest HoF member.
+        if current_best.fitness is not None:
+            hof = self.population.hall_of_fame
+            hof_max = self.config.evolution.hof_size
+            if len(hof) == 0:
+                hof.append(current_best.copy())
+            else:
+                min_dist = min(
+                    float(np.linalg.norm(current_best.weights - h.weights))
+                    for h in hof
+                )
+                if min_dist > 1.0:  # Must be genuinely novel
+                    if len(hof) < hof_max:
+                        hof.append(current_best.copy())
+                    else:
+                        worst = min(
+                            hof,
+                            key=lambda g: g.fitness if g.fitness is not None else -float('inf')
+                        )
+                        if (current_best.fitness or 0.0) > (worst.fitness or 0.0):
+                            hof.remove(worst)
+                            hof.append(current_best.copy())
         
         # 4. Evolve to next generation
         new_genomes, evo_info = self.population.evolve()
         self.population.replace(new_genomes)
-        
+
+        # 5a. Apply sigma decay for the NEXT generation's mutations
+        self.factory.decay_sigma()
+
         # 5. Gather statistics
         stats = self.population.get_stats()
         gen_time = time.time() - gen_start
-        
+
+        # Compute per-format fitness means from this generation's eval results
+        hu_values = [r.hu_fitness for r in eval_results.values() if r.hu_fitness != 0.0]
+        mt_values = [r.mt_fitness for r in eval_results.values() if r.mt_fitness != 0.0]
+
         gen_stats = {
             'generation': self.generation,
             'mean_fitness': stats['mean'],
@@ -348,6 +375,11 @@ class EvolutionTrainer:
             'gen_time': gen_time,
             'eval_fixed_mean': None,
             'eval_fixed_best': None,
+            'mutation_sigma': self.factory.current_sigma,
+            'hu_mean_fitness': float(np.mean(hu_values)) if hu_values else None,
+            'hu_best_fitness': float(np.max(hu_values)) if hu_values else None,
+            'mt_mean_fitness': float(np.mean(mt_values)) if mt_values else None,
+            'mt_best_fitness': float(np.max(mt_values)) if mt_values else None,
         }
         if eval_fixed is not None and len(eval_fixed) > 0:
             gen_stats['eval_fixed_mean'] = float(np.mean(list(eval_fixed.values())))
@@ -420,7 +452,15 @@ class EvolutionTrainer:
                     writer.add_scalar('Fitness/Median', stats.get('median_fitness', 0), gen)
                     writer.add_scalar('Fitness/Std', stats.get('std_fitness', 0), gen)
                     writer.add_scalar('Diversity/MeanPairwiseDistance', stats.get('diversity', 0), gen)
-                    writer.add_scalar('Mutation/Sigma', getattr(self.config.evolution, 'mutation_sigma', 0), gen)
+                    # Real decayed sigma (replaces the static config value)
+                    writer.add_scalar('Mutation/Sigma', stats.get('mutation_sigma', getattr(self.config.evolution, 'mutation_sigma', 0)), gen)
+                    # Per-format fitness (populated only when heads_up_fraction > 0)
+                    if stats.get('hu_mean_fitness') is not None:
+                        writer.add_scalar('Fitness/HU_Mean', stats['hu_mean_fitness'], gen)
+                        writer.add_scalar('Fitness/HU_Best', stats['hu_best_fitness'], gen)
+                    if stats.get('mt_mean_fitness') is not None:
+                        writer.add_scalar('Fitness/MT_Mean', stats['mt_mean_fitness'], gen)
+                        writer.add_scalar('Fitness/MT_Best', stats['mt_best_fitness'], gen)
                     writer.add_scalar('Timing/GenerationSeconds', elapsed, gen)
                     # Hall of Fame fitness
                     hof_best_fitness = max(hof_best_fitness, stats['max_fitness'])

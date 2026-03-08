@@ -93,11 +93,29 @@ class FitnessConfig:
     ante: int = 0
     num_workers: int = 1          # CPU workers (set to 4 to match checkpoint)
     temperature: float = 1.0       # Action sampling temperature
-    
+
+    # ── Mixed-format training ────────────────────────────────────────────────
+    # When heads_up_fraction > 0, some matchups are played 2-player (HU) and
+    # the remainder at num_players (MultiTable).  The fitness score is a
+    # weighted average: HU BB/100 * heads_up_fraction + MT BB/100 * (1 - frac).
+    # Recommended value for a format-agnostic agent: 0.33 (1-in-3 matchups HU)
+    heads_up_fraction: float = 0.0  # 0.0 = all MT, 1.0 = all HU
+    hu_hands_per_matchup: int = 500  # Hands for HU matchups (can differ from MT)
+
     @property
     def total_hands_per_agent(self) -> int:
         """Total hands played per fitness evaluation."""
         return self.hands_per_matchup * self.matchups_per_agent
+
+    @property
+    def num_hu_matchups(self) -> int:
+        """Number of HeadsUp matchups per agent per generation."""
+        return round(self.matchups_per_agent * self.heads_up_fraction)
+
+    @property
+    def num_mt_matchups(self) -> int:
+        """Number of MultiTable matchups per agent per generation."""
+        return self.matchups_per_agent - self.num_hu_matchups
 
 
 @dataclass
@@ -178,6 +196,36 @@ class TrainingConfig:
                 seed=seed,
                 checkpoint_interval=10,
             )
+
+    @classmethod
+    def for_balanced_formats(cls, seed: int = 42) -> 'TrainingConfig':
+        """Config for format-agnostic training (HeadsUp + MultiTable mixed).
+
+        Uses m=8 matchups per agent with 1-in-3 being HeadsUp and 2-in-3
+        MultiTable, σ=0.08, h=500.  Empirically this produces agents that
+        are competitive in both formats without catastrophic format inversion.
+        """
+        return cls(
+            network=NetworkConfig(hidden_sizes=[64, 32]),
+            evolution=EvolutionConfig(
+                population_size=12,
+                elite_fraction=0.1,
+                mutation_sigma=0.08,
+                hof_size=10,
+                hof_opponent_prob=0.2,
+            ),
+            fitness=FitnessConfig(
+                hands_per_matchup=500,
+                matchups_per_agent=9,   # 3 HU + 6 MT = 9 total
+                num_players=6,
+                heads_up_fraction=0.333,  # 3 of 9 matchups are HU
+                hu_hands_per_matchup=500,
+                num_workers=1,
+            ),
+            num_generations=200,
+            seed=seed,
+            checkpoint_interval=10,
+        )
 
     @classmethod
     def for_phase_2(cls, seed: int = 42) -> 'TrainingConfig':

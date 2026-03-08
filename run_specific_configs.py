@@ -1,48 +1,73 @@
 #!/usr/bin/env python3
 """
-Run specific 29 configurations by calling train.py script.
+Run Batch 4 configurations by calling train.py script.
 Each configuration runs as an isolated subprocess for clean separation.
+
+Batch 4 strategy:
+- Survivors trimmed to 3 (one representative per proven cluster) for baseline
+- NEW: seeded fine-tune runs — start from B3 champion weights, low σ (0.04-0.06)
+  This is the highest-value thing we haven't tried: fix the feature bug + refine.
+- NEW: σ=0.05-0.07 from random init (to confirm exploitation range works cold-start)
+- NEW: mixed-format (30% HU) to train format-agnostic agents
+- Retired: all m=9, dead-zone p40, and bulk of redundant survivor re-runs
 """
 import sys
 import subprocess
 from pathlib import Path
 
-# Your specific 29 configurations
+# Path to the best B3 champion weights for seeded fine-tuning
+_CHAMP_DIR = Path(__file__).parent / 'hall_of_fame' / 'champions'
+_CHAMP = {
+    'p12_m7': str(_CHAMP_DIR / 'p12_m7_h500_s0.08_g200_b3_champion.npy'),
+    'p12_m8': str(_CHAMP_DIR / 'p12_m8_h500_s0.09_g200_b3_champion.npy'),
+    'p40_m8': str(_CHAMP_DIR / 'p40_m8_h750_s0.07_g200_b3_champion.npy'),
+    # MT specialist: 0% HU win rate but top-3 MT in every tournament group
+    'mt_specialist': str(_CHAMP_DIR / 'p12_m8_h750_s0.1_g200_b3_champion.npy'),
+}
+
+# ── Batch 4 configurations ──────────────────────────────────────────────────
 configs = [
-    # p12 configs
-    {'pop': 12, 'matchups': 9, 'hands': 750, 'sigma': 0.09},
-    {'pop': 12, 'matchups': 8, 'hands': 375, 'sigma': 0.1},
-    {'pop': 12, 'matchups': 9, 'hands': 375, 'sigma': 0.1},
-    {'pop': 12, 'matchups': 7, 'hands': 375, 'sigma': 0.09},
-    {'pop': 12, 'matchups': 8, 'hands': 750, 'sigma': 0.1},
+    # ── 3 Survivor baselines (one per proven cluster, cold-start for comparison) ──
     {'pop': 12, 'matchups': 8, 'hands': 500, 'sigma': 0.09},
-    {'pop': 12, 'matchups': 8, 'hands': 750, 'sigma': 0.09},
-    {'pop': 12, 'matchups': 7, 'hands': 750, 'sigma': 0.08},
     {'pop': 12, 'matchups': 7, 'hands': 500, 'sigma': 0.08},
-    {'pop': 12, 'matchups': 7, 'hands': 750, 'sigma': 0.09},
-    {'pop': 12, 'matchups': 7, 'hands': 375, 'sigma': 0.08},
-    
-    # p20 configs
-    {'pop': 20, 'matchups': 8, 'hands': 500, 'sigma': 0.09},
-    {'pop': 20, 'matchups': 8, 'hands': 375, 'sigma': 0.1},
-    {'pop': 20, 'matchups': 9, 'hands': 750, 'sigma': 0.1},
-    {'pop': 20, 'matchups': 7, 'hands': 750, 'sigma': 0.09},
-    {'pop': 20, 'matchups': 9, 'hands': 500, 'sigma': 0.09},
-    {'pop': 20, 'matchups': 9, 'hands': 750, 'sigma': 0.09},
-    {'pop': 20, 'matchups': 9, 'hands': 500, 'sigma': 0.1},
-    {'pop': 20, 'matchups': 7, 'hands': 375, 'sigma': 0.08},
-    
-    # p40 configs
-    {'pop': 40, 'matchups': 9, 'hands': 750, 'sigma': 0.1},
-    {'pop': 40, 'matchups': 7, 'hands': 375, 'sigma': 0.1},
-    {'pop': 40, 'matchups': 9, 'hands': 375, 'sigma': 0.1},
     {'pop': 40, 'matchups': 8, 'hands': 375, 'sigma': 0.1},
-    {'pop': 40, 'matchups': 7, 'hands': 750, 'sigma': 0.08},
-    {'pop': 40, 'matchups': 9, 'hands': 500, 'sigma': 0.08},
-    {'pop': 40, 'matchups': 8, 'hands': 750, 'sigma': 0.08},
-    {'pop': 40, 'matchups': 7, 'hands': 500, 'sigma': 0.1},
-    {'pop': 40, 'matchups': 8, 'hands': 500, 'sigma': 0.1},
-    {'pop': 40, 'matchups': 8, 'hands': 750, 'sigma': 0.07},
+
+    # ── Seeded fine-tune: start from B3 champion, low σ (highest value) ──
+    {'pop': 12, 'matchups': 8, 'hands': 500, 'sigma': 0.05,
+     'seed_weights': _CHAMP['p12_m8']},
+    {'pop': 12, 'matchups': 8, 'hands': 500, 'sigma': 0.06,
+     'seed_weights': _CHAMP['p12_m8']},
+    {'pop': 12, 'matchups': 7, 'hands': 500, 'sigma': 0.05,
+     'seed_weights': _CHAMP['p12_m7']},
+    {'pop': 12, 'matchups': 7, 'hands': 375, 'sigma': 0.06,
+     'seed_weights': _CHAMP['p12_m7']},
+    {'pop': 40, 'matchups': 8, 'hands': 375, 'sigma': 0.05,
+     'seed_weights': _CHAMP['p40_m8']},
+    {'pop': 40, 'matchups': 8, 'hands': 375, 'sigma': 0.06,
+     'seed_weights': _CHAMP['p40_m8']},
+
+    # ── σ=0.05-0.07 cold-start sweep (exploitation range from random init) ──
+    {'pop': 12, 'matchups': 8, 'hands': 500, 'sigma': 0.07},
+    {'pop': 12, 'matchups': 8, 'hands': 375, 'sigma': 0.07},
+    {'pop': 12, 'matchups': 7, 'hands': 500, 'sigma': 0.07},
+    {'pop': 20, 'matchups': 8, 'hands': 500, 'sigma': 0.07},
+    {'pop': 12, 'matchups': 8, 'hands': 500, 'sigma': 0.06},
+    {'pop': 20, 'matchups': 7, 'hands': 500, 'sigma': 0.06},
+
+    # ── Mixed-format HU+MT (30% heads-up matchups) ──
+    {'pop': 12, 'matchups': 8, 'hands': 500, 'sigma': 0.08,
+     'hu_fraction': 0.3, 'hu_hands': 300},
+    {'pop': 12, 'matchups': 7, 'hands': 375, 'sigma': 0.08,
+     'hu_fraction': 0.3, 'hu_hands': 300},
+
+    # ── MT specialist seeded fine-tune (confirmed 55-58% MT win rate across all groups) ──
+    # Pure MT: no HU pressure, let it deepen its survival/stack-building strategy
+    {'pop': 12, 'matchups': 8, 'hands': 500, 'sigma': 0.05,
+     'seed_weights': _CHAMP['mt_specialist']},
+    # Mixed MT: small HU exposure to avoid complete HU blindness while keeping MT strength
+    {'pop': 12, 'matchups': 8, 'hands': 500, 'sigma': 0.05,
+     'seed_weights': _CHAMP['mt_specialist'],
+     'hu_fraction': 0.3, 'hu_hands': 300},
 ]
 
 def main():
@@ -67,16 +92,18 @@ def main():
                        help='Maximum number of HoF opponents to load (default: 3)')
     # Removed --workers argument: workers are now auto-selected based on workload
     # (1 worker for <100k hands/gen, 4 workers for >100k hands/gen)
+    parser.add_argument('--skip-existing', action='store_true',
+                       help='Skip configs whose checkpoint directory already exists')
     
     args = parser.parse_args()
     
     # Build HoF arguments for train.py
     hof_args = []
     if args.tournament_winners:
-        # Find and pass champion paths directly
+        # Find and pass all champion paths directly (no cap — load every champion)
         champions_dir = Path(__file__).parent / 'hall_of_fame' / 'champions'
         if champions_dir.exists():
-            champion_files = sorted(champions_dir.glob('*.npy'))[:args.hof_count]
+            champion_files = sorted(champions_dir.glob('*.npy'))
             if champion_files:
                 hof_args = ['--hof-paths'] + [str(f) for f in champion_files]
                 print(f"\n📂 Will load {len(champion_files)} Hall of Fame champions")
@@ -115,7 +142,9 @@ def main():
             current += 1
             # Include HOF count in name to match existing checkpoint naming convention
             hof_suffix = f"_hof{args.hof_count}" if hof_args else ""
-            name = f"p{cfg['pop']}_m{cfg['matchups']}_h{cfg['hands']}_s{cfg['sigma']}{hof_suffix}_g{gen_count}"
+            hu_suffix = f"_hu{int(cfg.get('hu_fraction', 0)*100)}" if cfg.get('hu_fraction') else ""
+            seed_suffix = "_seeded" if cfg.get('seed_weights') else ""
+            name = f"p{cfg['pop']}_m{cfg['matchups']}_h{cfg['hands']}_s{cfg['sigma']}{hu_suffix}{seed_suffix}{hof_suffix}_g{gen_count}"
             
             print(f"\n[{current}/{total}] {name}")
             print("="*70)
@@ -130,6 +159,16 @@ def main():
             # Use 1 worker for smaller workloads to avoid multiprocessing overhead
             workers = 8 if total_hands > 50000 else 1
             
+            # Skip if checkpoint already exists WITH actual trained weights
+            # (a directory alone doesn't count — it may be an empty/aborted run)
+            runs_dir = checkpoint_dir / "runs"
+            has_weights = runs_dir.exists() and any(runs_dir.rglob("best_genome.npy"))
+            if args.skip_existing and has_weights:
+                print(f"  ⏭  Skipping (checkpoint exists): {checkpoint_dir.name}")
+                current_skipped = getattr(args, '_skipped', 0) + 1
+                args._skipped = current_skipped
+                continue
+
             print(f"Config: pop={cfg['pop']}, m={cfg['matchups']}, h={cfg['hands']}, sig={cfg['sigma']}")
             print(f"Total hands/gen: {total_hands:,}")
             print(f"Workers: {workers} (auto-selected based on workload)")
@@ -149,6 +188,16 @@ def main():
                 '--seed', str(args.seed + current),
                 '--checkpoint-interval', '999',  # Only save at end
             ] + hof_args
+
+            # Mixed-format options (optional per-config)
+            if cfg.get('hu_fraction'):
+                cmd += ['--heads-up-fraction', str(cfg['hu_fraction'])]
+            if cfg.get('hu_hands'):
+                cmd += ['--hu-hands', str(cfg['hu_hands'])]
+            # Seeded fine-tune: warm-start from an existing champion
+            if cfg.get('seed_weights') and Path(cfg['seed_weights']).exists():
+                cmd += ['--seed-weights', cfg['seed_weights']]
+                print(f"Seeded from: {Path(cfg['seed_weights']).name}")
             
             print(f"Running: {' '.join(cmd)}")
             print()

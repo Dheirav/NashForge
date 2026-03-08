@@ -326,7 +326,7 @@ def get_state_features(game, player_id: int) -> Dict[str, float]:
         'round_flop': 1.0 if round_idx == 1 else 0.0,
         'round_turn': 1.0 if round_idx == 2 else 0.0,
         'round_river': 1.0 if round_idx == 3 else 0.0,
-        'players_in_hand': players_in_hand / num_players,
+        'players_in_hand': players_in_hand / 6.0,  # normalise by max table size
         
         # Action context
         'facing_bet': facing_bet,
@@ -373,9 +373,10 @@ def get_state_vector(game, player_id: int, cache: Optional['FeatureCache'] = Non
     rounds = {'preflop': 0, 'flop': 1, 'turn': 2, 'river': 3, 'showdown': 3}
     street_idx = rounds.get(state.betting_round, 0)
     
-    # Active players
+    # Active players – normalise by max table size (6) so the network gets an
+    # absolute count signal that distinguishes HU (≈0.33) from 6-max (≈1.0).
     active_players = sum(1 for p in game.players if not p.has_folded)
-    num_active_norm = active_players / max(1, num_players)
+    num_active_norm = active_players / 6.0
     
     # Hand strength
     hand_strength = get_preflop_strength_fast(player.hole_cards)
@@ -618,7 +619,8 @@ class FeatureCache:
         self.features[10] = 1.0 if round_idx == 1 else 0.0  # flop
         self.features[11] = 1.0 if round_idx == 2 else 0.0  # turn
         self.features[12] = 1.0 if round_idx == 3 else 0.0  # river
-        self.features[13] = players_in_hand / self.num_players
+        # Normalise by max table size (6) so HU ≈ 0.33, 6-max ≈ 1.0.
+        self.features[13] = players_in_hand / 6.0
         
         # Action context (index 14-15)
         self.features[14] = 1.0 if to_call > 0 else 0.0      # facing bet

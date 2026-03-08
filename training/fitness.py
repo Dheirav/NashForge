@@ -66,10 +66,12 @@ _GAME_POOL = GamePool(100)
 class EvalResult:
     """Result of evaluating a single genome."""
     genome_id: int
-    fitness: float  # BB/100
+    fitness: float  # BB/100 (combined)
     total_hands: int
     total_chip_delta: int
     matchups_played: int
+    hu_fitness: float = 0.0   # BB/100 in heads-up matchups (0 when none played)
+    mt_fitness: float = 0.0   # BB/100 in multi-table matchups (0 when none played)
 
 
 def abstract_action_to_engine_action(action_idx: int, game, player_id: int):
@@ -364,22 +366,28 @@ def evaluate_matchup(genome_weights: np.ndarray,
                     network_config: NetworkConfig,
                     fitness_config: FitnessConfig,
                     seed: int,
-                    hand_seeds: Optional[List[int]] = None) -> Tuple[int, int]:
+                    hand_seeds: Optional[List[int]] = None,
+                    num_players_override: Optional[int] = None) -> Tuple[int, int]:
     """
     Evaluate one matchup (hero vs opponents over many hands).
-    
+
     Args:
         genome_weights: Hero genome weights
         opponent_weights: List of opponent weights
         network_config: Network config
         fitness_config: Evaluation config
         seed: Random seed for reproducibility
-        
+        hand_seeds: Fixed hand seeds (None = random, used for training)
+        num_players_override: If set, overrides fitness_config.num_players for
+            this matchup.  Used by mixed-format training to interleave 2-player
+            HeadsUp matchups and 6-player MultiTable matchups in a single
+            fitness evaluation, producing format-agnostic agents.
+
     Returns:
         Tuple of (total_chip_delta, hands_played)
     """
     from engine import PokerGame
-    
+
     # Use PCG64 for faster random number generation
     rng = Generator(PCG64(seed))
     # Create networks
@@ -390,7 +398,8 @@ def evaluate_matchup(genome_weights: np.ndarray,
         net = PolicyNetwork(network_config)
         net.set_weights_from_genome(w)
         opponent_nets.append(net)
-    num_players = fitness_config.num_players
+    # Respect per-matchup player count (for mixed-format training)
+    num_players = num_players_override if num_players_override is not None else fitness_config.num_players
     # Create network list and randomize seat positions
     networks = [hero_net] + opponent_nets[:num_players - 1]
     while len(networks) < num_players:
@@ -505,14 +514,16 @@ def _worker_evaluate_genome_with_hof(args: Tuple) -> Dict:
     # Call the original worker function
     original_args = (genome_id, genome_weights, opponent_weights_list, network_config, fitness_config, base_seed, hof_info)
     result = _worker_evaluate_genome(original_args)
-    
+
     # Convert EvalResult to dict and add HOF tracking
     result_dict = {
         'genome_id': genome_id,
         'fitness': result.fitness,
-        'num_hands': result.num_hands,
-        'win_rate': result.win_rate,
-        'num_matchups': result.num_matchups
+        'num_hands': result.total_hands,       # EvalResult field is total_hands
+        'win_rate': result.fitness,             # BB/100 is the closest proxy
+        'num_matchups': result.matchups_played, # EvalResult field is matchups_played
+        'hu_fitness': result.hu_fitness,
+        'mt_fitness': result.mt_fitness,
     }
     
     # Add HOF tracking information
@@ -531,38 +542,82 @@ def _worker_evaluate_genome_with_hof(args: Tuple) -> Dict:
 def _worker_evaluate_genome(args: Tuple) -> EvalResult:
     """
     Worker function for parallel evaluation.
-    
+
     Args:
-        args: Tuple of (genome_id, genome_weights, opponent_weights_list, 
-                       network_config, fitness_config, base_seed, hof_info)
-                       
+        args: Tuple of (genome_id, genome_weights, opponent_weights_list,
+                       network_config, fitness_config, base_seed, hof_info
+                       [, player_counts])
+               ``player_counts`` is an optional list[int] — one entry per
+               matchup — specifying the table size (2 = HeadsUp, 6 = 6-max).
+               Omitting it falls back to fitness_config.num_players for all
+               matchups (backward-compatible).
+
     Returns:
         EvalResult for this genome
     """
-    (genome_id, genome_weights, opponent_weights_list,
-     network_config, fitness_config, base_seed, hof_info) = args
-    
+    if len(args) == 8:
+        (genome_id, genome_weights, opponent_weights_list,
+         network_config, fitness_config, base_seed, hof_info, player_counts) = args
+    else:
+        (genome_id, genome_weights, opponent_weights_list,
+         network_config, fitness_config, base_seed, hof_info) = args
+        player_counts = None
+
     total_delta = 0
     total_hands = 0
+    mt_delta = 0
+    mt_hands = 0
+    hu_delta = 0
+    hu_hands = 0
+
     for matchup_idx, opponents in enumerate(opponent_weights_list):
         seed = base_seed + genome_id * 1000 + matchup_idx
-        # For training, use random hands (hand_seeds=None)
-        delta, hands = evaluate_matchup(
+
+        # Determine per-matchup player count and hands
+        if player_counts is not None and matchup_idx < len(player_counts):
+            n_players = player_counts[matchup_idx]
+        else:
+            n_players = fitness_config.num_players
+
+        is_hu = (n_players == 2)
+        hands = fitness_config.hu_hands_per_matchup if is_hu else fitness_config.hands_per_matchup
+
+        # Use pre-generated hand seeds of the desired length to avoid mutating the
+        # shared config object (important for sequential / num_workers=1 mode).
+        import dataclasses
+        matchup_cfg = dataclasses.replace(fitness_config, hands_per_matchup=hands)
+
+        delta, h_played = evaluate_matchup(
             genome_weights, opponents,
-            network_config, fitness_config, seed,
-            hand_seeds=None
+            network_config, matchup_cfg, seed,
+            hand_seeds=None,
+            num_players_override=n_players,
         )
+
         total_delta += delta
-        total_hands += hands
-    # Calculate BB/100
+        total_hands += h_played
+        if is_hu:
+            hu_delta += delta
+            hu_hands += h_played
+        else:
+            mt_delta += delta
+            mt_hands += h_played
+
+    # Final fitness = weighted BB/100 across all matchups
+    # (HU and MT are naturally weighted by their share of total hands)
     bb = fitness_config.big_blind
     bb_per_100 = (total_delta / bb) * (100 / max(1, total_hands))
+    hu_bb100 = (hu_delta / bb) * (100 / max(1, hu_hands)) if hu_hands > 0 else 0.0
+    mt_bb100 = (mt_delta / bb) * (100 / max(1, mt_hands)) if mt_hands > 0 else 0.0
+
     return EvalResult(
         genome_id=genome_id,
         fitness=bb_per_100,
         total_hands=total_hands,
         total_chip_delta=total_delta,
         matchups_played=len(opponent_weights_list),
+        hu_fitness=hu_bb100,
+        mt_fitness=mt_bb100,
     )
 
 def evaluate_fixed_hands(genome_weights: np.ndarray,
@@ -623,77 +678,92 @@ class FitnessEvaluator:
     
     def create_opponent_groups(self, genomes: List[Genome],
                                hall_of_fame: Optional[List[Genome]] = None,
-                               hof_max_size: int = 20) -> Tuple[List[List[np.ndarray]], List[List[int]]]:
+                               hof_max_size: int = 20) -> Tuple[List[List[np.ndarray]], List[List[int]], List[int]]:
         """
         Create opponent weight groups for evaluation.
-        
-        Each group has (num_players - 1) opponent weights.
-        
+
+        Supports mixed-format training: when ``heads_up_fraction > 0`` in the
+        FitnessConfig, some matchups are designated as 2-player HeadsUp and the
+        rest as num_players-player MultiTable.  The caller must honour the
+        returned ``player_counts`` list when invoking evaluate_matchup so the
+        correct table size is used.
+
         Args:
             genomes: Current population
             hall_of_fame: Optional historical best agents
-            
+            hof_max_size: Max number of diverse HoF agents to retain
+
         Returns:
-            Tuple of (opponent weight lists, HOF ID tracking lists)
+            Tuple of:
+              - ``groups``: opponent weight lists, one per matchup
+              - ``hof_tracking``: list of HoF genome IDs used per matchup
+              - ``player_counts``: list of int (2 for HU, num_players for MT)
         """
-        num_opponents = self.config.num_players - 1
         num_matchups = self.config.matchups_per_agent
-        
+
+        # Determine how many matchups are HeadsUp vs MultiTable
+        num_hu = self.config.num_hu_matchups  # uses heads_up_fraction
+        num_mt = self.config.num_mt_matchups
+        mt_num_players = self.config.num_players  # typically 6
+
+        # Build the ordered matchup format list (HU first, then MT — shuffled later)
+        matchup_formats = [2] * num_hu + [mt_num_players] * num_mt
+        self.rng.shuffle(matchup_formats)  # randomise order across generations
+
         # Collect all potential opponent weights
         all_weights = [g.weights for g in genomes]
-        
+
         hof_weights = []
         hof_genome_ids = []
         if hall_of_fame:
-            # Keep only the most diverse and highest-performing agents in the Hall of Fame
+            # Keep only the most diverse and highest-performing agents
             hof_sorted = sorted(hall_of_fame, key=lambda g: g.fitness if g.fitness is not None else -1, reverse=True)
             hof_selected = []
             for g in hof_sorted:
-                # Add if sufficiently different from those already selected
                 if not hof_selected:
                     hof_selected.append(g)
                 else:
                     dists = [np.linalg.norm(g.weights - h.weights) for h in hof_selected]
-                    if min(dists) > 0.1:  # Diversity threshold (tune as needed)
+                    if min(dists) > 0.1:  # Diversity threshold
                         hof_selected.append(g)
                 if len(hof_selected) >= hof_max_size:
                     break
             hof_weights = [g.weights for g in hof_selected]
             hof_genome_ids = [g.genome_id for g in hof_selected]
-        
+
         groups = []
-        hof_tracking = []  # Track which HOF members are used in each group
-        
-        for _ in range(num_matchups):
+        hof_tracking = []
+        player_counts = []
+
+        for fmt_players in matchup_formats:
+            # For HU matchups, only 1 opponent needed; for MT, num_players-1
+            num_opponents = fmt_players - 1
             group = []
-            group_hof_ids = []  # HOF IDs used in this group
-            
+            group_hof_ids = []
+
             for _ in range(num_opponents):
-                # Decide source: population, HoF, or random
                 r = self.rng.random()
-                
                 if r < 0.2 and hof_weights:
-                    # 20% from HoF
+                    # 20%: from Hall of Fame
                     idx = self.rng.integers(len(hof_weights))
                     group.append(hof_weights[idx])
                     group_hof_ids.append(hof_genome_ids[idx])
                 elif r < 0.3:
-                    # 10% random
+                    # 10%: random noise agent (maintains diversity)
                     random_weights = self.rng.standard_normal(
                         self.factory.genome_size
                     ).astype(np.float32) * 0.1
                     group.append(random_weights)
-                    # No HOF ID for random opponents
                 else:
-                    # 70% from population
+                    # 70%: from current population
                     idx = self.rng.integers(len(all_weights))
                     group.append(all_weights[idx])
-                    # No HOF ID for population opponents
-            
+
             groups.append(group)
             hof_tracking.append(group_hof_ids)
-        
-        return groups, hof_tracking
+            player_counts.append(fmt_players)
+
+        return groups, hof_tracking, player_counts
     
     def evaluate_single(self, genome: Genome,
                        opponents: List[Genome],
@@ -713,18 +783,25 @@ class FitnessEvaluator:
             old_hands = self.config.hands_per_matchup
             self.config.hands_per_matchup = num_hands // self.config.matchups_per_agent
         
-        opponent_groups, _ = self.create_opponent_groups(opponents)
-        
+        opponent_groups, _, pc = self.create_opponent_groups(opponents)
+
         total_delta = 0
         total_hands = 0
-        
+
         for matchup_idx, opponent_weights in enumerate(opponent_groups):
             seed = self.rng.integers(0, 2**31)
+            n_players = pc[matchup_idx] if matchup_idx < len(pc) else self.config.num_players
+            is_hu = (n_players == 2)
+            hands_override = self.config.hu_hands_per_matchup if is_hu else self.config.hands_per_matchup
+            orig = self.config.hands_per_matchup
+            self.config.hands_per_matchup = hands_override
             delta, hands = evaluate_matchup(
                 genome.weights, opponent_weights,
                 self.factory.network_config,
-                self.config, seed
+                self.config, seed,
+                num_players_override=n_players,
             )
+            self.config.hands_per_matchup = orig
             total_delta += delta
             total_hands += hands
         
@@ -751,16 +828,11 @@ class FitnessEvaluator:
             Dict mapping genome_id to EvalResult
         """
         # Create opponent groups with optional HOF tracking
+        # create_opponent_groups now returns (groups, hof_tracking, player_counts)
         if track_hof_usage:
-            opponent_groups, hof_tracking = self.create_opponent_groups(genomes, hall_of_fame)
+            opponent_groups, hof_tracking, player_counts = self.create_opponent_groups(genomes, hall_of_fame)
         else:
-            # Fallback for backward compatibility
-            result = self.create_opponent_groups(genomes, hall_of_fame)
-            if isinstance(result, tuple):
-                opponent_groups, hof_tracking = result
-            else:
-                opponent_groups = result
-                hof_tracking = [[] for _ in opponent_groups]
+            opponent_groups, hof_tracking, player_counts = self.create_opponent_groups(genomes, hall_of_fame)
         
         # Prepare evaluation arguments
         base_seed = self.rng.integers(0, 2**31)
@@ -774,7 +846,8 @@ class FitnessEvaluator:
             
             args_list.append((
                 g.genome_id, g.weights, opponent_groups,
-                self.factory.network_config, self.config, base_seed, hof_info
+                self.factory.network_config, self.config, base_seed, hof_info,
+                player_counts,  # per-matchup table sizes for mixed-format training
             ))
         
         if parallel and self.config.num_workers > 1:

@@ -91,6 +91,11 @@ def parse_args():
                         help='Matchups per agent')
     parser.add_argument('--players', type=int, default=6,
                         help='Players per table (2-6)')
+    parser.add_argument('--heads-up-fraction', type=float, default=0.0,
+                        help='Fraction of matchups run as heads-up (2-player). '
+                             '0 = pure multi-table, 1 = pure heads-up, 0.3 = mixed.')
+    parser.add_argument('--hu-hands', type=int, default=None,
+                        help='Hands per heads-up matchup (defaults to --hands if not set)')
     
     # Network architecture
     parser.add_argument('--hidden', type=int, nargs='+', default=[64, 32],
@@ -177,6 +182,8 @@ def create_config(args) -> TrainingConfig:
             matchups_per_agent=args.matchups,
             num_players=args.players,
             num_workers=args.workers,
+            heads_up_fraction=getattr(args, 'heads_up_fraction', 0.0),
+            hu_hands_per_matchup=getattr(args, 'hu_hands', None) or args.hands,
         ),
         num_generations=args.gens,
         checkpoint_interval=args.checkpoint_interval,
