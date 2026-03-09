@@ -1,7 +1,10 @@
 # PokerBot — What To Do Next
 
 **Written**: March 8, 2026  
-**Status at writing**: B5 complete. 4 active HoF champions. σ floor reached at 0.04 (100% MT win rate).
+**Updated**: March 9, 2026  
+**Status**: Phase 1 ✅ complete. Phase 2 ✅ complete. **Phase 3 (PPO) is the active work item.**
+
+B6 result: the aggression fix is architecturally correct but did not improve evolved agents (compensated weights). Both B6 agents lost to their B5 counterparts in their native formats. Evolution ceiling is fully confirmed. Proceeding to PPO.
 
 ---
 
@@ -23,79 +26,60 @@ not the training process.
 
 ---
 
-## Phase 1 — Architecture Fix 1: Opponent Aggression Feature
+## Phase 1 — Architecture Fix 1: Opponent Aggression Feature ✅ COMPLETE
 
-**Why first**: Single-line code change in the feature extractor. Highest impact-to-effort ratio
-of any possible improvement. The network currently has zero opponent-read capability — `features[15]`
-has been hardcoded to `0.5` since the very first training run.
+**Completed**: March 9, 2026
 
-### What to change
+The fix was implemented in `engine/features.py`:
+- `build_feature_vector_jit()` now takes `opponent_aggression: float` as a new parameter
+- `get_state_vector()` computes `opponent_aggression = 1.0 if to_call > bb else 0.0` (facing_raise signal)
+- Both JIT and NumPy fallback paths updated
+- Stale Numba disk cache cleared after signature change
+- Verified: `features[15]` returns `0.0` pre-raise, `1.0` after opponent raises
 
-**File: `engine/features.py`** — two locations:
-- Line 81: inside `build_feature_vector_jit()` (JIT/Numba path)
-- Line 427: inside `extract_features()` (numpy fallback path)
+The signal mirrors `FeatureCache.get_features()[15]` exactly, making inference and training paths consistent for the first time.
 
-Replace `features[15] = 0.5` with a real running aggression metric:
-
-```python
-# aggression = fraction of opponent actions that were bets or raises this hand
-aggression = (num_bets + num_raises) / max(total_opponent_actions, 1)
-features[15] = float(aggression)
-```
-
-This must be passed in as a parameter. The `PokerGame` action history in `engine/game.py`
-already tracks all actions — the metric can be computed per opponent from `game.history`.
-
-**Files to touch**:
-1. `engine/features.py` — replace constant with the computed value at both locations
-2. `engine/game.py` — verify action history is accessible; add helper to compute per-opponent aggression
-3. `training/config.py` — no change (input_size stays 17, slot 15 already allocated)
-
-### Backward compatibility
-
-All existing `.npy` champion weights remain valid. The network weights for slot 15 already
-exist — they were trained on a constant `0.5`. When you seed a B6 run from B5 weights,
-the network will immediately receive live data for the input it previously saw as `0.5`,
-and evolution will adapt those weights within a few generations. No architecture change,
-no retraining from scratch.
-
-### How to verify
-
-Run `scripts/testing/test_ai_features.py` after the change.
-Use `scripts/analysis/visualize_agent_behavior.py` to compare agent behaviour against
-an aggressive opponent vs a passive opponent — the actions should now differ.
+**Note**: The fix is in the codebase permanently. Do not revert.
 
 ---
 
-## Phase 2 — B6 Experiment (Measure the Fix)
+## Phase 2 — B6 Experiment (Measure the Fix) ✅ COMPLETE
 
-Run **two configs only** — not a full sweep:
+**Completed**: March 9, 2026  
+**Result: The fix did not improve evolved agents.**
 
-| Config | Purpose | Seed |
-|---|---|---|
-| `p12_m8_h500_s0.04_aggfix_seeded_hof4_g50` | MT with Fix 1 applied | B5 MT champion |
-| `p12_m7_h375_s0.06_hu100_aggfix_seeded_hof4_g50` | HU with Fix 1 applied | B5 HU champion |
+### What ran
 
-Name them with `_aggfix_` in the checkpoint directory to distinguish from B5 runs in
-tournament reports.
+| Config | Result |
+|---|---|
+| `p12_m8_h500_s0.04_aggfix_seeded_hof4_g50` | MT: 43.8% (−4.4pp vs B5 champ's 48.2%). Lost H2H. |
+| `p12_m7_h375_s0.06_hu100_aggfix_seeded_hof4_g50` | HU: 72.2% (−11pp vs B5 champ's 83.3%). Lost H2H. |
 
-After training, run both against the B5 HoF champions in a head-to-head tournament using
-the existing `run_archive_tournament.py` pattern.
+### Why it didn't help
 
-**Interpret the result**:
-- If aggfix agents beat B5 champions → architecture change has measurable impact, proceed to full feature expansion (Fix 5)
-- If aggfix agents tie or lose → the ceiling is not the aggression feature; proceed directly to RL (Phase 3)
+The B5 champion weights were trained for 50 generations with `features[15] = 0.5`. The weights
+for input slot 15 effectively learned to ignore it (near-zero weight) or compensate via other
+features. Seeding B6 from these weights means starting with compensated weights that expect a
+constant signal. Evolution adapts in 50 generations but does not fully reconverge.
 
-**Script to create**: `run_b6_aggfix_experiment.py` — copy `run_batch5_configs.py`, remove all
-configs except the two above, point seed weights at B5 champions.
+### What it means
+
+- The aggression fix benefits **fresh** training runs only (i.e. PPO training from scratch)
+- It will not help an evolutionary run seeded from pre-fix champion weights without many more generations (>200), which is not cost-effective
+- The fix stays in the codebase permanently for PPO
+- **Evolution ceiling is confirmed.** No more evolution batches needed.
+
+### Decision (per plan): Proceed to Phase 3 — PPO
 
 ---
 
-## Phase 3 — RL (PPO) Self-Play
+## Phase 3 — RL (PPO) Self-Play ← CURRENT PRIORITY
 
-After Phase 2, transition to PPO. This replaces evolution as the **training algorithm** —
-it does NOT replace the engine. The same `engine/game.py`, same feature vector, same 6-action
-abstract action space.
+**Status**: Not started. All infrastructure to be built from scratch.
+
+After Phase 2 confirmed the aggression fix does not help evolution, the path to a stronger
+agent is a new training paradigm. PPO reuses the existing engine almost unchanged and
+provides a per-action gradient signal that evolution cannot.
 
 ### Nothing RL-related exists yet
 
@@ -264,30 +248,30 @@ The directory exists but is empty. Either:
 
 ## Summary Checklist
 
-### Phase 1 — Feature Fix (do this first)
-- [ ] Fix `features[15]` in `engine/features.py` lines 81 and 427 — real aggression metric
-- [ ] Verify `engine/game.py` exposes action history for aggression computation
-- [ ] Add `tests/test_features.py` — smoke test feature ranges after fix
+### Phase 1 — Feature Fix ✅ DONE
+- [x] Fix `features[15]` in `engine/features.py` — real aggression metric (facing_raise)
+- [x] Verify `engine/game.py` exposes action history for aggression computation
+- [ ] Add `tests/test_features.py` — smoke test feature ranges after fix *(still outstanding)*
 
-### Phase 2 — B6 Experiment
-- [ ] Create `run_b6_aggfix_experiment.py` — 2 configs only
-- [ ] Run B6 (50 gens each, seeded from B5 champions)
-- [ ] Head-to-head tournament: aggfix agents vs B5 HoF champions
-- [ ] Decision: did the fix improve performance?
+### Phase 2 — B6 Experiment ✅ DONE
+- [x] Create `run_b6_aggfix_experiment.py` — 2 configs only
+- [x] Run B6 (50 gens each, seeded from B5 champions)
+- [x] Head-to-head tournament: aggfix agents vs B5 HoF champions
+- [x] Decision: aggfix did NOT improve performance → proceed to PPO
 
-### Phase 3 — PPO Transition
+### Phase 3 — PPO Transition ← DO THIS NOW
 - [ ] Create `training/poker_env.py` — gym-style wrapper
 - [ ] Create `training/policy_network_torch.py` — PyTorch port with value head
 - [ ] Create `training/rl_trainer.py` — PPO loop with HoF opponent pool
-- [ ] Evaluate PPO vs B5 HU champion — target: beat 88.0%
+- [ ] Evaluate PPO vs B5 HU champion — target: beat 83.3%–88.0%
 
 ### Phase 4 — CFR (optional, heads-up only)
 - [ ] Add `game.public_view(player_id)` to `engine/state.py`
 - [ ] Build info-set key + card abstraction
 - [ ] Create `training/cfr_trainer.py`
 
-### Cleanup (can be done anytime)
-- [ ] Archive σ≥0.08, p=20, p=40, hu30 checkpoint dirs to archived_configs/
+### Cleanup (anytime)
+- [ ] Archive σ≥0.08, p=20, p=40, hu30 checkpoint dirs to `archived_configs/`
 - [ ] Move legacy batch runners to `scripts/legacy/`
 - [ ] Create `docs/` folder and consolidate 13 root-level .md files
 - [ ] Populate or remove `hall_of_fame/milestones/`
@@ -302,5 +286,10 @@ The directory exists but is empty. Either:
 | Run B6 σ=0.03 full sweep | σ=0.04 is already at 100% MT. Lower σ with seeding adds marginal gain vs investing in features. |
 | Run another 13-config hyperparameter batch | The bottleneck is features, not σ. More evolution batches will not break the ceiling. |
 | Expand feature vector 17→22 immediately | Breaks all existing champion weights. Only worth doing when committing to full retraining from scratch. |
-| Start RL before fixing aggression | The gym wrapper uses the same 17 features. If `features[15]` is still fake, PPO hits the same ceiling as evolution. |
-| Run evolution after PPO works | Once PPO beats 88% HU, evolution is retired. Do not mix paradigms. |
+| Start RL before fixing aggression | ✅ Already done. `features[15]` is now a real signal. |
+| Run evolution after PPO works | Once PPO beats 83.3% HU, evolution is retired. Do not mix paradigms. |
+
+---
+
+*Last updated: March 9, 2026*  
+*Phase 1 (aggfix) and Phase 2 (B6 experiment) complete. Phase 3 (PPO) is active.*

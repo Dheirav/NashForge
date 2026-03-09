@@ -44,7 +44,8 @@ def build_feature_vector_jit(
     street_idx: int,
     num_active: float,
     hand_strength: float,
-    commitment: float
+    commitment: float,
+    opponent_aggression: float
 ) -> np.ndarray:
     """
     JIT-compiled feature vector assembly.
@@ -57,7 +58,7 @@ def build_feature_vector_jit(
     [12] num_active players (normalized)
     [13] hand_strength
     [14] hand_potential (placeholder, currently equals hand_strength)
-    [15] aggression (placeholder, set to 0.5)
+    [15] opponent_aggression (1.0 if facing a raise, 0.0 otherwise)
     [16] commitment level
     """
     features = np.zeros(17, dtype=np.float32)
@@ -78,7 +79,7 @@ def build_feature_vector_jit(
     features[12] = num_active
     features[13] = hand_strength
     features[14] = hand_strength  # hand_potential = hand_strength for now
-    features[15] = 0.5  # aggression placeholder
+    features[15] = opponent_aggression  # 1.0 if facing a raise, 0.0 otherwise
     features[16] = commitment
     
     return features
@@ -386,6 +387,10 @@ def get_state_vector(game, player_id: int, cache: Optional['FeatureCache'] = Non
     starting_stack = my_stack + total_invested
     commitment = total_invested / starting_stack if starting_stack > 0 else 0.0
     
+    # Opponent aggression: 1.0 if facing a raise (to_call exceeds a full BB),
+    # 0.0 otherwise. Mirrors the facing_raise signal in FeatureCache [15].
+    opponent_aggression = 1.0 if to_call > bb else 0.0
+
     if HAS_NUMBA:
         # Use JIT-compiled feature assembly (2-3× faster)
         pot_odds = compute_pot_odds_jit(float(to_call), float(pot))
@@ -398,7 +403,8 @@ def get_state_vector(game, player_id: int, cache: Optional['FeatureCache'] = Non
             street_idx,
             num_active_norm,
             hand_strength,
-            commitment
+            commitment,
+            opponent_aggression
         )
     else:
         # Fallback: numpy implementation
@@ -424,7 +430,7 @@ def get_state_vector(game, player_id: int, cache: Optional['FeatureCache'] = Non
         features[12] = num_active_norm
         features[13] = hand_strength
         features[14] = hand_strength  # hand_potential
-        features[15] = 0.5  # aggression
+        features[15] = opponent_aggression
         features[16] = commitment
         
         return features

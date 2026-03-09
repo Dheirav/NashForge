@@ -1,8 +1,8 @@
 # PokerBot — Total Results Across All Batches
 
-**Coverage**: Batch 1 → Batch 2 → Batch 1+2 Combined → Batch 3 → Batch 4 → Batch 5  
-**Total Games Analyzed**: ~964,000+ (1,080 B1 + 1,872 B2 + 544 B1+2 + 622,916 B3 + 296,041 B4 + 38,156 B5)  
-**Date Range**: Jan 26 – Mar 8, 2026  
+**Coverage**: Batch 1 → Batch 2 → Batch 1+2 Combined → Batch 3 → Batch 4 → Batch 5 → Batch 6  
+**Total Games Analyzed**: ~1,012,000+ (1,080 B1 + 1,872 B2 + 544 B1+2 + 622,916 B3 + 296,041 B4 + 38,156 B5 + 47,900 B6)  
+**Date Range**: Jan 26 – Mar 9, 2026  
 
 ---
 
@@ -14,13 +14,14 @@
 4. [Batch 3 Results](#batch-3)
 5. [Batch 4 Results](#batch-4)
 6. [Batch 5 Results](#batch-5)
-7. [Cross-Batch Hyperparameter Evolution](#cross-batch-hyperparameter-evolution)
-8. [Hall of Fame Impact](#hall-of-fame-impact)
-9. [Format Analysis: HeadsUp vs MultiTable](#format-analysis)
-10. [All-Time Rankings](#all-time-rankings)
-11. [Anti-Patterns — What Never Works](#anti-patterns)
-12. [Training Roadmap — Batch 6](#training-roadmap-batch-6)
-13. [Architecture Roadmap — Known Ceilings](#architecture-roadmap)
+7. [Batch 6 Results](#batch-6)
+8. [Cross-Batch Hyperparameter Evolution](#cross-batch-hyperparameter-evolution)
+9. [Hall of Fame Impact](#hall-of-fame-impact)
+10. [Format Analysis: HeadsUp vs MultiTable](#format-analysis)
+11. [All-Time Rankings](#all-time-rankings)
+12. [Anti-Patterns — What Never Works](#anti-patterns)
+13. [Training Roadmap — PPO Transition](#training-roadmap-ppo)
+14. [Architecture Roadmap — Known Ceilings](#architecture-roadmap)
 
 ---
 
@@ -404,6 +405,93 @@
 
 ---
 
+## Batch 6
+
+**Date**: March 9, 2026 | **Agents**: 9 | **Rounds**: 10 × 2 modes | **Hands/Matchup**: 10,000 | **Est. Games**: ~47,900  
+**Purpose**: A/B validation of the `features[15]` aggression fix — does replacing the hardcoded `0.5` constant with a real facing-raise signal improve evolved agents?
+
+### Tournament Field
+
+| Agent (tournament name) | Checkpoint | Role |
+|---|---|---|
+| `p12_m7_h375_s0.06_g50_v2` | `deep_p12_m7_h375_s0.06_hu100_seeded_hof3_g50` | B5 HU champion baseline |
+| `p12_m7_h375_s0.06_g50` | `deep_p12_m7_h375_s0.06_hu100_aggfix_seeded_hof4_g50` | **B6 HU aggfix** (test) |
+| `p12_m8_h500_s0.04_g50_v2` | `deep_p12_m8_h500_s0.04_seeded_hof3_g50` | B5 MT champion baseline |
+| `p12_m8_h500_s0.04_g50` | `deep_p12_m8_h500_s0.04_aggfix_seeded_hof4_g50` | **B6 MT aggfix** (test) |
+| `p12_m8_h500_s0.05_g50` | `deep_p12_m8_h500_s0.05_seeded_hof3_g50` (run 20260302) | B5 MT σ=0.05 fresh run |
+| `p12_m8_h500_s0.05_g50_v2` | `deep_p12_m8_h500_s0.05_seeded_hof3_g50` (run 20260301) | B5 MT σ=0.05 earlier run |
+| `p12_m8_h500_s0.045_g50` | `deep_p12_m8_h500_s0.045_seeded_hof3_g50` | B5 MT σ=0.045 |
+| `p12_m7_h375_s0.05_g50` | `deep_p12_m7_h375_s0.05_hu100_seeded_hof3_g50` | B5 HU σ=0.05 |
+| `p12_m7_h375_s0.07_g50` | `deep_p12_m7_h375_s0.07_hu100_seeded_hof3_g50` | B5 HU σ=0.07 |
+
+### HeadsUp Rankings (Round 10, round-robin, 2,000 hands/matchup)
+
+| Rank | Agent | Role | W/L | Win% | ELO | Notes |
+|---|---|---|---|---|---|---|
+| **1** | p12_m7_h375_s0.06_g50_v2 | B5 HU champ (baseline) | 15/3 | **83.3%** | 1702 | Beat B6 HU aggfix directly |
+| 2 | p12_m7_h375_s0.05_g50 | B5 HU σ=0.05 | 15/3 | **83.3%** | 1620 | Tied record, lower ELO |
+| 3 | p12_m7_h375_s0.06_g50 | **B6 HU aggfix** | 13/5 | 72.2% | 1611 | Lost to B5 baseline (−11pp) |
+| 4 | p12_m8_h500_s0.05_g50_v2 | B5 MT σ=0.05 | 12/6 | 66.7% | 1572 | |
+| 5 | p12_m8_h500_s0.06_g50 | B5 MT σ=0.06 | 12/6 | 66.7% | 1558 | |
+| 6 | p12_m7_h375_s0.07_g50 | B5 HU σ=0.07 | 11/7 | 61.1% | 1470 | |
+| 7 | p12_m8_h500_s0.04_g50 | **B6 MT aggfix** | 3/15 | 16.7% | 1425 | Marginally beat B5 MT champ |
+| 8 | p12_m8_h500_s0.04_g50_v2 | B5 MT champ (baseline) | 3/15 | 16.7% | 1391 | |
+| 9 | p12_m8_h500_s0.045_g50 | B5 MT σ=0.045 | 3/15 | 16.7% | 1348 | |
+| 10 | p12_m8_h500_s0.05_g50 | B5 MT σ=0.05 | 3/15 | 16.7% | 1302 | |
+
+### MultiTable Rankings (Round 10, round-robin, 137 tables/agent)
+
+| Rank | Agent | Role | W/L | Win Rate | Avg Chips/Table | Notes |
+|---|---|---|---|---|---|---|
+| **1** | p12_m8_h500_s0.05_g50 | B5 MT σ=0.05 fresh run | 67W/2L | **48.9%** | +7,969 | Edges B5 MT champ |
+| 2 | p12_m8_h500_s0.04_g50_v2 | B5 MT champ (baseline) | 66W/0L | 48.2% | +8,532 | |
+| 3 | p12_m8_h500_s0.04_g50 | **B6 MT aggfix** | 60W/2L | 43.8% | +6,174 | Lost to B5 counterpart (−4.4pp) |
+| 4 | p12_m8_h500_s0.045_g50 | B5 MT σ=0.045 | 55W/56L | 40.1% | +5,110 | |
+| 5 | p12_m7_h375_s0.05_g50 | B5 HU σ=0.05 | 45W/91L | 32.8% | +75,237 | |
+| 6 | p12_m7_h375_s0.06_g50 | **B6 HU aggfix** | 39W/98L | 28.5% | −35,917 | |
+| 7 | p12_m8_h500_s0.05_g50_v2 | B5 MT σ=0.05 earlier | 32W/105L | 23.4% | −4,207 | |
+| 8 | p12_m8_h500_s0.06_g50 | B5 MT σ=0.06 | 31W/106L | 22.6% | +5,601 | |
+| 9 | p12_m7_h375_s0.06_g50_v2 | B5 HU champ (baseline) | 30W/107L | 21.9% | −40,194 | |
+| 10 | p12_m7_h375_s0.07_g50 | B5 HU σ=0.07 | 29W/108L | 21.2% | +19,956 | |
+
+### A/B Direct Comparison — Aggression Fix vs Baseline
+
+| Config | HU Win% (rank) | MT Win Rate (rank) | HU H2H | MT H2H |
+|---|---|---|---|---|
+| B5 HU champ (`_v2`, baseline) | **83.3% (#1)** | 21.9% (#9) | Beat B6 HU | Lost to B6 HU |
+| **B6 HU aggfix** | 72.2% (#3) | 28.5% (#6) | Lost to B5 HU | Beat B5 HU |
+| B5 MT champ (`_v2`, baseline) | 16.7% (#8) | **48.2% (#2)** | Lost to B6 MT | Beat B6 MT |
+| **B6 MT aggfix** | 16.7% (#7) | 43.8% (#3) | Beat B5 MT | Lost to B5 MT |
+
+### Key Findings — Batch 6
+
+1. **The aggression fix did not improve evolved agents.** Both B6 configs lost to their B5 counterparts in their native formats. The fix is architecturally correct but disrupts already-trained weights.
+
+2. **Root cause — compensated weights**: B5 champions were trained for 50 generations with `features[15] = 0.5` constant. Their weights for input slot 15 learned to effectively be near-zero (ignored) or compensated via other inputs. Seeding B6 from B5 means starting with those compensated weights; 50 generations adapts but does not fully reconverge to the new signal.
+
+3. **Cross-format inversion intensified**: The aggfix improved the HU agent's MT performance (+6.6pp) and the MT agent's HU performance (marginally), suggesting the facing-raise signal helps most in the *opposite* context — but not enough to matter in either format.
+
+4. **σ=0.04 vs σ=0.05 is a dead heat at MT**: `p12_m8_h500_s0.05_g50` (fresh run 20260302) edges the B5 MT champion 48.9% vs 48.2% — within statistical noise. Both beat all σ≥0.045 agents. The σ floor for MT is confirmed between 0.04–0.05.
+
+5. **Evolution is saturated.** The B5 HU champion at 83.3% and B5 MT champion at 48.2% remain the best agents ever produced. B6 produced no improvement. More evolution batches will not change this.
+
+6. **HoF unchanged**: No B6 agent beats its B5 counterpart in its native format. 4 active champions remain.
+
+7. **Feature fix stays in codebase**: `features[15] = facing_raise` is the correct implementation for PPO training with fresh weights. The change should not be reverted.
+
+### Hall of Fame — Post-B6
+
+*(No changes — B5 champions remain definitive)*
+
+| Champion | Format | Win Rate | Status |
+|---|---|---|---|
+| `p12_m8_h500_s0.04_g50_b5_champion.npy` | MultiTable | 100% MT (B5) | ✅ Active |
+| `p12_m7_h375_s0.06_hu100_g50_b5_champion.npy` | HeadsUp | 88.0% HU (B5) | ✅ Active |
+| `p12_m8_h500_s0.05_g50_b4_champion.npy` | MultiTable | 98.5% MT (B4) | ✅ Active |
+| `p40_m8_h750_s0.07_g200_b3_champion.npy` | Overall | B3 era | ✅ Active |
+
+---
+
 ## Cross-Batch Hyperparameter Evolution
 
 ### Win Rate by Hyperparameter Value Across All Batches
@@ -561,63 +649,44 @@ Combinations that have **never** produced a good result across any batch:
 
 ---
 
-## Training Roadmap — Batch 6
+## Training Roadmap — PPO Transition
 
-**Status**: ✅ B5 complete. Ready to begin B6 planning.
+**Status**: ✅ B5 complete. ✅ B6 aggfix experiment complete. Evolution ceiling confirmed.  
+**Next step**: Transition to RL (PPO). The evolutionary approach is fully saturated.
 
-### What B5 Answered
+### What B5 and B6 Answered
 
 | Question | Answer |
 |---|---|
-| Can σ=0.04 beat σ=0.05 at MT? | **Yes — σ=0.04 seeded = 100% MT win rate.** New all-time record. |
+| Can σ=0.04 beat σ=0.05 at MT? | **Yes — σ=0.04 seeded = 100% MT win rate in B5. σ=0.05 within noise in B6.** |
 | Is seeding essential at σ=0.04? | **Absolutely.** Seeded: 76.2% overall. Cold-start: 28.5%. Largest ever gap. |
-| Does hu100 flag improve HU specialist? | **Yes** — same config, B4: 82.7% → B5 hu100: 88.0% (+5.3pp). |
-| Does h=250 work for HU? | **Viable but not optimal.** 84.7% (h=250) vs 88.0% (h=375). |
-| Is σ=0.045 a good midpoint? | **No.** 55.7% MT / 10% HU. Midpoints collapse in both formats. |
-| Is σ=0.09 dead? | **Confirmed permanently retired.** 28-29% overall, declining every batch. |
-| Is format split bridgeable? | **No** — MT top 2 scored 10% HU; HU top 3 scored 25-31% MT. |
+| Does hu100 flag improve HU specialist? | **Yes** — B4: 82.7% → B5 hu100: 88.0% (+5.3pp). |
+| Does the aggression fix (features[15]) improve evolved agents? | **No — net neutral/negative.** Correct signal, disrupted compensated weights. |
+| Will the fix help PPO? | **Yes.** PPO trains from scratch — no compensated weights to disrupt. |
+| Is evolution saturated? | **Confirmed.** B5 MT champ still #2 MT in B6. B5 HU champ still #1 HU. No improvement. |
+| Is format split bridgeable by evolution? | **No.** MT top configs crash at HU (16–22%). HU top configs crash at MT (22–29%). |
 
-### B6 Target Configs
+### What to Build Next (PPO)
 
-B5 pushed σ as low as 0.04 with seeding. B6 should test the σ floor and fix architecture signals.
-
-**MultiTable track** — push σ floor further:
 ```
-Population:   12
-Matchups:     8
-Hands:        500
-Sigma:        0.03, 0.035, 0.04          ← test if floor is 0.04 or lower
-Generations:  50
-Seeded from:  p12_m8_h500_s0.04_g50_b5_champion  ← must seed, cold-start fails at this σ
-HoF:          4 (include both B5 champions)
+Step 1  training/poker_env.py          — gym-style wrapper (reset/step, 17-feature obs)
+Step 2  training/policy_network_torch.py — PyTorch port of [17→64→32→6] + value head
+Step 3  training/rl_trainer.py          — PPO loop with HoF opponent pool
+Step 4  Evaluate PPO vs B5 HU champion  — target: beat 83.3%–88.0%
 ```
 
-**HeadsUp track** — confirm hu100 σ optimum:
-```
-Population:   12
-Matchups:     7
-Hands:        375
-Sigma:        0.05, 0.055, 0.06          ← B5 showed σ=0.05 hu100 at 77.3%, worth closing to champ
-Generations:  50
-HeadsUpFrac:  1.0                         ← hu100 mandatory based on B5 result
-Seeded from:  p12_m7_h375_s0.06_hu100_g50_b5_champion
-HoF:          4 (include both B5 champions)
-```
-
-**Architecture experiment (optional with B6)**:
-Before running full B6, consider patching `engine/features.py` Fix 1 (replace hardcoded  
-`features[15] = 0.5` with real opponent aggression metric). Even a simple running average  
-of opponent bet/pot ratios would give the network a live signal it has never had. Run one  
-seeded B6 MT config with and without this patch to isolate the impact.
+Start with **heads-up only** (cleaner reward signal). If PPO HU beats the B5 HU champion,
+the paradigm shift is validated and multi-table RL follows.
 
 ### What to Retire Permanently
 
-| Config Pattern | Reason |
+| Config Pattern / Approach | Reason |
 |---|---|
-| Any σ≥0.08 | Dead in all formats across B3, B4, B5. No recovery possible. |
+| Any σ≥0.08 | Dead in all formats across B3–B6. No recovery possible. |
 | Any cold-start at σ≤0.04 | Seeding delta (76% vs 28%) is too large to ignore. |
 | Any `_hu30_` or multi-format hybrid | Format split is structural. Mixing degrades both. |
 | p=40 at any σ | Consistently outperformed by p=12 since B3. |
+| **Further evolution sweeps** | Ceiling confirmed. PPO is the only lever remaining. |
 
 ---
 
@@ -810,5 +879,5 @@ The fastest path to a stronger agent right now is **PPO after B5** — it reuses
 
 ---
 
-*Last updated: March 8, 2026*  
-*Source reports: Batch1_Report, Batch2_Report, Batch1and2_Report, BATCH3_RESULTS.md, Batch4_HeadsUp_Report, Batch4_MultiTable_Report, Batch4_Overall_Report, hall_of_fame/champions/README.md*
+*Last updated: March 9, 2026*  
+*Source reports: Batch1_Report, Batch2_Report, Batch1and2_Report, BATCH3_RESULTS.md, Batch4_HeadsUp_Report, Batch4_MultiTable_Report, Batch4_Overall_Report, Batch5_HeadsUp_Report, Batch5_MultiTable_Report, Batch5_Overall_Report, Batch6_HeadsUp_Report, Batch6_MultiTable_Report, hall_of_fame/champions/README.md*
