@@ -25,14 +25,32 @@ import numpy as np
 
 from games.base import Game
 
-#: A policy maps an information-set key and the legal action count to
-#: probabilities. Returning None means "no opinion", and uniform is used.
-Policy = Callable[[Hashable, int], Optional[np.ndarray]]
+#: A policy is called with the game, the state, the player to act and the
+#: number of legal actions, and returns action probabilities. Returning None
+#: means "no opinion", and uniform is used.
+#:
+#: It receives the STATE rather than just the information-set key so that two
+#: agents trained on different abstractions can play each other: each must be
+#: able to compute the key its own abstraction would produce. Passing only the
+#: game's key would silently feed one agent another's bucketing, and it would
+#: look like it was playing badly rather than being asked the wrong question.
+Policy = Callable[[Any, Any, int, int], Optional[np.ndarray]]
 
 
-def strategy_policy(strategy: Dict[Hashable, np.ndarray]) -> Policy:
-    """Wrap a solved strategy table as a policy."""
-    def policy(key: Hashable, num_actions: int) -> Optional[np.ndarray]:
+def strategy_policy(strategy: Dict[Hashable, np.ndarray],
+                    abstraction: Any = None) -> Policy:
+    """
+    Wrap a solved strategy table as a policy.
+
+    With ``abstraction``, keys are computed through that abstraction rather than
+    the game's — which is what lets an agent play in a game whose abstraction is
+    not its own.
+    """
+    def policy(game, state, player: int, num_actions: int) -> Optional[np.ndarray]:
+        if abstraction is None:
+            key = game.information_set(state, player)
+        else:
+            key = game.information_set_with(state, player, abstraction)
         probabilities = strategy.get(key)
         if probabilities is None or probabilities.size != num_actions:
             return None
@@ -42,16 +60,17 @@ def strategy_policy(strategy: Dict[Hashable, np.ndarray]) -> Policy:
 
 def uniform_policy() -> Policy:
     """Plays every legal action equally often."""
-    return lambda key, num_actions: None
+    return lambda game, state, player, num_actions: None
 
 
 def always_call_policy(call_action: int = 1) -> Policy:
     """
     Never folds, never raises — the classic passive baseline.
 
-    A strategy that cannot beat this is not playing poker.
+    A strategy that cannot beat this is not playing poker. Note it also cannot
+    be bluffed, so it does not test semi-bluffing or draw play at all.
     """
-    def policy(key: Hashable, num_actions: int) -> Optional[np.ndarray]:
+    def policy(game, state, player: int, num_actions: int) -> Optional[np.ndarray]:
         probabilities = np.zeros(num_actions)
         probabilities[min(call_action, num_actions - 1)] = 1.0
         return probabilities
@@ -125,9 +144,8 @@ def _play_one(game: Game, policies: Sequence[Policy],
 
         player = game.current_player(state)
         actions = game.legal_actions(state)
-        key = game.information_set(state, player)
 
-        probabilities = policies[player](key, len(actions))
+        probabilities = policies[player](game, state, player, len(actions))
         if probabilities is None:
             probabilities = np.full(len(actions), 1.0 / len(actions))
 

@@ -28,19 +28,41 @@ exploitable. Granularity is therefore something to measure, which is what
 """
 from __future__ import annotations
 
-from dataclasses import dataclass
+import bisect
+from dataclasses import dataclass, field
 from typing import Dict, List, Optional, Sequence, Tuple
 
 import numpy as np
 
 from engine.cards import RANKS, Card
-from engine.features import chen_formula
+from engine.features import chen_formula, made_hand_strength
 
 from .equity import equity_vs_random, sample_situations
 
 #: Board sizes for the streets that have one.
 STREET_BOARD_SIZE = {"flop": 3, "turn": 4, "river": 5}
 POSTFLOP_STREETS = ("flop", "turn", "river")
+
+#: Board size -> street, so a lookup does not rebuild a dict on every call.
+_STREET_BY_BOARD = {3: "flop", 4: "turn", 5: "river"}
+
+
+def _nearest_centroid(centroids: List[float], value: float) -> int:
+    """
+    Index of the centroid closest to ``value``, over a sorted list.
+
+    A binary search rather than ``np.abs(centroids - value).argmin()``: the
+    array holds six or eight numbers, and numpy's per-call overhead dwarfs the
+    arithmetic at that size. This runs once per decision during training, so it
+    is squarely on the hot path.
+    """
+    position = bisect.bisect_left(centroids, value)
+    if position == 0:
+        return 0
+    if position == len(centroids):
+        return len(centroids) - 1
+    below, above = centroids[position - 1], centroids[position]
+    return position if (above - value) < (value - below) else position - 1
 
 
 def canonical_preflop_hands() -> List[Tuple[str, str, bool]]:
@@ -104,24 +126,62 @@ def _fit_kmeans_1d(values: np.ndarray, num_buckets: int,
     return np.sort(centroids)
 
 
+#: Postflop strength signals a bucketing can be built on.
+#:
+#: ``equity`` is what the project's proposal specifies: Monte Carlo equity
+#: against a random hand. It accounts for draws, and costs about 512 us per
+#: situation at 40 samples — two hand evaluations per sample.
+#:
+#: ``made_hand`` scores only the hand made so far, deterministically, in a
+#: single evaluation of about 6 us. It is roughly ninety times cheaper and free
+#: of sampling noise, but it cannot see a draw: a flush draw scores as whatever
+#: it has already made.
+#:
+#: Which to use is a real trade-off rather than an optimisation, so both are
+#: available and measured — see ``scripts/cfr/compare_strength_signals.py``.
+STRENGTH_SIGNALS = ("equity", "made_hand")
+
+
 @dataclass
 class CardAbstraction:
     """
-    A fitted abstraction: preflop groups plus per-street equity centroids.
+    A fitted abstraction: preflop groups plus per-street strength centroids.
 
     Attributes:
         preflop_buckets: Number of preflop groups.
         postflop_buckets: Number of buckets on each postflop street.
         samples: Situations sampled per postflop street when fitting.
-        equity_samples: Monte Carlo samples per equity estimate.
+        equity_samples: Monte Carlo samples per estimate, when using ``equity``.
+        strength: Which postflop signal to bucket on; see
+            :data:`STRENGTH_SIGNALS`.
     """
     preflop_buckets: int = 8
     postflop_buckets: int = 8
     samples: int = 3_000
     equity_samples: int = 120
+    strength: str = "equity"
 
     _preflop: Dict[Tuple[str, str, bool], int] = None
     _centroids: Dict[str, np.ndarray] = None
+    #: The same centroids as plain sorted lists, for the binary-search lookup.
+    _centroid_list: Dict[str, List[float]] = None
+
+    def __post_init__(self):
+        if self.strength not in STRENGTH_SIGNALS:
+            raise ValueError(
+                f"strength must be one of {STRENGTH_SIGNALS}, got {self.strength!r}")
+
+    def _postflop_strength(self, hole, board,
+                           rng: Optional[np.random.Generator] = None) -> float:
+        """
+        The signal this abstraction buckets postflop situations on.
+
+        Fitting and lookup both go through here, so a clustering can never be
+        fitted on one signal and queried with another.
+        """
+        if self.strength == "equity":
+            return equity_vs_random(hole, board, self.equity_samples, rng)
+        return made_hand_strength(hole, board)
 
     # ------------------------------------------------------------------
 
@@ -153,13 +213,15 @@ class CardAbstraction:
     def _fit_postflop(self, rng: np.random.Generator) -> None:
         """Cluster sampled equities into buckets, one clustering per street."""
         self._centroids = {}
+        self._centroid_list = {}
         for street in POSTFLOP_STREETS:
-            equities = np.array([
-                equity_vs_random(hole, board, self.equity_samples, rng)
+            values = np.array([
+                self._postflop_strength(hole, board, rng)
                 for hole, board in sample_situations(
                     STREET_BOARD_SIZE[street], self.samples, rng)
             ])
-            self._centroids[street] = _fit_kmeans_1d(equities, self.postflop_buckets)
+            self._centroids[street] = _fit_kmeans_1d(values, self.postflop_buckets)
+            self._centroid_list[street] = self._centroids[street].tolist()
 
     # ------------------------------------------------------------------
 
@@ -177,9 +239,9 @@ class CardAbstraction:
         if not board:
             return self._preflop[preflop_key(hole)]
 
-        street = {3: "flop", 4: "turn", 5: "river"}[len(board)]
-        equity = equity_vs_random(hole, board, self.equity_samples, rng)
-        return int(np.abs(self._centroids[street] - equity).argmin())
+        street = _STREET_BY_BOARD[len(board)]
+        value = self._postflop_strength(hole, board, rng)
+        return _nearest_centroid(self._centroid_list[street], value)
 
     def num_buckets(self, street: str) -> int:
         """Buckets available on a street."""
@@ -189,11 +251,12 @@ class CardAbstraction:
 
     def describe(self) -> str:
         """Human-readable summary, for reports."""
-        lines = [f"preflop  {self.num_buckets('preflop')} buckets over 169 hands"]
+        lines = [f"preflop  {self.num_buckets('preflop')} buckets over 169 hands",
+                 f"postflop signal: {self.strength}"]
         for street in POSTFLOP_STREETS:
             centroids = self._centroids[street]
             lines.append(
-                f"{street:<8} {centroids.size} buckets, equity centroids "
+                f"{street:<8} {centroids.size} buckets, centroids "
                 + " ".join(f"{c:.2f}" for c in centroids)
             )
         return "\n".join(lines)
