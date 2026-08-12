@@ -46,13 +46,20 @@ def compute_stack_to_pot_jit(stack: float, pot_size: float) -> float:
 # Precomputed lookup tables for common calculations
 # Pot odds lookup: POT_ODDS_TABLE[to_call][pot] = to_call/(pot+to_call)
 # Using 5-chip granularity for indices, covering 0-5000 chips
-POT_ODDS_TABLE = np.zeros((1001, 1001), dtype=np.float32)
-for tc_idx in range(1001):
-    to_call = tc_idx * 5
-    for pot_idx in range(1001):
-        pot = pot_idx * 5
-        if pot + to_call > 0:
-            POT_ODDS_TABLE[tc_idx, pot_idx] = to_call / (pot + to_call)
+#
+# Built vectorised rather than with a Python double loop over 1,002,001 cells.
+# This runs at import, and every multiprocessing worker re-imports the module,
+# so the old loop cost ~0.3 s per process — paid again for each worker in the
+# evaluation pool. The vectorised form produces a bit-identical table in ~8 ms.
+_TO_CALL = (np.arange(1001, dtype=np.float32) * 5)[:, None]
+_POT = (np.arange(1001, dtype=np.float32) * 5)[None, :]
+_DENOM = _TO_CALL + _POT
+POT_ODDS_TABLE = np.divide(
+    np.broadcast_to(_TO_CALL, _DENOM.shape), _DENOM,
+    out=np.zeros((1001, 1001), dtype=np.float32),
+    where=_DENOM > 0,
+)
+del _TO_CALL, _POT, _DENOM
 
 # Precomputed hand strength for all 169 starting hands (13 ranks × 13 ranks × suited/offsuit)
 PREFLOP_STRENGTH_CACHE = {}

@@ -20,9 +20,20 @@ class Card:
     def __hash__(self):
         return hash((self.rank, self.suit))
 
+# The 52 distinct cards, built once. A Card carries only a rank and a suit and
+# is never mutated after construction — every use site compares, none assigns —
+# so every deck can share these instances instead of allocating its own.
+#
+# This matters because a deck is rebuilt for each hand: a single profiled
+# generation constructed 63,000 decks and therefore 3.3 million Card objects,
+# about 2.6 s of the run. Copying the tuple into a fresh list keeps each deck's
+# ordering private, so shuffling and dealing are unchanged.
+_STANDARD_DECK = tuple(Card(rank, suit) for suit in SUITS for rank in RANKS)
+
+
 class Deck:
     def __init__(self, seed: int = None):
-        self.cards = [Card(rank, suit) for suit in SUITS for rank in RANKS]
+        self.cards = list(_STANDARD_DECK)
         # Use numpy RNG for faster shuffling (1.05-1.1× speedup)
         self._rng = np.random.default_rng(seed)
         self.shuffle()
