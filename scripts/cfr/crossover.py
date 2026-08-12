@@ -45,7 +45,8 @@ from games.nolimit import NoLimitHoldem  # noqa: E402
 def parse_args():
     parser = argparse.ArgumentParser(description=__doc__,
                                      formatter_class=argparse.RawDescriptionHelpFormatter)
-    parser.add_argument("--budgets", type=float, nargs="+", default=[40, 160, 640],
+    parser.add_argument("--budgets", type=float, nargs="+",
+                        default=[40, 160, 640, 2560],
                         help="cumulative training seconds at which to measure")
     parser.add_argument("--seeds", type=int, default=3)
     parser.add_argument("--buckets", type=int, default=6)
@@ -93,19 +94,33 @@ def run_one(signal, seed, budgets, args, on_measurement=None):
     measurements = []
     spent = 0.0
     for budget in budgets:
-        deadline = time.perf_counter() + (budget - spent)
+        started = time.perf_counter()
+        deadline = started + (budget - spent)
         while time.perf_counter() < deadline:
             solver.train(25)
+        elapsed = time.perf_counter() - started
         spent = budget
+
+        # Record what the machine was doing. A wall-clock budget measures the
+        # machine as much as the algorithm, so throughput and load are stored
+        # alongside the result rather than assumed to have been constant.
+        try:
+            with open("/proc/loadavg") as handle:
+                load = float(handle.read().split()[0])
+        except Exception:
+            load = float("nan")
 
         bound = lbr_value(game, solver.average_strategy(), hands=args.lbr_hands,
                           rng=np.random.default_rng(7000 + seed),
                           rollout_samples=args.rollout_samples)
         measurements.append({"budget": budget, "iterations": solver.iterations,
-                             "lbr": bound.mean, "stderr": bound.stderr})
+                             "lbr": bound.mean, "stderr": bound.stderr,
+                             "train_seconds": elapsed, "load_avg": load,
+                             "ms_per_iteration": (elapsed / max(1, solver.iterations)
+                                                  * 1000)})
         print(f"      {signal:<10} seed {seed}  {budget:>6.0f}s  "
               f"{solver.iterations:>7,} iters  LBR {bound.mean:+.3f} "
-              f"+/- {bound.stderr:.3f}", flush=True)
+              f"+/- {bound.stderr:.3f}  (load {load:.1f})", flush=True)
         if on_measurement is not None:
             on_measurement(signal, seed, measurements)
     return measurements
