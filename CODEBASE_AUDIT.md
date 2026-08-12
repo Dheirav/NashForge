@@ -256,6 +256,17 @@ Its two problems are design, not code:
 
 ## Part 3 — How to get a bot that plays effectively
 
+> **Status, 12 August 2026.** The three steps below were carried out. Measurement
+> was rebuilt and covered by 148 tests; the observation was made board-aware; and
+> the algorithm was replaced — CFR now runs on Kuhn, Leduc and an abstracted
+> heads-up no-limit game, validated against Kuhn's analytic value of −1/18 and
+> against exact exploitability on Leduc. Results are in
+> `IEEE_CFR_Poker_Engine_Paper_v3.pdf` and under `results/cfr/`. What remains open
+> is recorded in that paper's threats-to-validity section rather than here.
+
+### Original plan
+
+
 The split between Parts 1 and 2 is the answer. The hard, slow-to-write, easy-to-get-wrong component — a correct rules engine with correct money — exists and is verified. The parts that failed are thin, recently written and cheap to replace. That argues against starting over, and equally against trusting anything above the engine.
 
 Three things stand between this repository and a bot that plays well, and the order matters. Skipping ahead is what produced the existing results.
