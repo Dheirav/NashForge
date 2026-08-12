@@ -275,6 +275,22 @@ class NoLimitHoldem(Game):
         """
         return f"{self._bucket(state, player)}|{state.history}"
 
+    def information_set_with(self, state: NoLimitState, player: int,
+                             abstraction: CardAbstraction) -> Hashable:
+        """
+        The key this state would have under a DIFFERENT card abstraction.
+
+        Needed to play two agents trained on different abstractions against each
+        other: each must be asked the question its own bucketing poses. Handing
+        an agent the other's key would look like bad play rather than a
+        mismatched lookup.
+        """
+        hole = [FULL_DECK[c] for c in state.hole[player]]
+        board = [FULL_DECK[c] for c in state.board]
+        seed = hash((state.hole[player], state.board)) % (2 ** 32)
+        bucket = abstraction.bucket(hole, board, np.random.default_rng(seed))
+        return f"{bucket}|{state.history}"
+
     def _bucket(self, state: NoLimitState, player: int) -> int:
         key = (state.hole[player], state.board)
         cached = self._bucket_cache.get(key)
