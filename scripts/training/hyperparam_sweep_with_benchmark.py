@@ -83,9 +83,9 @@ def evaluate_against_benchmarks(trainer, benchmark_weights, num_hands=1000):
         total_delta += delta
         total_hands += hands
     
-    bb = trainer.config.fitness.big_blind
-    bb_per_100 = (total_delta / bb) * (100 / max(1, total_hands))
-    
+    # total_delta is already in big blinds
+    bb_per_100 = total_delta * (100 / max(1, total_hands))
+
     return bb_per_100
 
 

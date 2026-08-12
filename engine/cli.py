@@ -133,7 +133,7 @@ def main():
                 try:
                     amt = int(input("Enter raise amount: "))
                     action = Action(Action.RAISE, amt)
-                except:
+                except Exception:
                     log_lines.append("Invalid raise amount.")
                     print("Invalid raise amount.")
                     continue

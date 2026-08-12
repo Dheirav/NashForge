@@ -1,3 +1,4 @@
+import random
 from .cards import Deck
 from .state import GameState, PlayerState
 from .actions import Action
@@ -102,19 +103,21 @@ class PokerGame:
                 self._start_next_round()
         else:
             self.state.current_player = None
-    def betting_closed(self) -> bool:
-        """
-        Returns True if betting is closed (all but one player is folded or all-in).
-        """
-        active = [p for p in self.players if not p.has_folded and not p.is_all_in]
-        return len(active) <= 1
-
     def __init__(self, player_stacks: List[int], small_blind: int, big_blind: int, 
                  ante: int = 0, seed: int = None, enable_history: bool = False):
         self.players = [PlayerState(i, stack, i) for i, stack in enumerate(player_stacks)]
         self.state = GameState(self.players, button=0, small_blind=small_blind, big_blind=big_blind, seed=seed)
         self.state.ante = ante  # Store ante amount
         self.deck = Deck(seed)
+
+        # Hands dealt by THIS game object.  Reset here rather than probed with
+        # hasattr() so a game recycled through a pool starts from the same state
+        # as a fresh one — otherwise a recycled game kept the attribute and
+        # opened on button 1 while a fresh game opened on button 0.
+        self._hands_dealt = 0
+        # Draws a fresh deck seed for each subsequent hand, deterministically
+        # from the master seed.  See reset_hand().
+        self._deck_rng = random.Random(seed)
 
         self.current_bet = 0
         self.last_raiser = None
@@ -134,7 +137,7 @@ class PokerGame:
     def reset_hand(self):
         # Advance button position for new hand (except first hand)
         # Skip over busted players when moving button
-        if hasattr(self, '_hands_played'):
+        if self._hands_dealt > 0:
             n = len(self.players)
             new_button = (self.state.button + 1) % n
             # Find next player with chips for button
@@ -143,9 +146,28 @@ class PokerGame:
                     break
                 new_button = (new_button + 1) % n
             self.state.button = new_button
-        self._hands_played = True
-        
-        self.deck = Deck(self.state.deck_seed)
+
+        # Deal a DIFFERENT deck each hand.
+        #
+        # This used to be `Deck(self.state.deck_seed)` — the same seed every
+        # time — so every hand of a session got an identical shuffle and only
+        # the button rotation varied.  A session therefore contained just two
+        # distinct deals, alternating.  Anything that played hands by looping
+        # reset_hand() (self_play.play_match, and so every round-robin
+        # tournament, plus the GUI) was scoring agents on two repeated hands.
+        #
+        # The first hand still uses the master seed, so `PokerGame(seed=s)`
+        # deals exactly what it always did; later hands draw their seed from an
+        # RNG that is itself seeded from the master, keeping whole sessions
+        # reproducible.
+        if self.state.deck_seed is None:
+            deck_seed = None                      # unseeded: fresh entropy per hand
+        elif self._hands_dealt == 0:
+            deck_seed = self.state.deck_seed
+        else:
+            deck_seed = self._deck_rng.randrange(2 ** 31)
+        self.deck = Deck(deck_seed)
+        self._hands_dealt += 1
 
         for p in self.players:
             p.reset_for_new_hand()
@@ -169,14 +191,38 @@ class PokerGame:
             self.action_history = []  # Reset action history for new hand
         
         # Track BB position for option
-        n = len(self.players)
-        if n == 2:
-            self.bb_position = (self.state.button + 1) % n  # Heads-up: button is SB, other is BB
-        else:
-            self.bb_position = (self.state.button + 2) % n
+        _, self.bb_position = self._blind_positions()
         self.bb_has_option = True  # BB gets option if no raises preflop
 
         self.state.current_player = self._first_to_act("preflop")
+
+    def _blind_positions(self):
+        """
+        Seats posting the small and big blind, skipping busted players.
+
+        Blinds used to be assigned by seat offset alone, so a seat with no chips
+        could be handed one — it then "posted" zero, which both left the pot
+        short and marked a busted player all-in.  With enough busted seats a hand
+        could begin with nobody having posted anything at all.
+
+        Returns (sb_seat, bb_seat); either may be None if too few players are
+        funded to make a hand.
+        """
+        n = len(self.players)
+        funded = [(self.state.button + i) % n for i in range(n)
+                  if self.players[(self.state.button + i) % n].stack > 0]
+
+        if len(funded) < 2:
+            return (funded[0] if funded else None), None
+
+        if len(funded) == 2:
+            # Heads-up: the button posts the small blind.
+            return funded[0], funded[1]
+
+        # Three or more: small blind is the first funded seat left of the button,
+        # big blind the next one after that.
+        left_of_button = [s for s in funded if s != self.state.button] or funded
+        return left_of_button[0], left_of_button[1 % len(left_of_button)]
 
     def deal_hole_cards(self):
         # Deal cards starting left of button, one at a time (standard order)
@@ -204,20 +250,12 @@ class PokerGame:
                     p.total_contributed += ante_amt
                     self.state.pot.add_contribution(i, ante_amt)
         
-        if n == 2:
-            # Heads-up: button posts SB, other player posts BB
-            sb = self.state.button
-            bb = (self.state.button + 1) % n
-        else:
-            # Standard: SB is left of button, BB is left of SB
-            sb = (self.state.button + 1) % n
-            bb = (self.state.button + 2) % n
+        sb, bb = self._blind_positions()
 
-        sb_amt = self.players[sb].post_blind(self.state.small_blind)
-        bb_amt = self.players[bb].post_blind(self.state.big_blind)
-
-        self.state.pot.add_contribution(sb, sb_amt)
-        self.state.pot.add_contribution(bb, bb_amt)
+        if sb is not None:
+            self.state.pot.add_contribution(sb, self.players[sb].post_blind(self.state.small_blind))
+        if bb is not None:
+            self.state.pot.add_contribution(bb, self.players[bb].post_blind(self.state.big_blind))
 
     # ---------- TURN ORDER ----------
 
@@ -239,65 +277,14 @@ class PokerGame:
                 return idx
         return None
 
-    def _next_player(self):
-        n = len(self.players)
-        for i in range(1, n + 1):
-            idx = (self.state.current_player + i) % n
-            p = self.players[idx]
-            if not p.has_folded and not p.is_all_in:
-                return idx
-        return None
-
-    # ---------- BETTING ROUNDS ----------
-
-    def _reset_bets_for_new_round(self):
-        for p in self.players:
-            p.bet = 0
-
-        self.current_bet = 0
-        self.last_raiser = None
-        self.acted_since_last_raise.clear()
-
-    def next_betting_round(self):
-        # If betting is closed, auto-deal all remaining community cards and go to showdown
-        if self.betting_closed():
-            while self.state.betting_round != "showdown":
-                if self.state.betting_round == "preflop":
-                    self.deck.deal(1)  # Burn
-                    self.state.community_cards += self.deck.deal(3)
-                    self.state.betting_round = "flop"
-                elif self.state.betting_round == "flop":
-                    self.deck.deal(1)  # Burn
-                    self.state.community_cards += self.deck.deal(1)
-                    self.state.betting_round = "turn"
-                elif self.state.betting_round == "turn":
-                    self.deck.deal(1)  # Burn
-                    self.state.community_cards += self.deck.deal(1)
-                    self.state.betting_round = "river"
-                elif self.state.betting_round == "river":
-                    self.state.betting_round = "showdown"
-            return
-        # Otherwise, normal round advancement
-        self._reset_bets_for_new_round()
-        if self.state.betting_round == "preflop":
-            self.deck.deal(1)  # Burn
-            self.state.community_cards += self.deck.deal(3)
-            self.state.betting_round = "flop"
-        elif self.state.betting_round == "flop":
-            self.deck.deal(1)  # Burn
-            self.state.community_cards += self.deck.deal(1)
-            self.state.betting_round = "turn"
-        elif self.state.betting_round == "turn":
-            self.deck.deal(1)  # Burn
-            self.state.community_cards += self.deck.deal(1)
-            self.state.betting_round = "river"
-        elif self.state.betting_round == "river":
-            self.state.betting_round = "showdown"
-            return
-        self.state.current_player = self._first_to_act(self.state.betting_round)
-        if self.state.current_player is None:
-            # No one left to act, skip to next round
-            self.next_betting_round()
+    # NOTE: a second, unreachable street-advancement path used to live here
+    # (`_reset_bets_for_new_round` / `next_betting_round` / `_end_betting_round`
+    # / `betting_closed` / `_next_player`).  It duplicated the card-dealing
+    # logic of `_start_next_round()` with subtly different bookkeeping — it
+    # never reset `last_raise_size` or `bb_has_option` — so calling it would
+    # have corrupted min-raise enforcement.  Nothing referenced it; removed so
+    # `_advance_turn` → `_should_end_betting_round` → `_start_next_round`
+    # is the only way a street advances.
 
     # ---------- CORE ACTION LOGIC ----------
 
@@ -327,10 +314,14 @@ class PokerGame:
         if to_call > 0 and player.stack > 0:
             legal.append({'type': 'call', 'amount': min(to_call, player.stack)})
         
-        # Raise is legal if player can put in more than the call amount
-        if player.stack > to_call:
-            min_raise_to = current_max_bet + min_raise
-            max_raise_to = player.bet + player.stack
+        # Raise is legal only if the player can actually reach the minimum
+        # raise-to amount.  Having *some* chips beyond the call is not enough:
+        # if the stack falls short of a full min-raise the only aggressive
+        # action available is an all-in, which is listed separately below.
+        # (Advertising such a raise produced entries with min > max.)
+        min_raise_to = current_max_bet + min_raise
+        max_raise_to = player.bet + player.stack
+        if player.stack > to_call and max_raise_to >= min_raise_to:
             legal.append({'type': 'raise', 'min': min_raise_to, 'max': max_raise_to})
         
         # All-in is always legal if player has chips
@@ -494,15 +485,6 @@ class PokerGame:
         pot_sum = sum(p.total_contributed for p in self.state.players)
         assert self.state.pot.total == pot_sum, f"Pot {self.state.pot.total} != sum bets {pot_sum}"
 
-    def _end_betting_round(self):
-        # 4. Reset bets, current_bet, clear acted_since_last_raise, advance round and deal community cards
-        for p in self.players:
-            p.bet = 0
-        self.current_bet = 0
-        self.last_raiser = None
-        self.acted_since_last_raise = set()
-        self.next_betting_round()
-
     # ---------- END CONDITIONS ----------
 
     def is_hand_over(self):
@@ -516,11 +498,18 @@ class PokerGame:
         """
         self.state.pot.create_side_pots(self.players)
         winnings = resolve_showdown(self.players, self.state.community_cards, self.state.pot, self.state.button)
-        
+
         # Update player stacks with winnings
         for pid, amount in winnings.items():
             self.players[pid].stack += amount
-        
+
+        # Empty the pot now that it has been paid out.  It used to keep its
+        # pre-payout total until the next reset_hand(), so `sum(stacks) + pot`
+        # double-counted the money and any caller reading pot.total after a
+        # showdown saw a stale figure.  Clearing here also makes a second call
+        # a no-op rather than a double payout.
+        self.state.pot.reset()
+
         return winnings
 
     def __repr__(self):

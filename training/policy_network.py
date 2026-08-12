@@ -184,10 +184,13 @@ class PolicyNetwork:
         self.weights: List[np.ndarray] = []
         self.biases: List[np.ndarray] = []
         
+        # Expose architecture attributes once
+        self.input_size = self.config.input_size
+        self.hidden_sizes = self.config.hidden_sizes
+        self.output_size = self.config.output_size
         for i in range(len(self.layer_sizes) - 1):
             in_size = self.layer_sizes[i]
             out_size = self.layer_sizes[i + 1]
-            
             # Xavier/He initialization - use float32 for Numba compatibility
             std = np.sqrt(2.0 / in_size)
             self.weights.append(np.zeros((in_size, out_size), dtype=np.float32))
@@ -289,13 +292,15 @@ class PolicyNetwork:
         exp_logits = np.exp(logits_batch)
         probs_batch = exp_logits / np.sum(exp_logits, axis=1, keepdims=True)
         
-        # Sample actions for each state in batch
-        batch_size = features_batch.shape[0]
-        actions = np.zeros(batch_size, dtype=np.int32)
-        for i in range(batch_size):
-            actions[i] = rng.choice(len(probs_batch[i]), p=probs_batch[i])
-        
-        return actions
+        # Sample actions for the whole batch by inverse-CDF rather than calling
+        # rng.choice(p=...) once per row. That call re-validates the probability
+        # vector and rebuilds a cumulative distribution every time, costing
+        # ~19 us each; it dominated the training profile at 4.7 s per generation.
+        # This draws from the identical distribution in a single vectorised step.
+        cdf = np.cumsum(probs_batch, axis=1)
+        cdf[:, -1] = 1.0                       # guard against float drift < 1.0
+        u = rng.random((probs_batch.shape[0], 1))
+        return (cdf < u).sum(axis=1).astype(np.int32)
     
     def select_action(self, features: np.ndarray, mask: np.ndarray,
                       rng: np.random.Generator,
@@ -398,6 +403,73 @@ class PolicyNetwork:
             parts.append(w.flatten())
             parts.append(b)
         return np.concatenate(parts)
+
+    def set_weights(self, data):
+        """
+        Flexible setter for network parameters.
+
+        Accepts:
+          - 1D numpy array (flat genome) matching `genome_size`
+          - list/tuple of numpy arrays [w0, b0, w1, b1, ...] matching shapes
+          - dict with keys 'weights' and 'biases' containing lists of arrays
+        """
+        # 1) Flat genome array
+        if isinstance(data, np.ndarray) and data.ndim == 1:
+            return self.set_weights_from_genome(data)
+
+        # 2) List/tuple of arrays as alternating [w0, b0, w1, b1, ...]
+        #
+        # A shape mismatch here is a real error and is reported as one.  This
+        # used to be wrapped in `except Exception: pass`, so passing weights of
+        # the wrong shape fell through to the TypeError at the bottom and was
+        # reported as an unsupported *format* — sending you looking for the
+        # wrong problem entirely.
+        if isinstance(data, (list, tuple)):
+            seq = list(data)
+            if len(seq) != 2 * len(self.weights):
+                raise ValueError(
+                    f"expected {2 * len(self.weights)} arrays "
+                    f"([w0, b0, ...] for {len(self.weights)} layers), got {len(seq)}"
+                )
+            for i in range(len(self.weights)):
+                w = np.asarray(seq[2 * i], dtype=np.float32)
+                b = np.asarray(seq[2 * i + 1], dtype=np.float32)
+                if w.shape != self.weights[i].shape or b.shape != self.biases[i].shape:
+                    raise ValueError(
+                        f"layer {i} shape mismatch: got weights {w.shape} biases {b.shape}, "
+                        f"expected {self.weights[i].shape} and {self.biases[i].shape}"
+                    )
+                self.weights[i] = w.copy()
+                self.biases[i] = b.copy()
+            return
+
+        # 3) Dict with 'weights'/'biases'
+        if isinstance(data, dict):
+            ws, bs = data.get('weights'), data.get('biases')
+            if ws is None or bs is None:
+                raise ValueError("dict form requires both 'weights' and 'biases' keys")
+            if len(ws) != len(self.weights) or len(bs) != len(self.biases):
+                raise ValueError(
+                    f"expected {len(self.weights)} weight and bias arrays, "
+                    f"got {len(ws)} and {len(bs)}"
+                )
+            for i in range(len(self.weights)):
+                w = np.asarray(ws[i], dtype=np.float32)
+                b = np.asarray(bs[i], dtype=np.float32)
+                if w.shape != self.weights[i].shape or b.shape != self.biases[i].shape:
+                    raise ValueError(
+                        f"layer {i} shape mismatch: got weights {w.shape} biases {b.shape}, "
+                        f"expected {self.weights[i].shape} and {self.biases[i].shape}"
+                    )
+                self.weights[i] = w.copy()
+                self.biases[i] = b.copy()
+            return
+
+        raise TypeError(
+            f"unsupported weight format {type(data).__name__}; expected a flat "
+            f"1-D genome array, a [w0, b0, ...] sequence, or a "
+            f"{{'weights': [...], 'biases': [...]}} dict"
+        )
     
     def copy(self) -> 'PolicyNetwork':
         """Create a deep copy of this network."""
@@ -433,38 +505,14 @@ def create_action_mask(game, player_id: int) -> np.ndarray:
     Args:
         game: PokerGame instance
         player_id: Player to create mask for
-        
+
     Returns:
         Binary mask array of shape (6,)
+
+    Note:
+        Kept as a thin alias so training code reads naturally.  The mask itself
+        is defined once in `engine.features.get_abstract_action_mask` — there
+        used to be three separate implementations of this that disagreed.
     """
-    # Use optimized mask creation if available
-    try:
-        from .policy_network_fast import create_action_mask_fast
-        return create_action_mask_fast(game, player_id)
-    except ImportError:
-        pass
-    
-    # Fallback implementation
-    player = game.players[player_id]
-    to_call = game.current_bet - player.bet
-    
-    mask = np.zeros(6, dtype=np.float32)
-    mask[0] = 1.0  # fold always legal
-    mask[1] = 1.0  # check/call always legal
-    
-    # Enable raises if we have chips beyond call amount
-    if player.stack > to_call:
-        min_raise = game.state.big_blind
-        remaining = player.stack - to_call
-        
-        # Enable all raise sizes if we have enough for minimum raise
-        if remaining >= min_raise:
-            mask[2] = 1.0  # 0.5x pot
-            mask[3] = 1.0  # 1x pot
-            mask[4] = 1.0  # 2x pot
-    
-    # All-in always legal if we have chips
-    if player.stack > 0:
-        mask[5] = 1.0
-    
-    return mask
+    from engine.features import get_abstract_action_mask
+    return get_abstract_action_mask(game, player_id)

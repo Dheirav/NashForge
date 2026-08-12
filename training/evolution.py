@@ -9,9 +9,48 @@ import time
 from typing import Optional, List, Dict, Any
 from dataclasses import asdict
 from pathlib import Path
+def resolve_checkpoint_dir(path: str) -> str:
+    """
+    Accept either a checkpoint directory or the experiment directory above it.
+
+    Checkpoints are written to ``<output_dir>/<experiment>/runs/run_<timestamp>/``,
+    so the natural thing to type — ``--resume checkpoints/my_run`` — points one
+    or two levels above the files. Rather than fail with "config.json not found"
+    at a path that plainly exists, resolve an experiment directory to its most
+    recent run.
+
+    Returns the path unchanged if it already contains a checkpoint.
+    """
+    if os.path.exists(os.path.join(path, 'config.json')):
+        return path
+
+    runs_dir = os.path.join(path, 'runs')
+    search_root = runs_dir if os.path.isdir(runs_dir) else path
+    candidates = [
+        os.path.join(search_root, name)
+        for name in os.listdir(search_root)
+    ] if os.path.isdir(search_root) else []
+    candidates = [
+        c for c in candidates
+        if os.path.isdir(c) and os.path.exists(os.path.join(c, 'config.json'))
+    ]
+    if candidates:
+        return max(candidates, key=os.path.getmtime)
+    return path
+
+
 try:
+    # TensorBoard logging is optional; training reports the same statistics to
+    # stdout and to the checkpointed history either way.
+    #
+    # Catching Exception rather than ImportError is deliberate. torch's
+    # tensorboard bridge reaches through tensorboard.lazy into `tensorflow.io`
+    # at import time, so with tensorboard installed but tensorflow absent it
+    # raises AttributeError, not ImportError — which sailed straight past the
+    # narrower guard and took the whole module down. TensorFlow is otherwise
+    # unused here and costs ~1.8 GB and ~3.5 s of start-up per run.
     from torch.utils.tensorboard import SummaryWriter
-except ImportError:
+except Exception:
     SummaryWriter = None
 
 
@@ -153,8 +192,8 @@ class EvolutionTrainer:
                 )
                 total_delta += delta
                 total_hands += hands
-            bb = self.config.fitness.big_blind
-            bb_per_100 = (total_delta / bb) * (100 / max(1, total_hands))
+            # total_delta is already in big blinds
+            bb_per_100 = total_delta * (100 / max(1, total_hands))
             results[genome.genome_id] = bb_per_100
             if callback:
                 callback({'genome_id': genome.genome_id, 'bb_per_100': bb_per_100})
@@ -342,15 +381,21 @@ class EvolutionTrainer:
                             hof.remove(worst)
                             hof.append(current_best.copy())
         
-        # 4. Evolve to next generation
+        # 4. Gather statistics — BEFORE replacing the population.
+        # get_stats() skips genomes whose fitness is None, and the next
+        # generation is almost entirely freshly-mutated children with no
+        # fitness yet.  Collecting stats after replace() therefore averaged
+        # over just the surviving elite, making 'mean' identical to 'max' and
+        # 'std' exactly 0.0 in every generation ever logged.
+        stats = self.population.get_stats()
+
+        # 5. Evolve to next generation.  Population.evolve() already applies
+        # sigma decay internally; calling factory.decay_sigma() here as well
+        # decayed it twice per generation (sigma * decay**2g instead of
+        # sigma * decay**g).
         new_genomes, evo_info = self.population.evolve()
         self.population.replace(new_genomes)
 
-        # 5a. Apply sigma decay for the NEXT generation's mutations
-        self.factory.decay_sigma()
-
-        # 5. Gather statistics
-        stats = self.population.get_stats()
         gen_time = time.time() - gen_start
 
         # Compute per-format fitness means from this generation's eval results
@@ -538,12 +583,19 @@ class EvolutionTrainer:
             - Config
         """
         if path is None:
-            # Save to a new timestamped run directory if not resuming
+            # Save to a new timestamped run directory if not resuming.
+            #
+            # Nested under self.output_dir (output_dir/experiment_name), not
+            # config.output_dir. Using the latter dropped the experiment name,
+            # so every run landed in an anonymous checkpoints/runs/run_<ts>/
+            # regardless of --name, and `--resume checkpoints/<name>` could
+            # never find it. This restores the layout the archived runs use:
+            # checkpoints/<experiment_name>/runs/run_<timestamp>/
             import datetime
             run_dir = getattr(self, 'run_dir', None)
             if run_dir is None:
                 timestamp = datetime.datetime.now().strftime('%Y%m%d_%H%M%S')
-                run_dir = os.path.join(self.config.output_dir, 'runs', f'run_{timestamp}')
+                run_dir = os.path.join(self.output_dir, 'runs', f'run_{timestamp}')
                 os.makedirs(run_dir, exist_ok=True)
                 self.run_dir = run_dir
             path = run_dir
@@ -600,6 +652,11 @@ class EvolutionTrainer:
             'fitness': asdict(self.config.fitness),
             'num_generations': self.config.num_generations,
             'seed': self.config.seed,
+            # Recorded so a resumed run writes back into the same experiment
+            # directory. Without it, resume fell back to the default name and
+            # nested a second experiment dir inside the first.
+            'experiment_name': self.config.experiment_name,
+            'checkpoint_interval': self.config.checkpoint_interval,
         }
         atomic_save_json(os.path.join(path, 'config.json'), config_dict)
         
@@ -610,8 +667,11 @@ class EvolutionTrainer:
         Load training checkpoint.
         
         Args:
-            path: Path to checkpoint directory
+            path: Path to a checkpoint directory, or to an experiment directory
+                  containing runs/ — in which case the most recent run is used.
         """
+        path = resolve_checkpoint_dir(path)
+
         # Load and check config compatibility
         config_path = os.path.join(path, 'config.json')
         state_path = os.path.join(path, 'state.json')

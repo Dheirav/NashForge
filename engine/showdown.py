@@ -5,6 +5,21 @@ from .state import PlayerState
 from .pot import Pot
 
 
+def _winner_indices(candidates: List[PlayerState], community_cards: List) -> List[int]:
+    """
+    Indices (within `candidates`) of the player(s) holding the best hand.
+
+    A lone candidate wins by default and is never evaluated.  This matters
+    because a hand won by folding can end before the board is complete, and the
+    five-card comparator raises on fewer than five cards — so comparing a single
+    survivor against nobody used to crash with
+    "Need at least 5 cards, got 2" instead of simply paying them.
+    """
+    if len(candidates) == 1:
+        return [0]
+    return compare_hands_fast([p.hole_cards + community_cards for p in candidates])
+
+
 def resolve_showdown(players: List[PlayerState], community_cards: List, pot: Pot, button: int = 0) -> Dict[int, int]:
     """
     Given a list of PlayerState, community cards, and the pot,
@@ -30,8 +45,7 @@ def resolve_showdown(players: List[PlayerState], community_cards: List, pot: Pot
                 # Fall back to awarding to all active players proportionally
                 if active_players:
                     # Award to player(s) with best hand among all active
-                    hands = [p.hole_cards + community_cards for p in active_players]
-                    winner_idxs = compare_hands_fast(hands)
+                    winner_idxs = _winner_indices(active_players, community_cards)
                     share = side['amount'] // len(winner_idxs)
                     for idx in winner_idxs:
                         winnings[active_players[idx].player_id] += share
@@ -42,8 +56,7 @@ def resolve_showdown(players: List[PlayerState], community_cards: List, pot: Pot
                         for i in range(remainder):
                             winnings[winner_pids_sorted[i]] += 1
                 continue
-            hands = [p.hole_cards + community_cards for p in eligible]
-            winner_idxs = compare_hands_fast(hands)
+            winner_idxs = _winner_indices(eligible, community_cards)
             share = side['amount'] // len(winner_idxs)
             for idx in winner_idxs:
                 winnings[eligible[idx].player_id] += share
@@ -58,8 +71,7 @@ def resolve_showdown(players: List[PlayerState], community_cards: List, pot: Pot
                     winnings[winner_pids_sorted[i]] += 1
     else:
         # No side pots: main pot only
-        hands = [p.hole_cards + community_cards for p in active_players]
-        winner_idxs = compare_hands_fast(hands)
+        winner_idxs = _winner_indices(active_players, community_cards)
         share = pot.total // len(winner_idxs)
         for idx in winner_idxs:
             winnings[active_players[idx].player_id] += share

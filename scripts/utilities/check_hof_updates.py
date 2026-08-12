@@ -138,7 +138,7 @@ class HallOfFameChecker:
                                     if isinstance(history, list) and history:
                                         return history[-1].get('best_ever_fitness', 
                                                              history[-1].get('max_fitness', None))
-                                except:
+                                except Exception:
                                     pass
         return None
     
@@ -229,7 +229,7 @@ class HallOfFameChecker:
                         run_date = datetime.fromtimestamp(run_dir.stat().st_mtime)
                         if cutoff_date and run_date < cutoff_date:
                             continue
-                except:
+                except Exception:
                     run_date = datetime.now()
                 
                 # Check for best_genome.npy

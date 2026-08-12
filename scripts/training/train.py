@@ -206,30 +206,52 @@ def main():
         # Load config from checkpoint
         import json
         from pathlib import Path
-        checkpoint_path = Path(args.resume)
+        # Accept the experiment directory as well as the run directory inside
+        # it; checkpoints live in <experiment>/runs/run_<timestamp>/.
+        from training.evolution import resolve_checkpoint_dir
+        checkpoint_path = Path(resolve_checkpoint_dir(str(args.resume)))
+        if str(checkpoint_path) != str(args.resume):
+            print(f"  resolved to most recent run: {checkpoint_path}")
         config_file = checkpoint_path / 'config.json'
         if not config_file.exists():
-            print(f"Error: Config file not found at {config_file}")
+            print(f"Error: no checkpoint found at {args.resume}")
+            print(f"       looked for {config_file} and under {args.resume}/runs/")
             sys.exit(1)
         
         with open(config_file) as f:
             checkpoint_config = json.load(f)
         
-        # Recreate config from checkpoint
+        # Write back into the SAME experiment directory. The checkpoint lives at
+        # <output>/<experiment>/runs/run_<ts>/, so the experiment directory is
+        # two levels up; older checkpoints saved no experiment_name, so it is
+        # recovered from the path rather than trusted from the file.
+        experiment_dir = (checkpoint_path.parent.parent
+                          if checkpoint_path.parent.name == 'runs'
+                          else checkpoint_path)
+
+        # Resuming means "continue for this many more generations". Deriving the
+        # target from the stored count instead meant --gens was ignored, and a
+        # target already reached silently trained nothing while reporting success.
+        completed = int(checkpoint_config.get('generation', 0))
         config = TrainingConfig(
             network=NetworkConfig(**checkpoint_config['network']),
             evolution=EvolutionConfig(**checkpoint_config['evolution']),
             fitness=FitnessConfig(**checkpoint_config['fitness']),
-            num_generations=checkpoint_config.get('num_generations', args.gens),
+            num_generations=args.gens,   # provisional; corrected after loading
             checkpoint_interval=checkpoint_config.get('checkpoint_interval', 10),
             seed=checkpoint_config['seed'],
-            output_dir=str(checkpoint_path.parent.parent),
-            experiment_name=checkpoint_config.get('experiment_name', 'evolution_run')
+            output_dir=str(experiment_dir.parent),
+            experiment_name=checkpoint_config.get('experiment_name', experiment_dir.name),
         )
-        
+
         # Create trainer with checkpoint config
         trainer = EvolutionTrainer(config)
-        trainer.load_checkpoint(args.resume)
+        trainer.load_checkpoint(str(checkpoint_path))
+
+        # trainer.generation is now the count actually restored from state.json.
+        config.num_generations = trainer.generation + args.gens
+        print(f"  resumed at generation {trainer.generation}; "
+              f"training {args.gens} more (through generation {config.num_generations})")
     else:
         print("\nInitializing new population...")
         # Create config

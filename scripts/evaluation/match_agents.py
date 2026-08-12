@@ -110,16 +110,10 @@ def main():
             if player_idx is None or game.state.players[player_idx].has_folded or game.state.players[player_idx].is_all_in:
                 break
             # Get state vector and action mask
-            from engine.features import get_state_vector, get_action_mask
+            from engine.features import get_state_vector, get_abstract_action_mask
             features = np.array(get_state_vector(game, player_idx), dtype=np.float32)
-            mask = np.array(get_action_mask(game, player_idx), dtype=np.float32)
+            mask = get_abstract_action_mask(game, player_idx)
             n_actions = agents[player_idx].weights[-1].shape[1]  # Output size (should be 6)
-            # Ensure mask matches output size (network's output layer)
-            if mask.shape[0] < n_actions:
-                mask = np.pad(mask, (0, n_actions - mask.shape[0]), 'constant')
-            elif mask.shape[0] > n_actions:
-                mask = mask[:n_actions]
-            # Defensive: ensure mask and logits will match
             assert mask.shape[0] == n_actions, f"Mask shape {mask.shape} does not match network output {n_actions}"
             # Agent selects action
             agent = agents[player_idx]
@@ -214,21 +208,24 @@ def main():
             logging.info(f"Total chips after hand: {total_chips}")
             logging.info(log_line)
         hand += 1
-    print(f"Final stacks: Agent 1: {stacks[0]}, Agent 2: {stacks[1]}")
+    print(f"Final stacks: {stacks}")
+    import json
+    print(json.dumps({"final_stacks": stacks}))
     if logging_enabled:
-        logging.info(f"Final stacks: Agent 1: {stacks[0]}, Agent 2: {stacks[1]}")
-    if stacks[0] <= 0:
-        print("Agent 2 wins by elimination!")
-        if logging_enabled:
-            logging.info("Agent 2 wins by elimination!")
-    elif stacks[1] <= 0:
-        print("Agent 1 wins by elimination!")
-        if logging_enabled:
-            logging.info("Agent 1 wins by elimination!")
-    else:
-        print("No elimination. Chips after max hands.")
-        if logging_enabled:
-            logging.info("No elimination. Chips after max hands.")
+        logging.info(f"Final stacks: {stacks}")
+    if len(stacks) > 1:
+        if stacks[0] <= 0:
+            print("Agent 2 wins by elimination!")
+            if logging_enabled:
+                logging.info("Agent 2 wins by elimination!")
+        elif stacks[1] <= 0:
+            print("Agent 1 wins by elimination!")
+            if logging_enabled:
+                logging.info("Agent 1 wins by elimination!")
+        else:
+            print("No elimination. Chips after max hands.")
+            if logging_enabled:
+                logging.info("No elimination. Chips after max hands.")
 
 if __name__ == "__main__":
     main()

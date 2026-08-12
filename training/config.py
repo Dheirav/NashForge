@@ -102,6 +102,25 @@ class FitnessConfig:
     heads_up_fraction: float = 0.0  # 0.0 = all MT, 1.0 = all HU
     hu_hands_per_matchup: int = 500  # Hands for HU matchups (can differ from MT)
 
+    # ── Per-hand condition randomisation (opt-in) ────────────────────────────
+    # These were previously read out of the config with getattr() defaults even
+    # though the field did not exist, so EVERY evaluation silently randomised
+    # stacks to 0.5-1.5x starting_stack, blinds to 1-2x, and injected a 0-1
+    # ante — none of it recorded in the saved config.  It is now explicit and
+    # off by default: each hand uses exactly the values declared above.
+    #
+    # Set randomise_conditions=True to opt in.  A None bound falls back to the
+    # historical formula, so the old behaviour is still reproducible.
+    randomise_conditions: bool = False
+    stack_min: Optional[int] = None   # default: starting_stack // 2
+    stack_max: Optional[int] = None   # default: starting_stack * 3 // 2
+    sb_min:    Optional[int] = None   # default: small_blind
+    sb_max:    Optional[int] = None   # default: small_blind * 2
+    bb_min:    Optional[int] = None   # default: big_blind
+    bb_max:    Optional[int] = None   # default: big_blind * 2
+    ante_min:  Optional[int] = None   # default: ante
+    ante_max:  Optional[int] = None   # default: max(1, ante * 2)
+
     @property
     def total_hands_per_agent(self) -> int:
         """Total hands played per fitness evaluation."""
