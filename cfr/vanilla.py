@@ -34,12 +34,17 @@ from games.base import Game
 class InfoSetNode:
     """Accumulated regret and strategy for one information set."""
 
-    __slots__ = ("num_actions", "regret_sum", "strategy_sum")
+    __slots__ = ("num_actions", "regret_sum", "strategy_sum", "last_discounted")
 
     def __init__(self, num_actions: int):
         self.num_actions = num_actions
         self.regret_sum = np.zeros(num_actions, dtype=np.float64)
         self.strategy_sum = np.zeros(num_actions, dtype=np.float64)
+        #: Iteration in which this node's accumulators were last decayed.
+        #: Discount schedules are defined per iteration, but a sampler may
+        #: reach the same information set many times within one — see
+        #: :meth:`cfr.mccfr.MCCFRSolver._discount_once`.
+        self.last_discounted = 0
 
     def strategy(self) -> np.ndarray:
         """
