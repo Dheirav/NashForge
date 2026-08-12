@@ -126,7 +126,8 @@ def play_match(agents: List[AgentPlayer], num_hands: int = 100,
         Dict mapping agent index to SessionStats
     """
     from engine import PokerGame, Action, get_state_vector
-    from .fitness import abstract_action_to_engine_action
+    from .fitness import (abstract_action_to_engine_action, hand_start_stacks,
+                          chip_deltas, apply_action_or_fold)
     
     config = config or FitnessConfig()
     rng = np.random.default_rng(seed)
@@ -159,8 +160,8 @@ def play_match(agents: List[AgentPlayer], num_hands: int = 100,
         hand_vpip = {i: False for i in range(num_players)}
         hand_pfr = {i: False for i in range(num_players)}
         
-        stacks_before = [p.stack for p in game.players]
-        
+        stacks_before = hand_start_stacks(game)
+
         action_count = 0
         max_actions = 200
         
@@ -190,28 +191,25 @@ def play_match(agents: List[AgentPlayer], num_hands: int = 100,
             elif action.action_type == 'call':
                 stats[current]['calls'] += 1
             
-            # Apply action
-            try:
-                game.apply_action(current, action)
-            except Exception as e:
-                if verbose:
-                    print(f"Action error: {e}")
+            # Apply action, folding for the player if the engine refuses it.
+            # Shares one handler with the fitness loop so rejected actions are
+            # counted in ILLEGAL_ACTIONS rather than vanishing.
+            if not apply_action_or_fold(game, current, action):
                 break
-            
+
             action_count += 1
         
-        # Resolve showdown
+        # Award the pot however the hand ended (fold-outs included)
+        pot_before = game.state.pot.total
         winners = []
-        if game.state.betting_round == 'showdown':
-            try:
-                winnings = game.resolve_showdown()
-                winners = [pid for pid, amt in winnings.items() if amt > 0]
-            except:
-                pass
-        
+        if pot_before > 0:
+            winnings = game.resolve_showdown()
+            winners = [pid for pid, amt in winnings.items() if amt > 0]
+
         # Calculate deltas and update stats
+        deltas = chip_deltas(game, stacks_before)
         for i, player in enumerate(game.players):
-            delta = player.stack - stacks_before[i]
+            delta = deltas[i]
             stats[i]['chip_delta'] += delta
             stats[i]['hands'] += 1
             
@@ -235,7 +233,7 @@ def play_match(agents: List[AgentPlayer], num_hands: int = 100,
         # Reset for next hand
         try:
             game.reset_hand()
-        except:
+        except Exception:
             game = PokerGame(
                 player_stacks=starting_stacks.copy(),
                 small_blind=config.small_blind,

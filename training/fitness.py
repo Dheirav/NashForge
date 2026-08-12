@@ -4,6 +4,7 @@ Fitness evaluation through self-play.
 Evaluates agent fitness by playing poker hands against other agents.
 Fitness = average big blinds won per 100 hands (BB/100).
 """
+import warnings
 import numpy as np
 from numpy.random import PCG64, Generator
 from typing import List, Dict, Optional, Tuple
@@ -68,7 +69,7 @@ class EvalResult:
     genome_id: int
     fitness: float  # BB/100 (combined)
     total_hands: int
-    total_chip_delta: int
+    total_bb_delta: float  # hero's own net result, in big blinds
     matchups_played: int
     hu_fitness: float = 0.0   # BB/100 in heads-up matchups (0 when none played)
     mt_fitness: float = 0.0   # BB/100 in multi-table matchups (0 when none played)
@@ -157,7 +158,124 @@ def abstract_action_to_engine_action(action_idx: int, game, player_id: int):
         return Action('fold')
 
 
-def play_hands_batched(networks_list: List[List[PolicyNetwork]], 
+class IllegalActionTally:
+    """
+    Counts actions the engine rejected, so they stop being invisible.
+
+    Both hand loops respond to a rejected action by folding for the player and
+    carrying on.  That is a reasonable way to survive a bad action, but it used
+    to be completely silent: an agent emitting illegal actions on every hand
+    scored as merely *weak* rather than broken, which is exactly how defects
+    survive dozens of training runs unnoticed.
+
+    A warning is raised the first time so a run cannot fail quietly, and the
+    counts stay available for callers that want to report them.
+    """
+
+    def __init__(self):
+        self.rejected = 0        # engine refused the chosen action
+        self.fold_failed = 0     # even the fallback fold was refused
+        self.truncated = 0       # hand hit the max_actions safety cap
+
+    def reset(self) -> None:
+        self.rejected = 0
+        self.fold_failed = 0
+        self.truncated = 0
+
+    @property
+    def total(self) -> int:
+        return self.rejected + self.fold_failed + self.truncated
+
+    def __repr__(self) -> str:
+        return (f"IllegalActionTally(rejected={self.rejected}, "
+                f"fold_failed={self.fold_failed}, truncated={self.truncated})")
+
+
+# Process-wide tally. Read it after a run; call .reset() to zero it.
+ILLEGAL_ACTIONS = IllegalActionTally()
+_WARNED_ILLEGAL = False
+
+
+def apply_action_or_fold(game, seat: int, action, tally: IllegalActionTally = None) -> bool:
+    """
+    Apply `action` for `seat`, falling back to a fold if the engine refuses it.
+
+    Returns True if the hand can continue, False if even folding failed and the
+    hand must be abandoned.
+    """
+    global _WARNED_ILLEGAL
+    tally = tally if tally is not None else ILLEGAL_ACTIONS
+
+    try:
+        game.apply_action(seat, action)
+        return True
+    except Exception as exc:
+        tally.rejected += 1
+        if not _WARNED_ILLEGAL:
+            _WARNED_ILLEGAL = True
+            warnings.warn(
+                f"engine rejected an agent action ({action!r}: {exc}); folding "
+                f"instead. Further occurrences are counted in "
+                f"training.fitness.ILLEGAL_ACTIONS rather than warned about.",
+                RuntimeWarning, stacklevel=2,
+            )
+        try:
+            from engine import Action
+            game.apply_action(seat, Action('fold'))
+            return True
+        except Exception:
+            tally.fold_failed += 1
+            return False
+
+
+def hand_start_stacks(game) -> List[int]:
+    """
+    Stacks as they were at the START of the hand, before blinds and antes left
+    them.
+
+    Callers receive a game whose blinds are already posted, so reading
+    `player.stack` alone understates each player's starting chips by whatever
+    they have already put in.  Measuring chip deltas against that understated
+    baseline credits a winner with their own blind back as profit — a
+    systematic, position-dependent bias, since the button does not rotate
+    between hands here.  `total_contributed` at this point is exactly the
+    blind/ante already posted, so adding it back recovers the true baseline.
+    """
+    return [p.stack + p.total_contributed for p in game.players]
+
+
+def finish_hand(game) -> None:
+    """
+    Award the pot, whichever way the hand ended.
+
+    `resolve_showdown()` handles a lone surviving player as well as a real
+    showdown, so it must be called on fold-outs too.  Guarding it with
+    `betting_round == 'showdown'` silently destroyed the pot on every hand won
+    by folding — the majority of hands — and scored all players as having lost
+    their contributions.
+    """
+    if game.state.pot.total > 0:
+        game.resolve_showdown()
+
+
+def chip_deltas(game, start_stacks: List[int]) -> Dict[int, int]:
+    """
+    Per-seat chip change for a completed hand, keyed by SEAT index.
+
+    Poker is zero-sum: once the pot is awarded the deltas must sum to zero.
+    Violating that means chips were destroyed (pot never awarded) or created
+    (double payout), so it is asserted rather than trusted.
+    """
+    changes = {i: p.stack - start_stacks[i] for i, p in enumerate(game.players)}
+    total = sum(changes.values())
+    assert total == 0, (
+        f"chips not conserved: net {total:+d} over the hand "
+        f"(pot={game.state.pot.total}, round={game.state.betting_round})"
+    )
+    return changes
+
+
+def play_hands_batched(networks_list: List[List[PolicyNetwork]],
                        games: List,
                        rng: np.random.Generator,
                        temperature: float = 1.0) -> List[Dict[int, int]]:
@@ -177,7 +295,7 @@ def play_hands_batched(networks_list: List[List[PolicyNetwork]],
     from engine.features import FeatureCache
     
     batch_size = len(games)
-    stacks_before = [[p.stack for p in game.players] for game in games]
+    stacks_before = [hand_start_stacks(game) for game in games]
     max_actions = 200
     
     # Track state for each game
@@ -204,7 +322,14 @@ def play_hands_batched(networks_list: List[List[PolicyNetwork]],
                 continue
                 
             game = gs['game']
-            if game.is_hand_over() or gs['action_count'] >= max_actions:
+            if game.is_hand_over():
+                gs['finished'] = True
+                continue
+            if gs['action_count'] >= max_actions:
+                # A hand needing 200 actions means the betting loop is not
+                # terminating. Truncating silently turned that into a slightly
+                # odd chip delta instead of a visible failure.
+                ILLEGAL_ACTIONS.truncated += 1
                 gs['finished'] = True
                 continue
             
@@ -253,39 +378,20 @@ def play_hands_batched(networks_list: List[List[PolicyNetwork]],
             game = gs['game']
             action_idx = action_indices[i]
             
-            # Convert to engine action
+            # Convert to engine action and apply it
             action = abstract_action_to_engine_action(action_idx, game, current)
-            
-            # Apply action
-            try:
-                game.apply_action(current, action)
-            except Exception:
-                # If action fails, try fold
-                try:
-                    from engine import Action
-                    game.apply_action(current, Action('fold'))
-                except:
-                    gs['finished'] = True
-            
+            if not apply_action_or_fold(game, current, action):
+                gs['finished'] = True
+
             gs['action_count'] += 1
     
-    # Resolve showdowns and calculate results
+    # Award pots and calculate results
     results = []
     for idx, gs in enumerate(game_states):
         game = gs['game']
-        
-        if game.state.betting_round == 'showdown':
-            try:
-                game.resolve_showdown()
-            except:
-                pass
-        
-        # Calculate chip changes
-        changes = {}
-        for i, player in enumerate(game.players):
-            changes[i] = player.stack - stacks_before[idx][i]
-        results.append(changes)
-    
+        finish_hand(game)
+        results.append(chip_deltas(game, stacks_before[idx]))
+
     return results
 
 
@@ -303,62 +409,14 @@ def play_hand(networks: List[PolicyNetwork], game,
         
     Returns:
         Dict mapping player_id to chip change
+
+    Note:
+        This is a batch of one.  It used to carry its own copy of the hand loop,
+        which then drifted from the batched version — the two disagreed about
+        which feature layout to use, and that is how agents ended up trained on
+        one observation and evaluated on another.  There is now a single loop.
     """
-    from engine.features import FeatureCache
-    
-    stacks_before = [p.stack for p in game.players]
-    max_actions = 200  # Safety limit
-    action_count = 0
-    
-    # Create feature caches once per hand (1.5-2× speedup)
-    feature_caches = [FeatureCache(game, i) for i in range(len(game.players))]
-    
-    while not game.is_hand_over() and action_count < max_actions:
-        current = game.state.current_player
-        if current is None:
-            break
-        
-        player = game.players[current]
-        if player.has_folded or player.is_all_in:
-            # This shouldn't happen but safety check
-            break
-        
-        # Get state features (using cached static features) and action mask
-        features = feature_caches[current].get_features(game)
-        mask = create_action_mask(game, current)
-        
-        # Select action from network
-        action_idx = networks[current].select_action(features, mask, rng, temperature)
-        
-        # Convert to engine action
-        action = abstract_action_to_engine_action(action_idx, game, current)
-        
-        # Apply action
-        try:
-            game.apply_action(current, action)
-        except Exception as e:
-            # If action fails, try fold
-            try:
-                from engine import Action
-                game.apply_action(current, Action('fold'))
-            except:
-                break
-        
-        action_count += 1
-    
-    # Resolve showdown if needed
-    if game.state.betting_round == 'showdown':
-        try:
-            game.resolve_showdown()
-        except:
-            pass
-    
-    # Calculate chip changes
-    changes = {}
-    for i, player in enumerate(game.players):
-        changes[i] = player.stack - stacks_before[i]
-    
-    return changes
+    return play_hands_batched([networks], [game], rng, temperature)[0]
 
 
 def evaluate_matchup(genome_weights: np.ndarray,
@@ -384,7 +442,9 @@ def evaluate_matchup(genome_weights: np.ndarray,
             fitness evaluation, producing format-agnostic agents.
 
     Returns:
-        Tuple of (total_chip_delta, hands_played)
+        Tuple of (hero_delta_in_big_blinds, hands_played).  The delta is the
+        HERO's own net result — not seat 0's — accumulated in big blinds so a
+        varying blind level cannot corrupt the normalisation.
     """
     from engine import PokerGame
 
@@ -411,23 +471,31 @@ def evaluate_matchup(genome_weights: np.ndarray,
     if hand_seeds is None:
         # Use random hands for training
         hand_seeds = [int(rng.integers(0, 2**31)) for _ in range(num_hands)]
-    # Vary stack sizes and blind levels for each hand
-    stack_min = int(getattr(fitness_config, 'stack_min', fitness_config.starting_stack * 0.5))
-    stack_max = int(getattr(fitness_config, 'stack_max', fitness_config.starting_stack * 1.5))
-    sb_min = int(getattr(fitness_config, 'sb_min', fitness_config.small_blind))
-    sb_max = int(getattr(fitness_config, 'sb_max', fitness_config.small_blind * 2))
-    bb_min = int(getattr(fitness_config, 'bb_min', fitness_config.big_blind))
-    bb_max = int(getattr(fitness_config, 'bb_max', fitness_config.big_blind * 2))
-    ante_min = int(getattr(fitness_config, 'ante_min', fitness_config.ante))
-    ante_max = int(getattr(fitness_config, 'ante_max', max(1, fitness_config.ante * 2)))
+    # Per-hand conditions.  Off by default: every hand uses the declared
+    # starting_stack / blinds / ante.  Randomisation is opt-in via the config.
+    cfg = fitness_config
+    randomise = cfg.randomise_conditions
+    if randomise:
+        def _bound(value, fallback):
+            return int(fallback if value is None else value)
+        stack_min = _bound(cfg.stack_min, cfg.starting_stack // 2)
+        stack_max = _bound(cfg.stack_max, cfg.starting_stack * 3 // 2)
+        sb_min    = _bound(cfg.sb_min, cfg.small_blind)
+        sb_max    = _bound(cfg.sb_max, cfg.small_blind * 2)
+        bb_min    = _bound(cfg.bb_min, cfg.big_blind)
+        bb_max    = _bound(cfg.bb_max, cfg.big_blind * 2)
+        ante_min  = _bound(cfg.ante_min, cfg.ante)
+        ante_max  = _bound(cfg.ante_max, max(1, cfg.ante * 2))
 
-    def new_game(hand_seed, seat_order):
-        # Randomize stacks and blinds for each hand
-        stacks = [int(rng.integers(stack_min, stack_max+1)) for _ in range(num_players)]
-        stacks = [stacks[i] for i in seat_order]
-        sb = int(rng.integers(sb_min, sb_max+1))
-        bb = int(rng.integers(bb_min, bb_max+1))
-        ante = int(rng.integers(ante_min, ante_max+1)) if ante_max > 0 else 0
+    def new_game(hand_seed):
+        if randomise:
+            stacks = [int(rng.integers(stack_min, stack_max + 1)) for _ in range(num_players)]
+            sb   = int(rng.integers(sb_min, sb_max + 1))
+            bb   = int(rng.integers(bb_min, bb_max + 1))
+            ante = int(rng.integers(ante_min, ante_max + 1)) if ante_max > 0 else 0
+        else:
+            stacks = [cfg.starting_stack] * num_players
+            sb, bb, ante = cfg.small_blind, cfg.big_blind, cfg.ante
         # Use game pool for memory reuse
         return _GAME_POOL.acquire(
             player_stacks=stacks,
@@ -435,8 +503,12 @@ def evaluate_matchup(genome_weights: np.ndarray,
             big_blind=bb,
             ante=ante,
             seed=hand_seed
-        )
-    total_delta = 0
+        ), bb
+
+    # Accumulated in BIG BLINDS, not chips: with randomisation enabled the blind
+    # varies per hand, so dividing a chip total by a single nominal blind at the
+    # end (as this used to) normalises most hands by the wrong denominator.
+    total_delta_bb = 0.0
     hands_played = 0
     
     # Process hands in batches for better performance
@@ -449,22 +521,29 @@ def evaluate_matchup(genome_weights: np.ndarray,
         # Prepare batch of games
         games_batch = []
         networks_batch = []
-        seat_orders_batch = []
-        
+        hero_seats_batch = []
+        bb_batch = []
+
         for hand_idx in range(batch_start, batch_end):
             # Shuffle seat positions
             seat_order = list(range(num_players))
             rng.shuffle(seat_order)
-            seat_orders_batch.append(seat_order)
-            
-            # Shuffle networks to match seat order
+
+            # Shuffle networks to match seat order: seat j plays networks[seat_order[j]].
             shuffled_networks = [networks[i] for i in seat_order]
             networks_batch.append(shuffled_networks)
-            
+
+            # The hero is networks[0], so it occupies the seat holding index 0.
+            # Chip deltas come back keyed by SEAT, so this is the only seat whose
+            # result belongs to the hero.  (Reading seat 0 unconditionally, as
+            # this used to, scored an opponent on ~(n-1)/n of all hands.)
+            hero_seats_batch.append(seat_order.index(0))
+
             # Create game
-            game = new_game(hand_seeds[hand_idx], seat_order)
+            game, bb = new_game(hand_seeds[hand_idx])
             games_batch.append(game)
-        
+            bb_batch.append(bb)
+
         # Play batch of hands with batched inference
         if batch_hands == 1:
             # Single hand - use regular play_hand
@@ -472,24 +551,17 @@ def evaluate_matchup(genome_weights: np.ndarray,
         else:
             # Multiple hands - use batched processing
             changes_batch = play_hands_batched(networks_batch, games_batch, rng, fitness_config.temperature)
-        
-        # Accumulate results
-        for changes in changes_batch:
-            total_delta += changes.get(0, 0)
+
+        # Accumulate the hero's own result, in big blinds
+        for changes, hero_seat, bb in zip(changes_batch, hero_seats_batch, bb_batch):
+            total_delta_bb += changes[hero_seat] / bb
             hands_played += 1
-        
+
         # Return games to pool
         for game in games_batch:
             _GAME_POOL.release(game)
-            
-            # Check for busted players - reset stacks if needed
-            active = [p for p in game.players if p.stack > 0]
-            if len(active) < 2:
-                for i, p in enumerate(game.players):
-                    game.players[i].stack = fitness_config.starting_stack
-                game.players[i].stack = fitness_config.starting_stack
-    
-    return total_delta, hands_played
+
+    return total_delta_bb, hands_played
 
 
 def _worker_evaluate_genome_with_hof(args: Tuple) -> Dict:
@@ -605,16 +677,16 @@ def _worker_evaluate_genome(args: Tuple) -> EvalResult:
 
     # Final fitness = weighted BB/100 across all matchups
     # (HU and MT are naturally weighted by their share of total hands)
-    bb = fitness_config.big_blind
-    bb_per_100 = (total_delta / bb) * (100 / max(1, total_hands))
-    hu_bb100 = (hu_delta / bb) * (100 / max(1, hu_hands)) if hu_hands > 0 else 0.0
-    mt_bb100 = (mt_delta / bb) * (100 / max(1, mt_hands)) if mt_hands > 0 else 0.0
+    # evaluate_matchup already returns big blinds, so no division by blind here.
+    bb_per_100 = total_delta * (100 / max(1, total_hands))
+    hu_bb100 = hu_delta * (100 / max(1, hu_hands)) if hu_hands > 0 else 0.0
+    mt_bb100 = mt_delta * (100 / max(1, mt_hands)) if mt_hands > 0 else 0.0
 
     return EvalResult(
         genome_id=genome_id,
         fitness=bb_per_100,
         total_hands=total_hands,
-        total_chip_delta=total_delta,
+        total_bb_delta=total_delta,
         matchups_played=len(opponent_weights_list),
         hu_fitness=hu_bb100,
         mt_fitness=mt_bb100,
@@ -625,26 +697,17 @@ def evaluate_fixed_hands(genome_weights: np.ndarray,
                         network_config: NetworkConfig,
                         fitness_config: FitnessConfig,
                         eval_hand_seeds: List[int],
-                        seed: int) -> Tuple[int, int]:
+                        seed: int) -> Tuple[float, int]:
     """
     Evaluate a genome on a fixed set of hands for fair comparison.
+
+    Returns:
+        (total_delta_in_big_blinds, hands_played)
     """
     return evaluate_matchup(
         genome_weights, opponent_weights,
         network_config, fitness_config, seed,
         hand_seeds=eval_hand_seeds
-    )
-    
-    # Calculate BB/100
-    bb = fitness_config.big_blind
-    bb_per_100 = (total_delta / bb) * (100 / max(1, total_hands))
-    
-    return EvalResult(
-        genome_id=genome_id,
-        fitness=bb_per_100,
-        total_hands=total_hands,
-        total_chip_delta=total_delta,
-        matchups_played=len(opponent_weights_list),
     )
 
 
@@ -807,9 +870,9 @@ class FitnessEvaluator:
         
         if num_hands is not None:
             self.config.hands_per_matchup = old_hands
-        
-        bb = self.config.big_blind
-        return (total_delta / bb) * (100 / max(1, total_hands))
+
+        # total_delta is already in big blinds
+        return total_delta * (100 / max(1, total_hands))
     
     def evaluate_population(self, genomes: List[Genome],
                            hall_of_fame: Optional[List[Genome]] = None,
@@ -905,6 +968,6 @@ class FitnessEvaluator:
         )
         
         self.config.hands_per_matchup = old_hands
-        
-        bb = self.config.big_blind
-        return (delta / bb) * (100 / max(1, hands))
+
+        # delta is already in big blinds
+        return delta * (100 / max(1, hands))

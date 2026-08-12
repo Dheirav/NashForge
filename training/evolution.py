@@ -153,8 +153,8 @@ class EvolutionTrainer:
                 )
                 total_delta += delta
                 total_hands += hands
-            bb = self.config.fitness.big_blind
-            bb_per_100 = (total_delta / bb) * (100 / max(1, total_hands))
+            # total_delta is already in big blinds
+            bb_per_100 = total_delta * (100 / max(1, total_hands))
             results[genome.genome_id] = bb_per_100
             if callback:
                 callback({'genome_id': genome.genome_id, 'bb_per_100': bb_per_100})
@@ -342,15 +342,21 @@ class EvolutionTrainer:
                             hof.remove(worst)
                             hof.append(current_best.copy())
         
-        # 4. Evolve to next generation
+        # 4. Gather statistics — BEFORE replacing the population.
+        # get_stats() skips genomes whose fitness is None, and the next
+        # generation is almost entirely freshly-mutated children with no
+        # fitness yet.  Collecting stats after replace() therefore averaged
+        # over just the surviving elite, making 'mean' identical to 'max' and
+        # 'std' exactly 0.0 in every generation ever logged.
+        stats = self.population.get_stats()
+
+        # 5. Evolve to next generation.  Population.evolve() already applies
+        # sigma decay internally; calling factory.decay_sigma() here as well
+        # decayed it twice per generation (sigma * decay**2g instead of
+        # sigma * decay**g).
         new_genomes, evo_info = self.population.evolve()
         self.population.replace(new_genomes)
 
-        # 5a. Apply sigma decay for the NEXT generation's mutations
-        self.factory.decay_sigma()
-
-        # 5. Gather statistics
-        stats = self.population.get_stats()
         gen_time = time.time() - gen_start
 
         # Compute per-format fitness means from this generation's eval results
