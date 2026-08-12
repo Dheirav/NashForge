@@ -88,9 +88,11 @@ class MCCFRSolver:
             return game.utility(state, traverser)
 
         if game.is_chance(state):
-            outcomes = game.chance_outcomes(state)
-            index = self._sample([p for _, p in outcomes])
-            return self._walk(game.next_state(state, outcomes[index][0]), traverser)
+            # Through sample_chance rather than chance_outcomes: a no-limit deal
+            # has ~1.6 million outcomes, and building that list to pick one from
+            # it would cost more than the rest of the traversal put together.
+            return self._walk(
+                game.next_state(state, game.sample_chance(state, self.rng)), traverser)
 
         player = game.current_player(state)
         actions: Sequence[Any] = game.legal_actions(state)
