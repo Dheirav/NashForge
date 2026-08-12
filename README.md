@@ -19,7 +19,9 @@ This project implements a **Texas Hold'em poker AI** trained through evolutionar
 - ⚡ Highly optimized with JIT compilation, batching, and caching
 - 🔧 Configurable hyperparameters and architecture
 
-**Performance**: Train 100 generations in ~7-10 minutes with Numba (was 63 hours originally)
+**Performance**: measured at ~59 s/generation single-worker for p12/m7/h375 (12 agents x 7 matchups x 375 hands). Earlier claims of 4-6 s/generation in this file were never measured and are off by one to two orders of magnitude.
+
+> **Read [CODEBASE_AUDIT.md](CODEBASE_AUDIT.md) first.** Results published in this repository before August 2026 were produced with a fitness function that scored the wrong player and a deck that dealt the same two hands repeatedly. The engine is sound; the results are not.
 
 ---
 
@@ -34,7 +36,7 @@ This project implements a **Texas Hold'em poker AI** trained through evolutionar
 
 **Bottom line**: Install Numba (`pip install numba`) for maximum performance!
 
-**See**: [OPTIMIZATION_STATUS.md](OPTIMIZATION_STATUS.md) for complete optimization roadmap
+**See**: [OPTIMIZATION_GUIDE.md](OPTIMIZATION_GUIDE.md) for the optimization roadmap
 
 ---
 
@@ -45,8 +47,7 @@ PokerBot/
 ├── engine/                  # Poker game engine (cards, rules, hand evaluation)
 ├── training/                # Evolutionary training system (genomes, networks, fitness)
 ├── agents/                  # Pre-trained and baseline agents (random, heuristic)
-├── scripts/                 # Training, evaluation, and analysis scripts (23 total)
-├── evaluator/               # Hand strength and equity calculations
+├── scripts/                 # Training, evaluation, and analysis scripts (43 total)
 ├── utils/                   # Utility functions and helpers
 ├── examples/                # Example scripts and usage demonstrations
 ├── hall_of_fame/            # Elite agent genomes (tournament winners, milestones)
@@ -65,15 +66,12 @@ PokerBot/
 ├── TRAINING_FINDINGS_REPORT.md  # Comprehensive research findings (formal report)
 ├── GLOBAL_SYNTHESIS_REPORT.md  # Cross-document research synthesis and insights
 ├── SWEEP_WORKFLOW_GUIDE.md  # Complete workflow guide for hyperparameter sweeps
-├── PRE_UPLOAD_CHECKLIST.md  # Pre-deployment checklist
-└── deep_sweep_report.txt    # Latest deep hyperparameter sweep results
 ```
 
 **Module Documentation**:
 - [engine/README.md](engine/README.md) - Poker engine internals
 - [training/README.md](training/README.md) - Training system details
 - [agents/README.md](agents/README.md) - Baseline agents
-- [evaluator/README.md](evaluator/README.md) - Hand ranking and equity
 - [utils/README.md](utils/README.md) - Utility functions
 - [hall_of_fame/README.md](hall_of_fame/README.md) - Elite agent storage
 - [scripts/README.md](scripts/README.md) - Complete scripts guide
@@ -115,23 +113,23 @@ pip install numba
 
 ```bash
 # Quick training run (2 generations, ~10-20 seconds)
-python scripts/train.py --pop 10 --gens 2 --hands 500
+python scripts/training/train.py --pop 10 --gens 2 --hands 500
 
 # Full training (100 generations, ~7-10 min with Numba, ~22 min without)
-python scripts/train.py --pop 20 --gens 100 --hands 3000 --matchups 12
+python scripts/training/train.py --pop 20 --gens 100 --hands 3000 --matchups 12
 
 # Resume from checkpoint
-python scripts/train.py --resume checkpoints/evolution_run
+python scripts/training/train.py --resume checkpoints/evolution_run
 ```
 
 ### Evaluate an Agent
 
 ```bash
 # Evaluate best agent against random opponents
-python scripts/eval_baseline.py checkpoints/evolution_run/best_genome.pkl
+python scripts/evaluation/eval_baseline.py checkpoints/evolution_run/best_genome.pkl
 
 # Match two agents head-to-head
-python scripts/match_agents.py genome1.pkl genome2.pkl --hands 10000
+python scripts/evaluation/match_agents.py genome1.pkl genome2.pkl --hands 10000
 ```
 
 ### Example Usage
@@ -188,7 +186,7 @@ Helper functions for:
 Train poker agents through evolutionary self-play:
 
 ```bash
-python scripts/train.py \
+python scripts/training/train.py \
     --pop 20 \              # Population size
     --gens 100 \            # Number of generations
     --hands 3000 \          # Hands per matchup
@@ -529,7 +527,6 @@ All training and evaluation scripts use batched neural network inference for maj
 
 **How to verify:**
 - Run `python scripts/utilities/benchmark_jit.py` to see batch inference speedup.
-- See [FORWARD_BATCH_INTEGRATION.md](FORWARD_BATCH_INTEGRATION.md) for technical details.
 
 **No changes needed**—batching is automatic if Numba is installed.
 
@@ -571,9 +568,6 @@ Current (Numba): 4-6 sec/gen (400-500×)  ← YOU ARE HERE
 **Potential**: Additional 5-10× speedup available (would reach ~0.5-1 sec/generation)
 
 **Documentation**:
-- [OPTIMIZATION_STATUS.md](OPTIMIZATION_STATUS.md) - Complete optimization roadmap
-- [NUMBA_JIT_GUIDE.md](NUMBA_JIT_GUIDE.md) - Numba JIT implementation guide
-- [FORWARD_BATCH_INTEGRATION.md](FORWARD_BATCH_INTEGRATION.md) - Batched inference details
 
 ---
 
@@ -602,17 +596,17 @@ temperature = 1.0             # Sampling temperature
 
 **Quick Testing** (1-2 minutes):
 ```bash
-python scripts/train.py --pop 10 --gens 5 --hands 500 --matchups 3
+python scripts/training/train.py --pop 10 --gens 5 --hands 500 --matchups 3
 ```
 
 **Standard Training** (20-30 minutes):
 ```bash
-python scripts/train.py --pop 20 --gens 100 --hands 3000 --matchups 12
+python scripts/training/train.py --pop 20 --gens 100 --hands 3000 --matchups 12
 ```
 
 **High-Quality Training** (1-2 hours):
 ```bash
-python scripts/train.py --pop 50 --gens 200 --hands 5000 --matchups 20
+python scripts/training/train.py --pop 50 --gens 200 --hands 5000 --matchups 20
 ```
 
 ---
@@ -696,7 +690,6 @@ python scripts/test_cli.py
   - Performance expectations
   - Extension guide for custom agents
 
-- **[evaluator/README.md](evaluator/README.md)** (300+ lines)
   - Hand ranking algorithm (7-card evaluation)
   - Equity calculation (exact and Monte Carlo)
   - Usage with pot odds and decision making
@@ -717,7 +710,6 @@ python scripts/test_cli.py
 
 ### Optimization Documentation (Performance & Implementation)
 
-- **[OPTIMIZATION_STATUS.md](OPTIMIZATION_STATUS.md)** (625 lines)
   - **Purpose**: Complete optimization roadmap and status
   - 11 implemented optimizations (400-500× speedup achieved)
   - Available but not implemented (C++/GPU/Cython)
@@ -731,7 +723,6 @@ python scripts/test_cli.py
   - Phase-by-phase breakdown
   - Current performance metrics
 
-- **[NUMBA_JIT_GUIDE.md](NUMBA_JIT_GUIDE.md)** (1062 lines)
   - **Purpose**: Complete Numba JIT implementation guide
   - How to install and use Numba
   - JIT-compiled functions reference
@@ -739,7 +730,6 @@ python scripts/test_cli.py
   - Troubleshooting and debugging
   - Before/after benchmarks
 
-- **[FORWARD_BATCH_INTEGRATION.md](FORWARD_BATCH_INTEGRATION.md)** (270 lines)
   - **Purpose**: Batched neural network inference documentation
   - 1.4-1.5× speedup explanation
   - Technical implementation details
@@ -883,8 +873,6 @@ python scripts/test_cli.py
 - Tournament bracket system
 
 **See**:
-- [OPTIMIZATION_STATUS.md](OPTIMIZATION_STATUS.md) for detailed optimization roadmap
-- [NUMBA_JIT_GUIDE.md](NUMBA_JIT_GUIDE.md) for JIT compilation patterns
 - Module READMEs for component-specific improvements
 
 ---
@@ -922,7 +910,7 @@ fitness_config = FitnessConfig(
 
 ```python
 # Use more workers for faster training
-python scripts/train.py --workers 8
+python scripts/training/train.py --workers 8
 ```
 
 ---
