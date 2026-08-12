@@ -14,8 +14,8 @@ class RandomOpponent:
     """Uniformly samples a legal abstract action."""
 
     def get_action(self, game, player_id: int) -> int:
-        from engine import get_action_mask
-        mask = get_action_mask(game, player_id)
+        from engine import get_abstract_action_mask
+        mask = get_abstract_action_mask(game, player_id)
         legal = [i for i, v in enumerate(mask) if v]
         return random.choice(legal) if legal else 1
 
@@ -31,8 +31,8 @@ class RaiseOpponent:
     """Always raise min (aggressive baseline)."""
 
     def get_action(self, game, player_id: int) -> int:
-        from engine import get_action_mask
-        mask = get_action_mask(game, player_id)
+        from engine import get_abstract_action_mask
+        mask = get_abstract_action_mask(game, player_id)
         # Prefer half-pot raise (2), then pot (3), then check/call
         for a in (2, 3, 1):
             if mask[a]:

@@ -1280,7 +1280,7 @@ class HyperparameterAnalyzer:
                             try:
                                 pred_value = rel_data['function'](point[0])
                                 prediction = f"{pred_value:.3f}"
-                            except:
+                            except Exception:
                                 prediction = "error"
                         section.append(f"| {point[0]} | {point[1]:.3f} | {prediction} |\n")
                 

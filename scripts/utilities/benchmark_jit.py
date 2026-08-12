@@ -243,7 +243,7 @@ def main():
             import numba
             print(f"Numba version: {numba.__version__}")
             print(f"NumPy version: {np.__version__}")
-        except:
+        except Exception:
             pass
     print()
     

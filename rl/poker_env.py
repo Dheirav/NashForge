@@ -34,34 +34,8 @@ import random
 from typing import List, Optional, Tuple, Dict, Any
 import numpy as np
 
-from engine import PokerGame, get_state_vector, get_action_mask as _engine_get_action_mask
+from engine import PokerGame, get_state_vector, get_abstract_action_mask
 from training.fitness import abstract_action_to_engine_action
-
-
-def get_abstract_action_mask(game, player_id: int) -> "np.ndarray":
-    """
-    Convert the engine's 5-slot mask [fold,check,call,raise,all-in]
-    to the 6-slot abstract mask used by policy networks:
-      0=fold  1=check/call  2=raise½pot  3=raisepot  4=raise2x  5=all-in
-
-    Rules:
-      - slot 0 (fold)       ← engine fold
-      - slot 1 (check/call) ← engine check OR call
-      - slots 2-4 (raises)  ← engine raise (all three get the same bit)
-      - slot 5 (all-in)     ← engine all-in
-    """
-    eng = _engine_get_action_mask(game, player_id)   # [fold, check, call, raise, all-in]
-    mask = np.zeros(6, dtype=np.float32)
-    mask[0] = float(eng[0])                   # fold
-    mask[1] = float(eng[1] or eng[2])         # check or call
-    mask[2] = float(eng[3])                   # raise (½pot)
-    mask[3] = float(eng[3])                   # raise (1pot)
-    mask[4] = float(eng[3])                   # raise (2x)
-    mask[5] = float(eng[4])                   # all-in
-    # Ensure at least one legal action
-    if mask.sum() == 0:
-        mask[1] = 1.0
-    return mask
 
 
 # ---------------------------------------------------------------------------

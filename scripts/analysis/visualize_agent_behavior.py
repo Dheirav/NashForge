@@ -9,7 +9,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 import sys
 import os
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '../../')))
 from training.policy_network import PolicyNetwork
 from engine import PokerGame
 from engine.cards import Deck
@@ -28,17 +28,23 @@ def parse_args():
 def main():
     args = parse_args()
     arch = [int(x) for x in args.arch.strip().split()]
-    net = PolicyNetwork(input_size=arch[0], hidden_sizes=arch[1:-1], output_size=arch[-1])
+    from training.config import NetworkConfig
+    net = PolicyNetwork(NetworkConfig(input_size=arch[0], hidden_sizes=arch[1:-1], output_size=arch[-1]))
     net.set_weights_from_genome(np.load(args.genome))
     rng = np.random.default_rng(args.seed)
     action_counts = np.zeros(arch[-1], dtype=int)
     position_counts = np.zeros(args.players, dtype=int)
+    from engine.features import get_state_vector
     for hand in range(args.hands):
         stacks = [1000] * args.players
         game = PokerGame(player_stacks=stacks, small_blind=5, big_blind=10, ante=0, seed=int(rng.integers(0, 2**31)))
         for pos in range(args.players):
-            features = np.array(game.state.get_state_vector(pos), dtype=np.float32)
-            mask = net.create_action_mask(game, pos)
+            features = np.array(get_state_vector(game, pos), dtype=np.float32)
+            from engine.features import get_action_mask, get_abstract_action_mask
+            if arch[-1] == 6:
+                mask = get_abstract_action_mask(game, pos)
+            else:
+                mask = np.array(get_action_mask(game, pos), dtype=np.float32)
             action = net.select_action(features, mask, rng)
             action_counts[action] += 1
             position_counts[pos] += 1
