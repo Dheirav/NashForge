@@ -1,5 +1,10 @@
 # Hyperparameter Sweep Workflow Guide
 
+> **Note.** Sweep results are only as good as the fitness function producing
+> them. See `CODEBASE_AUDIT.md` for the defects that invalidated every sweep
+> run before August 2026, and size runs from the measured noise floor rather
+> than convention.
+
 ## Quick Start
 
 ### Running a Hyperparameter Sweep
@@ -361,6 +366,4 @@ Returns:
 ## Questions?
 
 See the main documentation:
-- [GLOBAL_SYNTHESIS_REPORT.md](GLOBAL_SYNTHESIS_REPORT.md) - Overall training findings
-- [HYPERPARAMETER_RELATIONSHIPS.md](HYPERPARAMETER_RELATIONSHIPS.md) - Validated parameter relationships
 - [SWEEP_REFACTORING_SUMMARY.md](SWEEP_REFACTORING_SUMMARY.md) - Technical changes
