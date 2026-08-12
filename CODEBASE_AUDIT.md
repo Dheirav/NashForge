@@ -4,7 +4,9 @@
 **Scope:** `engine/`, `training/`, `rl/`, `scripts/`, `agents/`, `evaluator/`, `utils/`, `gui/`, and the analysis reports at repository root.
 **Method:** every claim below was established by executing the code — driving the engine with randomised legal actions, instrumenting the fitness path, and sampling feature vectors — not by reading it. Where a number appears, it was measured.
 
-> **Status of this document.** It supersedes `GLOBAL_SYNTHESIS_REPORT.md`, `TRAINING_FINDINGS_REPORT.md`, `HOF_IMPACT_ANALYSIS.md`, `HYPERPARAMETER_RELATIONSHIPS.md`, `HYPERPARAMETER_SCALING_LAWS.md` and `TOTAL_RESULTS.md`, all of which draw conclusions from a fitness function shown below to have been measuring the wrong quantity.
+> **Status of this document.** The reports it supersedes were deleted from the
+> working tree on 12 August 2026 and remain in git history (`git show <rev>:<file>`)
+> and in `PokerBot_superseded_2026-08-12.tar.gz`. It supersedes `GLOBAL_SYNTHESIS_REPORT.md`, `TRAINING_FINDINGS_REPORT.md`, `HOF_IMPACT_ANALYSIS.md`, `HYPERPARAMETER_RELATIONSHIPS.md`, `HYPERPARAMETER_SCALING_LAWS.md` and `TOTAL_RESULTS.md`, all of which draw conclusions from a fitness function shown below to have been measuring the wrong quantity.
 
 ---
 

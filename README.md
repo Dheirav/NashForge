@@ -36,7 +36,6 @@ This project implements a **Texas Hold'em poker AI** trained through evolutionar
 
 **Bottom line**: Install Numba (`pip install numba`) for maximum performance!
 
-**See**: [OPTIMIZATION_GUIDE.md](OPTIMIZATION_GUIDE.md) for the optimization roadmap
 
 ---
 
@@ -56,15 +55,6 @@ PokerBot/
 ├── hyperparam_results/      # Hyperparameter sweep results and visualizations
 ├── tournament_reports/      # Round-robin tournament results and charts
 ├── logs/                    # Training logs and tensorboard events
-├── match_logs/              # Game history logs (optional, disabled by default)\n├── ANALYSIS_CAPABILITIES.md # Mathematical analysis and scaling laws documentation
-├── OPTIMIZATION_DOCS.md     # Detailed optimization documentation
-├── OPTIMIZATION_GUIDE.md    # Step-by-step optimization guide
-├── OPTIMIZATION_SUMMARY.md  # Quick optimization reference
-├── HYPERPARAMETER_RELATIONSHIPS.md  # Proven hyperparameter design rules
-├── HYPERPARAMETER_RELATIONSHIPS_FORMAT_COMPARISON.md  # Format analysis of hyperparameter docs
-├── HOF_IMPACT_ANALYSIS.md   # Hall of Fame training impact analysis (52% improvement)
-├── TRAINING_FINDINGS_REPORT.md  # Comprehensive research findings (formal report)
-├── GLOBAL_SYNTHESIS_REPORT.md  # Cross-document research synthesis and insights
 ├── SWEEP_WORKFLOW_GUIDE.md  # Complete workflow guide for hyperparameter sweeps
 ```
 
@@ -78,10 +68,6 @@ PokerBot/
 - [examples/README.md](examples/README.md) - Example scripts and usage patterns
 
 **Key Research & Analysis**:
-- [TRAINING_FINDINGS_REPORT.md](TRAINING_FINDINGS_REPORT.md) - Comprehensive empirical analysis (formal research report)
-- [GLOBAL_SYNTHESIS_REPORT.md](GLOBAL_SYNTHESIS_REPORT.md) - Cross-document synthesis of all research findings
-- [HYPERPARAMETER_RELATIONSHIPS.md](HYPERPARAMETER_RELATIONSHIPS.md) - Proven hyperparameter design rules
-- [HOF_IMPACT_ANALYSIS.md](HOF_IMPACT_ANALYSIS.md) - Hall of Fame training impact (+52% win rate improvement)
 - [SWEEP_WORKFLOW_GUIDE.md](SWEEP_WORKFLOW_GUIDE.md) - Step-by-step workflow for hyperparameter optimization
 
 ---
@@ -717,7 +703,6 @@ python scripts/test_cli.py
   - Learning impact analysis
   - Recommended next steps
 
-- **[OPTIMIZATION_SUMMARY.md](OPTIMIZATION_SUMMARY.md)**
   - **Purpose**: Quick reference for all optimizations
   - One-page summary of speedups
   - Phase-by-phase breakdown
@@ -738,28 +723,24 @@ python scripts/test_cli.py
 
 ### Research & Methodology Documentation
 
-- **[TRAINING_FINDINGS_REPORT.md](TRAINING_FINDINGS_REPORT.md)** (Comprehensive)
   - **Purpose**: Formal research report on training experiments
   - Empirical analysis of hyperparameter relationships
   - Tournament results and statistical significance
   - Methodology and experimental design
   - Recommendations for future research
 
-- **[GLOBAL_SYNTHESIS_REPORT.md](GLOBAL_SYNTHESIS_REPORT.md)** (Research Synthesis)
   - **Purpose**: Meta-analysis of all research documents
   - Cross-document insights and themes
   - Consolidated best practices
   - Knowledge integration across experiments
   - High-level strategic recommendations
 
-- **[HOF_IMPACT_ANALYSIS.md](HOF_IMPACT_ANALYSIS.md)** (Impact Study)
   - **Purpose**: Hall of Fame training effectiveness analysis
   - 52% win rate improvement with HoF opponents
   - Small population optimization strategies
   - Comparison: with vs without HoF training
   - Cost-benefit analysis for compute efficiency
 
-- **[HYPERPARAMETER_RELATIONSHIPS.md](HYPERPARAMETER_RELATIONSHIPS.md)** (Design Guide)
   - **Purpose**: Proven hyperparameter design principles
   - Empirically validated relationships
   - Population-matchups-hands tradeoffs
