@@ -10,8 +10,17 @@ from typing import Optional, List, Dict, Any
 from dataclasses import asdict
 from pathlib import Path
 try:
+    # TensorBoard logging is optional; training reports the same statistics to
+    # stdout and to the checkpointed history either way.
+    #
+    # Catching Exception rather than ImportError is deliberate. torch's
+    # tensorboard bridge reaches through tensorboard.lazy into `tensorflow.io`
+    # at import time, so with tensorboard installed but tensorflow absent it
+    # raises AttributeError, not ImportError — which sailed straight past the
+    # narrower guard and took the whole module down. TensorFlow is otherwise
+    # unused here and costs ~1.8 GB and ~3.5 s of start-up per run.
     from torch.utils.tensorboard import SummaryWriter
-except ImportError:
+except Exception:
     SummaryWriter = None
 
 
