@@ -240,3 +240,56 @@ def test_reaching_sequences_compound_by_street():
     reaching = size.reaching_sequences
     assert reaching["preflop"] == 1
     assert reaching["flop"] < reaching["turn"] < reaching["river"]
+
+
+# ---------------------------------------------------------------------------
+# The pluggable postflop strength signal
+# ---------------------------------------------------------------------------
+
+def test_both_strength_signals_produce_ordered_buckets():
+    """
+    Whichever signal a bucketing is fitted on, a set must land above nothing.
+    made_hand cannot see draws, but it must still rank made hands correctly.
+    """
+    from abstraction.buckets import STRENGTH_SIGNALS
+
+    board = [C("2c"), C("7s"), C("9d")]
+    for signal in STRENGTH_SIGNALS:
+        fitted = CardAbstraction(preflop_buckets=4, postflop_buckets=4, samples=120,
+                                 equity_samples=30, strength=signal).fit(
+                                     np.random.default_rng(0))
+        strong = fitted.bucket([C("9h"), C("9c")], board, np.random.default_rng(1))
+        weak = fitted.bucket([C("3h"), C("4d")], board, np.random.default_rng(1))
+        assert strong > weak, signal
+
+
+def test_fit_and_lookup_share_one_signal():
+    """
+    A clustering fitted on one signal and queried with another would assign
+    every situation to whichever bucket happened to sit near the wrong scale —
+    plausible output, meaningless buckets. Both routes go through one method.
+    """
+    fitted = CardAbstraction(preflop_buckets=4, postflop_buckets=4, samples=80,
+                             equity_samples=25, strength="made_hand").fit(
+                                 np.random.default_rng(0))
+    hole, board = [C("Ah"), C("Kh")], [C("2c"), C("7s"), C("9d")]
+    direct = fitted._postflop_strength(hole, board, np.random.default_rng(0))
+    from engine.features import made_hand_strength
+    assert direct == made_hand_strength(hole, board)
+
+
+def test_unknown_strength_signal_is_rejected():
+    with pytest.raises(ValueError):
+        CardAbstraction(strength="vibes")
+
+
+def test_nearest_centroid_matches_exhaustive_search():
+    """The binary search must agree with the argmin it replaced."""
+    from abstraction.buckets import _nearest_centroid
+
+    rng = np.random.default_rng(0)
+    for _ in range(500):
+        centroids = np.sort(rng.random(rng.integers(2, 10)))
+        value = float(rng.random())
+        expected = int(np.abs(centroids - value).argmin())
+        assert _nearest_centroid(centroids.tolist(), value) == expected
