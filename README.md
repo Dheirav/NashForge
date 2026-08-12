@@ -59,12 +59,6 @@ PokerBot/
 ```
 
 **Module Documentation**:
-- [engine/README.md](engine/README.md) - Poker engine internals
-- [training/README.md](training/README.md) - Training system details
-- [agents/README.md](agents/README.md) - Baseline agents
-- [utils/README.md](utils/README.md) - Utility functions
-- [hall_of_fame/README.md](hall_of_fame/README.md) - Elite agent storage
-- [scripts/README.md](scripts/README.md) - Complete scripts guide
 - [examples/README.md](examples/README.md) - Example scripts and usage patterns
 
 **Key Research & Analysis**:
@@ -144,7 +138,6 @@ Complete Texas Hold'em implementation with:
 - Pot management and side pots
 - Action validation
 
-**See**: [engine/README.md](engine/README.md) for detailed documentation
 
 ### 2. Training System ([training/](training/))
 Evolutionary algorithm with:
@@ -154,7 +147,6 @@ Evolutionary algorithm with:
 - Population diversity maintenance
 - Elite preservation
 
-**See**: [training/README.md](training/README.md) for detailed documentation
 
 ### 3. Utilities ([utils/](utils/))
 Helper functions for:
@@ -162,7 +154,6 @@ Helper functions for:
 - Data processing
 - Configuration management
 
-**See**: [utils/README.md](utils/README.md) for detailed documentation
 
 ---
 
@@ -452,7 +443,6 @@ python scripts/cleanup_checkpoints.py --older-than 7  # Keep last 7 days
 - **`visualize_agent_behavior.py`**: Action distribution heatmaps by situation
 - **`visualize_hyperparam_sweep.py`**: Generate comparison plots for hyperparameter sweeps
 
-- **`analyze_tournament_history.py`**: **NEW** — Aggregates tournament results, generates head-to-head win matrices, hyperparameter correlations, and development recommendations. Produces detailed reports and visualizations for all agents and tournaments. See [scripts/README.md](scripts/README.md) for usage and output examples.
 
 ### Testing & Debugging Scripts
 - **`test_ai_hands.py`**: Test agent decisions on specific poker scenarios
@@ -652,7 +642,6 @@ python scripts/test_cli.py
 
 ### Module READMEs (Component Documentation)
 
-- **[engine/README.md](engine/README.md)** (764 lines)
   - Complete poker engine API reference
   - Card, action, pot, state, game classes
   - Hand evaluation (standard and fast)
@@ -660,7 +649,6 @@ python scripts/test_cli.py
   - CLI interface usage
   - Performance benchmarks
 
-- **[training/README.md](training/README.md)** (717 lines)
   - Evolutionary training algorithm details
   - Neural network policy architecture
   - Genome representation and mutations
@@ -669,7 +657,6 @@ python scripts/test_cli.py
   - Hyperparameter optimization guide
   - Numba JIT optimizations
 
-- **[agents/README.md](agents/README.md)** (230+ lines)
   - RandomAgent: Baseline random action agent
   - HeuristicAgent: Rule-based poker AI
   - Usage examples and API reference
@@ -682,7 +669,6 @@ python scripts/test_cli.py
   - Performance characteristics
   - Integration examples
 
-- **[utils/README.md](utils/README.md)** (317 lines)
   - Genome transformation utilities
   - Network parameter conversion
   - Helper functions for AI system
@@ -1028,4 +1014,3 @@ python scripts/training/deep_hyperparam_sweep.py \
 - ⚡ **Efficient Exploration**: Multi-generation training in single command
 - 🔧 **Flexible Control**: Specify exact sweep directory instead of always using latest
 
-See [scripts/README.md](scripts/README.md) for complete documentation.
