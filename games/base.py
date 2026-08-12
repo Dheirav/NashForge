@@ -88,7 +88,25 @@ class Game(ABC):
         Only called when :meth:`current_player` returns :data:`CHANCE`.
         Enumerating outcomes rather than sampling one is what lets vanilla CFR
         weight subtrees exactly; samplers may still choose to sample from this.
+
+        A game whose chance is too large to enumerate — no-limit Hold'em deals
+        one of about 1.6 million hole-card pairs — should raise here and
+        override :meth:`sample_chance` instead. Vanilla CFR then cannot run on
+        it, which is the truth rather than a limitation to work around.
         """
+
+    def sample_chance(self, state: Any, rng) -> Any:
+        """
+        Draw one chance outcome.
+
+        Defaults to sampling from :meth:`chance_outcomes`, which is right for
+        small games. Games with unenumerable chance override this to deal
+        directly; a sampler never needs the full list, so requiring it would
+        rule out exactly the games sampling exists for.
+        """
+        outcomes = self.chance_outcomes(state)
+        index = rng.choice(len(outcomes), p=[p for _, p in outcomes])
+        return outcomes[int(index)][0]
 
     # ---- payoffs and knowledge -------------------------------------------
 
