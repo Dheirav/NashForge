@@ -36,53 +36,11 @@ def compute_stack_to_pot_jit(stack: float, pot_size: float) -> float:
     return min(stack / pot_size, 20.0) / 20.0  # Normalize to 0-1
 
 
-@jit(nopython=True, cache=True, fastmath=True)
-def build_feature_vector_jit(
-    pot_odds: float,
-    stack_to_pot: float,
-    position_idx: int,
-    street_idx: int,
-    num_active: float,
-    hand_strength: float,
-    commitment: float,
-    opponent_aggression: float
-) -> np.ndarray:
-    """
-    JIT-compiled feature vector assembly.
-    
-    Returns 17-dimensional feature vector:
-    [0] pot_odds
-    [1] stack_to_pot ratio
-    [2-7] position one-hot (6 positions)
-    [8-11] street one-hot (4 streets)
-    [12] num_active players (normalized)
-    [13] hand_strength
-    [14] hand_potential (placeholder, currently equals hand_strength)
-    [15] opponent_aggression (1.0 if facing a raise, 0.0 otherwise)
-    [16] commitment level
-    """
-    features = np.zeros(17, dtype=np.float32)
-    
-    # Continuous features
-    features[0] = pot_odds
-    features[1] = stack_to_pot
-    
-    # Position one-hot (6 positions max)
-    if 0 <= position_idx < 6:
-        features[2 + position_idx] = 1.0
-    
-    # Street one-hot (4 streets: preflop, flop, turn, river)
-    if 0 <= street_idx < 4:
-        features[8 + street_idx] = 1.0
-    
-    # Other features
-    features[12] = num_active
-    features[13] = hand_strength
-    features[14] = hand_strength  # hand_potential = hand_strength for now
-    features[15] = opponent_aggression  # 1.0 if facing a raise, 0.0 otherwise
-    features[16] = commitment
-    
-    return features
+# NOTE: a second, JIT-assembled 17-dim layout used to live here
+# (`build_feature_vector_jit`, ordered pot_odds/spr/position-one-hot/...).  It
+# was a *different* ordering from FeatureCache, which meant agents were trained
+# on one layout and evaluated on the other.  It has been removed so that
+# FeatureCache remains the single definition of the observation.
 
 
 # Precomputed lookup tables for common calculations
@@ -99,25 +57,39 @@ for tc_idx in range(1001):
 # Precomputed hand strength for all 169 starting hands (13 ranks × 13 ranks × suited/offsuit)
 PREFLOP_STRENGTH_CACHE = {}
 def _init_preflop_cache():
-    """Initialize precomputed hand strength for all starting hands."""
-    for i, r1 in enumerate(RANKS):
-        for j, r2 in enumerate(RANKS):
-            # Suited
-            key_suited = (r1, r2, True)
-            PREFLOP_STRENGTH_CACHE[key_suited] = preflop_hand_strength([Card(r1, 'h'), Card(r2, 'h')])
-            # Offsuit
+    """
+    Initialize precomputed hand strength for all starting hands.
+
+    Pocket pairs are ALWAYS offsuit (two cards of one rank cannot share a
+    suit), so the offsuit key must be stored for r1 == r2 as well.  Skipping it
+    left every pair missing from the table, and the lookup below fell through
+    to its 0.5 default — meaning aces, kings and deuces all presented to the
+    network as an exactly average hand.
+    """
+    for r1 in RANKS:
+        for r2 in RANKS:
             if r1 != r2:
-                key_offsuit = (r1, r2, False)
-                PREFLOP_STRENGTH_CACHE[key_offsuit] = preflop_hand_strength([Card(r1, 'h'), Card(r2, 'd')])
+                PREFLOP_STRENGTH_CACHE[(r1, r2, True)] = \
+                    preflop_hand_strength([Card(r1, 'h'), Card(r2, 'h')])
+            # Offsuit (and the only real form for a pair)
+            PREFLOP_STRENGTH_CACHE[(r1, r2, False)] = \
+                preflop_hand_strength([Card(r1, 'h'), Card(r2, 'd')])
 
 def get_preflop_strength_fast(hole_cards: List[Card]) -> float:
-    """Fast lookup of precomputed preflop hand strength."""
+    """
+    Fast lookup of precomputed preflop hand strength.
+
+    Every real two-card holding is present in the table, so a miss means the
+    caller passed something malformed rather than an unusual hand.
+    """
     if len(hole_cards) != 2:
         return 0.5
     c1, c2 = hole_cards
     suited = (c1.suit == c2.suit)
-    key = (c1.rank, c2.rank, suited)
-    return PREFLOP_STRENGTH_CACHE.get(key, 0.5)
+    strength = PREFLOP_STRENGTH_CACHE.get((c1.rank, c2.rank, suited))
+    if strength is None:                      # malformed input, not a real hand
+        return 0.5
+    return strength
 
 # Chen formula for preflop hand strength
 def chen_formula(hole_cards: List[Card]) -> float:
@@ -341,106 +313,37 @@ def get_state_features(game, player_id: int) -> Dict[str, float]:
 def get_state_vector(game, player_id: int, cache: Optional['FeatureCache'] = None) -> np.ndarray:
     """
     Returns state features as a flat vector for neural network input.
-    Optimized with JIT-compiled feature extraction.
-    
+
+    There is exactly ONE feature layout in this project, defined by
+    `FeatureCache.get_features()` and named by `get_feature_names()`.  Every
+    trained genome in `checkpoints/` and `hall_of_fame/` was fitted against it,
+    so inference MUST use the same layout or the network receives permuted
+    inputs.  This function therefore always delegates to that definition.
+
+    Passing `cache` is purely a performance optimisation: the fields it caches
+    (position, preflop hand strength, starting stack, button) are invariant for
+    the duration of a hand, so building a transient cache here yields values
+    identical to a cache built at hand start.
+
     Args:
         game: PokerGame instance
         player_id: Player index
-        cache: Optional FeatureCache for performance (1.5-2× speedup)
-        
+        cache: Optional FeatureCache to avoid re-deriving static features
+
     Returns:
-        17-dimensional numpy array of normalized features
+        17-dimensional numpy array of normalized features (see get_feature_names)
     """
     if cache is not None:
-        # Use cached version (faster, reuses static features)
         return cache.get_features(game)
-    
-    # Fallback: compute features from scratch
-    player = game.players[player_id]
-    state = game.state
-    
-    # Extract raw values
-    pot = state.pot.total
-    to_call = max(0, game.current_bet - player.bet)
-    my_stack = player.stack
-    bb = state.big_blind
-    num_players = len(game.players)
-    
-    # Position
-    position = (player_id - state.button) % num_players
-    position_idx = min(5, position)  # Cap at 5 for one-hot
-    
-    # Street
-    rounds = {'preflop': 0, 'flop': 1, 'turn': 2, 'river': 3, 'showdown': 3}
-    street_idx = rounds.get(state.betting_round, 0)
-    
-    # Active players – normalise by max table size (6) so the network gets an
-    # absolute count signal that distinguishes HU (≈0.33) from 6-max (≈1.0).
-    active_players = sum(1 for p in game.players if not p.has_folded)
-    num_active_norm = active_players / 6.0
-    
-    # Hand strength
-    hand_strength = get_preflop_strength_fast(player.hole_cards)
-    
-    # Commitment
-    total_invested = player.total_contributed
-    starting_stack = my_stack + total_invested
-    commitment = total_invested / starting_stack if starting_stack > 0 else 0.0
-    
-    # Opponent aggression: 1.0 if facing a raise (to_call exceeds a full BB),
-    # 0.0 otherwise. Mirrors the facing_raise signal in FeatureCache [15].
-    opponent_aggression = 1.0 if to_call > bb else 0.0
 
-    if HAS_NUMBA:
-        # Use JIT-compiled feature assembly (2-3× faster)
-        pot_odds = compute_pot_odds_jit(float(to_call), float(pot))
-        stack_to_pot = compute_stack_to_pot_jit(float(my_stack), float(pot))
-        
-        return build_feature_vector_jit(
-            pot_odds,
-            stack_to_pot,
-            position_idx,
-            street_idx,
-            num_active_norm,
-            hand_strength,
-            commitment,
-            opponent_aggression
-        )
-    else:
-        # Fallback: numpy implementation
-        features = np.zeros(17, dtype=np.float32)
-        
-        # Pot odds
-        pot_odds = to_call / (pot + to_call) if (pot + to_call) > 0 else 0.0
-        features[0] = pot_odds
-        
-        # Stack to pot
-        spr = my_stack / pot if pot > 0 else 10.0
-        features[1] = min(1.0, spr / 20.0)
-        
-        # Position one-hot
-        if 0 <= position_idx < 6:
-            features[2 + position_idx] = 1.0
-        
-        # Street one-hot
-        if 0 <= street_idx < 4:
-            features[8 + street_idx] = 1.0
-        
-        # Other features
-        features[12] = num_active_norm
-        features[13] = hand_strength
-        features[14] = hand_strength  # hand_potential
-        features[15] = opponent_aggression
-        features[16] = commitment
-        
-        return features
+    return FeatureCache(game, player_id).get_features(game)
 
 
 def get_feature_names() -> List[str]:
     """Returns the ordered list of feature names for documentation."""
     return [
         'position', 'in_position', 'players_behind',
-        'stack_normalized', 'spr', 'commitment', 'is_all_in',
+        'stack_normalized', 'spr', 'commitment', 'opponent_all_in',
         'pot_odds', 'to_call_ratio',
         'round_preflop', 'round_flop', 'round_turn', 'round_river',
         'players_in_hand',
@@ -451,19 +354,21 @@ def get_feature_names() -> List[str]:
 
 def get_action_mask(game, player_id: int) -> List[int]:
     """
-    Returns a binary mask indicating which actions are legal.
-    Useful for masking illegal actions in policy networks.
-    
+    Engine-level legality mask, one slot per *engine* action type.
+
     Returns a list of 5 values: [fold, check, call, raise, all_in]
     1 = legal, 0 = illegal
+
+    This mirrors `PokerGame.get_legal_actions()` and is NOT the mask a policy
+    network consumes — networks act over the 6 abstract actions.  Use
+    `get_abstract_action_mask()` for that; do not zero-pad this list to 6.
     """
     legal_actions = game.get_legal_actions(player_id)
-    
+
     action_types = {'fold': 0, 'check': 0, 'call': 0, 'raise': 0, 'all-in': 0}
-    
     for action in legal_actions:
         action_types[action['type']] = 1
-    
+
     return [
         action_types['fold'],
         action_types['check'],
@@ -471,6 +376,39 @@ def get_action_mask(game, player_id: int) -> List[int]:
         action_types['raise'],
         action_types['all-in'],
     ]
+
+
+def get_abstract_action_mask(game, player_id: int) -> np.ndarray:
+    """
+    Legality mask over the 6 abstract actions a policy network chooses between:
+
+        0: fold          1: check/call    2: raise 0.5x pot
+        3: raise 1x pot  4: raise 2x pot  5: all-in
+
+    This is the single definition of the 6-slot mask.  It is the layout every
+    trained genome was fitted against, so training, evaluation, the GUI and the
+    RL environment must all use it.
+
+    Returns:
+        float32 array of shape (6,); 1.0 = legal, 0.0 = illegal
+    """
+    player = game.players[player_id]
+    to_call = game.current_bet - player.bet
+
+    mask = np.zeros(6, dtype=np.float32)
+    mask[0] = 1.0  # fold is always available
+    mask[1] = 1.0  # check/call is always available (a short call goes all-in)
+
+    # Raise sizings are available only with chips left beyond the call amount.
+    if player.stack > to_call and (player.stack - to_call) >= game.state.big_blind:
+        mask[2] = 1.0
+        mask[3] = 1.0
+        mask[4] = 1.0
+
+    if player.stack > 0:
+        mask[5] = 1.0
+
+    return mask
 
 
 def get_raise_sizing_info(game, player_id: int) -> Dict[str, float]:
@@ -510,17 +448,70 @@ def get_raise_sizing_info(game, player_id: int) -> Dict[str, float]:
     }
 
 
+# When True, the hand_strength feature reflects the player's best made hand
+# using the community cards.  When False it is the preflop Chen score of the
+# hole cards alone, which is what this project used to feed the network on
+# every street — meaning agents played the flop, turn and river unable to tell
+# a set from a busted draw, because the value depended only on the two hole
+# cards and so was identical for every possible board.
+#
+# Set to False to reproduce the old observation for a like-for-like ablation.
+BOARD_AWARE_STRENGTH = True
+
+
+# Approximate probability that each made-hand category beats a random hand.
+# These are heuristic anchors, not computed equities — their job is to put the
+# postflop feature on the SAME 0-1 scale as the preflop Chen score, so the value
+# does not jump when the flop lands.  Indexing follows HAND_RANKS
+# (0 = High Card ... 9 = Royal Flush), plus a sentinel so the top category can
+# interpolate against something.
+_CATEGORY_STRENGTH = [0.18, 0.42, 0.62, 0.75, 0.83, 0.89, 0.94, 0.98, 0.995, 1.0, 1.0]
+
+
+def made_hand_strength(hole_cards: List[Card], community_cards: List[Card]) -> float:
+    """
+    Strength of the player's best five-card hand, normalised to 0.0-1.0.
+
+    Category dominates — a flush always beats any straight — with the top
+    tiebreaking rank separating hands inside a category, so top pair reads higher
+    than bottom pair.  Values are anchored to roughly how often each category
+    beats a random hand, which keeps them commensurable with the preflop score:
+    without that anchoring, flopping a set scored *lower* than the same hand did
+    preflop, because a raw category index and a normalised Chen score are not the
+    same scale.
+
+    Uses the existing 7-card evaluator: ~8.7 us per call, roughly a thousandth of
+    the Monte-Carlo equity estimate, and unlike the preflop score it responds to
+    the board.  It does not value draws — a flush draw scores as whatever it has
+    made so far.
+    """
+    cards = list(hole_cards) + list(community_cards)
+    if len(cards) < 5:
+        return get_preflop_strength_fast(hole_cards)
+
+    result = evaluate_hand(cards)
+    base = _CATEGORY_STRENGTH[result.hand_rank]
+    ceiling = _CATEGORY_STRENGTH[result.hand_rank + 1]
+
+    # RANK_ORDER runs 0 (deuce) to 12 (ace).
+    top_rank = result.tiebreaker[0] if result.tiebreaker else 0
+    within = (top_rank / 12.0) * (ceiling - base) * 0.9
+
+    return min(1.0, base + within)
+
+
 class FeatureCache:
     """
     Cache static features per hand to avoid recomputation.
-    
+
     Optimization: Features that don't change during a hand are computed once,
     then only dynamic features are updated per action.
-    
+
     Performance: ~1.5-2× speedup by reducing redundant calculations.
     """
-    __slots__ = ['position_norm', 'hand_strength', 'starting_stack', 
-                 'num_players', 'player_id', 'features', 'button']
+    __slots__ = ['position_norm', 'hand_strength', 'starting_stack',
+                 'num_players', 'player_id', 'features', 'button',
+                 '_strength_board_len', '_strength_cached']
     
     def __init__(self, game, player_id: int):
         """
@@ -541,7 +532,11 @@ class FeatureCache:
         
         # Static: Hand strength (preflop) - use precomputed lookup
         self.hand_strength = get_preflop_strength_fast(player.hole_cards)
-        
+
+        # Board-aware strength is recomputed once per street, not per decision.
+        self._strength_board_len = -1
+        self._strength_cached = self.hand_strength
+
         # Static: Starting stack
         self.starting_stack = player.stack + player.total_contributed
         
@@ -610,8 +605,17 @@ class FeatureCache:
         commitment = player.total_contributed / self.starting_stack if self.starting_stack > 0 else 0
         self.features[5] = commitment
         
-        self.features[6] = 1.0 if player.is_all_in else 0.0
-        
+        # Whether an OPPONENT is all-in — a real decision input, since it caps
+        # what can still be won and closes further betting against them.
+        # This slot used to hold the acting player's own all-in flag, which is
+        # necessarily 0: a player who is all-in never gets a turn.  Measured
+        # over 22,423 decision states its standard deviation was exactly 0.000,
+        # so the network had one input that could never carry information.
+        self.features[6] = 1.0 if any(
+            p.is_all_in and not p.has_folded and p.player_id != self.player_id
+            for p in game.players
+        ) else 0.0
+
         # Pot features (index 7-8) - use precomputed pot odds table
         # Use lookup table with 5-chip granularity
         tc_idx = min(1000, to_call // 5)
@@ -632,7 +636,15 @@ class FeatureCache:
         self.features[14] = 1.0 if to_call > 0 else 0.0      # facing bet
         self.features[15] = 1.0 if to_call > bb else 0.0     # facing raise
         
-        # Hand strength (index 16) - static
-        self.features[16] = self.hand_strength
-        
+        # Hand strength (index 16) — recomputed once per street once the board
+        # exists, so the value actually responds to the community cards.
+        board = game.state.community_cards
+        if BOARD_AWARE_STRENGTH and board:
+            if self._strength_board_len != len(board):
+                self._strength_board_len = len(board)
+                self._strength_cached = made_hand_strength(player.hole_cards, board)
+            self.features[16] = self._strength_cached
+        else:
+            self.features[16] = self.hand_strength
+
         return self.features

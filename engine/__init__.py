@@ -12,12 +12,14 @@ from .features import (
     get_state_vector, 
     get_feature_names,
     get_action_mask,
+    get_abstract_action_mask,
     get_raise_sizing_info,
     preflop_hand_strength,
     hand_strength_vs_random,
     chen_formula,
     FeatureCache,
     get_preflop_strength_fast,
+    made_hand_strength,
     POT_ODDS_TABLE
 )
 from .history import HandHistoryLogger, SessionLogger, format_action_for_log
@@ -38,11 +40,13 @@ __all__ = [
     'get_state_vector',
     'get_feature_names',
     'get_action_mask',
+    'get_abstract_action_mask',
     'get_raise_sizing_info',
     'preflop_hand_strength',
     'hand_strength_vs_random',
     'chen_formula',
     'FeatureCache',
+    'made_hand_strength',
     'HandHistoryLogger',
     'SessionLogger',
     'format_action_for_log',
