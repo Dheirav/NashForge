@@ -105,31 +105,45 @@ def best_response_value(game: Game, strategy: Strategy, responder: int) -> float
 
     # Phase 2 — decide deepest information sets first, so every choice below a
     # set is already fixed when the set itself is decided.
+    #
+    # That ordering is also what makes caching sound: when deciding a set at
+    # depth d we only evaluate states deeper than d, whose own decisions are
+    # already final and will never be revised. Without the cache each of the
+    # game's information sets re-traverses its whole subtree once per action,
+    # which is free on Kuhn's twelve sets and intractable on Leduc's 288.
     chosen: Dict[Hashable, int] = {}
+    cache: Dict[Any, float] = {}
 
     def value(state: Any) -> float:
+        cached = cache.get(state)
+        if cached is not None:
+            return cached
+
         if game.is_terminal(state):
-            return game.utility(state, responder)
-        if game.is_chance(state):
-            return sum(p * value(game.next_state(state, a))
-                       for a, p in game.chance_outcomes(state))
+            result = game.utility(state, responder)
+        elif game.is_chance(state):
+            result = sum(p * value(game.next_state(state, a))
+                         for a, p in game.chance_outcomes(state))
+        else:
+            player = game.current_player(state)
+            actions = game.legal_actions(state)
+            if player == responder:
+                index = chosen[game.information_set(state, player)]
+                result = value(game.next_state(state, actions[index]))
+            else:
+                sigma = _policy(strategy, game.information_set(state, player),
+                                len(actions))
+                result = sum(sigma[i] * value(game.next_state(state, a))
+                             for i, a in enumerate(actions) if sigma[i] > 0.0)
 
-        player = game.current_player(state)
-        actions = game.legal_actions(state)
-        if player == responder:
-            index = chosen[game.information_set(state, player)]
-            return value(game.next_state(state, actions[index]))
-
-        sigma = _policy(strategy, game.information_set(state, player), len(actions))
-        return sum(sigma[i] * value(game.next_state(state, a))
-                   for i, a in enumerate(actions) if sigma[i] > 0.0)
+        cache[state] = result
+        return result
 
     for key in sorted(sets, key=lambda k: depth_of[k], reverse=True):
         states = sets[key]
-        num_actions = len(game.legal_actions(states[0][0]))
-        totals = np.zeros(num_actions, dtype=np.float64)
-        for index in range(num_actions):
-            action = game.legal_actions(states[0][0])[index]
+        actions = game.legal_actions(states[0][0])
+        totals = np.zeros(len(actions), dtype=np.float64)
+        for index, action in enumerate(actions):
             totals[index] = sum(
                 weight * value(game.next_state(state, action))
                 for state, weight in states
