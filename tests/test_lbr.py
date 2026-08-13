@@ -10,8 +10,12 @@ exists — so these tests pin it in three other ways:
   winnings are arithmetic, not opinion.
 * **Ordering.** A strategy trained for longer must not be *more* exploitable
   than an untrained one. LBR that cannot tell those apart is measuring noise.
-* **Mechanism.** The belief update must actually rule buckets out; without that
-  LBR has no leverage and degenerates into a fixed heuristic.
+* **Mechanism.** The range update must actually rule hands out; without that
+  LBR has no leverage and degenerates into a fixed heuristic. It must also
+  survive a new street, where the bucketing it reads is replaced wholesale.
+* **Fairness.** LBR must reach a verdict from public information alone. An
+  exploiter that peeks at the cards it is exploiting reports a bound on
+  nothing.
 
     python -m pytest tests/test_lbr.py -q
 """
@@ -135,57 +139,133 @@ def test_result_reports_its_own_uncertainty(game, trained):
 # Mechanism
 # ---------------------------------------------------------------------------
 
-def test_belief_rules_out_buckets_that_would_not_have_acted(game):
-    """
-    The whole leverage of LBR is that betting gives information away. If a
-    bucket would never take the observed action, its weight must go to zero.
-    """
-    strategy = {}
-    for bucket in range(4):
-        # Only bucket 3 ever raises; everything else always calls.
-        strategy[f"{bucket}|"] = (np.array([0.0, 1.0, 0.0, 0.0, 0.0, 0.0])
-                                  if bucket < 3 else
-                                  np.array([0.0, 0.0, 0.0, 1.0, 0.0, 0.0]))
+def dealt(game, seed=0):
+    """A freshly dealt hand, past the opening chance node."""
+    rng = np.random.default_rng(seed)
+    root = game.initial_state()
+    return game.next_state(root, game.sample_chance(root, rng))
 
-    lbr = LocalBestResponse(game, strategy, rollout_samples=10)
-    rng = np.random.default_rng(0)
-    state = game.next_state(game.initial_state(),
-                            game.sample_chance(game.initial_state(), rng))
+
+def test_betting_rules_out_hands_that_would_not_have_acted(game):
+    """
+    The whole leverage of LBR is that betting gives information away. If a hand
+    would never take the observed action, its weight must go to zero.
+    """
+    lbr = LocalBestResponse(game, {}, rollout_samples=5, candidates=48)
+    state = dealt(game)
+    candidates = lbr._deal_range(state, 0, np.random.default_rng(1))
+    lbr._sync(candidates, state.board)
 
     actions = list(game.legal_actions(state))
-    raise_index = 3 if len(actions) > 3 else len(actions) - 1
+    raise_index = len(actions) - 1
+    call_index = actions.index(CHECK_CALL)
+    assert raise_index != call_index
 
-    belief = np.full(4, 0.25)
-    updated = lbr._update_belief(belief, state, 0, raise_index)
+    # Only hands sharing the first candidate's bucket ever raise; the rest call.
+    tell = candidates.buckets[0]
+    strategy = {}
+    for bucket in set(candidates.buckets):
+        probabilities = np.zeros(len(actions))
+        probabilities[raise_index if bucket == tell else call_index] = 1.0
+        strategy[f"{bucket}|{state.history}"] = probabilities
+    lbr.strategy = strategy
 
-    assert updated[3] > 0.9, updated
-    assert updated[:3].sum() < 0.1, updated
+    lbr._update_belief(candidates, state, raise_index)
+
+    for index, bucket in enumerate(candidates.buckets):
+        if bucket != tell:
+            assert candidates.weights[index] == 0.0, candidates.hands[index]
+    assert candidates.weights.sum() == pytest.approx(1.0)
 
 
-def test_belief_survives_an_impossible_observation(game):
+def test_the_range_is_rebucketed_when_the_board_changes(game):
     """
-    If every bucket is ruled out — the strategy assigns the observed action zero
-    probability everywhere — the belief must reset rather than become NaN.
+    Each street has its own clustering, so bucket 2 on the flop and bucket 2 on
+    the turn are unrelated categories. A read carried across a street without
+    re-bucketing is applied to the wrong hands entirely — and a candidate
+    holding a card that just landed on the board is no longer possible at all.
     """
-    strategy = {f"{b}|": np.array([1.0, 0.0, 0.0, 0.0, 0.0, 0.0]) for b in range(4)}
-    lbr = LocalBestResponse(game, strategy, rollout_samples=10)
-    rng = np.random.default_rng(0)
-    state = game.next_state(game.initial_state(),
-                            game.sample_chance(game.initial_state(), rng))
+    lbr = LocalBestResponse(game, {}, rollout_samples=5, candidates=24)
+    state = dealt(game)
 
-    updated = lbr._update_belief(np.full(4, 0.25), state, 0, 1)
-    assert np.isfinite(updated).all()
-    assert updated.sum() == pytest.approx(1.0)
+    candidates = lbr._deal_range(state, 0, np.random.default_rng(1))
+    lbr._sync(candidates, state.board)
+    preflop_buckets = list(candidates.buckets)
+
+    mine = set(state.hole[0])
+    flop = tuple(c for c in range(52) if c not in mine)[:3]
+    lbr._sync(candidates, flop)
+
+    for index, hand in enumerate(candidates.hands):
+        if candidates.weights[index] > 0.0:
+            assert candidates.buckets[index] == game.bucket_for(hand, flop)
+        if hand[0] in flop or hand[1] in flop:
+            assert candidates.weights[index] == 0.0, hand
+
+    assert candidates.weights.sum() == pytest.approx(1.0)
+    assert preflop_buckets != candidates.buckets, \
+        "the flop changed nothing, so the buckets were never recomputed"
+
+
+def test_an_impossible_observation_leaves_the_read_intact(game):
+    """
+    If the strategy gives the observed action zero probability everywhere, the
+    strategy is not the one being modelled. The range must stay finite and
+    normalised rather than collapsing to NaN.
+    """
+    lbr = LocalBestResponse(game, {}, rollout_samples=5, candidates=16)
+    state = dealt(game)
+    candidates = lbr._deal_range(state, 0, np.random.default_rng(1))
+    lbr._sync(candidates, state.board)
+
+    actions = list(game.legal_actions(state))
+    always_first = np.zeros(len(actions))
+    always_first[0] = 1.0
+    lbr.strategy = {f"{b}|{state.history}": always_first
+                    for b in set(candidates.buckets)}
+
+    before = candidates.weights.copy()
+    lbr._update_belief(candidates, state, 1)
+
+    assert np.isfinite(candidates.weights).all()
+    assert candidates.weights.sum() == pytest.approx(1.0)
+    assert candidates.weights == pytest.approx(before)
 
 
 def test_fold_probability_reflects_the_range(game):
     """An opponent who always folds must read as folding with probability 1."""
-    lbr = LocalBestResponse(game, constant_strategy(game, FOLD), rollout_samples=10)
-    rng = np.random.default_rng(0)
-    state = game.next_state(game.initial_state(),
-                            game.sample_chance(game.initial_state(), rng))
+    lbr = LocalBestResponse(game, constant_strategy(game, FOLD),
+                            rollout_samples=10, candidates=16)
+    state = dealt(game)
     raised = game.next_state(state, 3)          # a pot-sized raise
+    candidates = lbr._deal_range(state, 0, np.random.default_rng(1))
 
     if FOLD in game.legal_actions(raised):
-        probability = lbr._fold_probability(raised, 1, np.full(4, 0.25))
+        probability = lbr._fold_probability(raised, candidates)
         assert probability == pytest.approx(1.0, abs=0.05)
+
+
+# ---------------------------------------------------------------------------
+# Fairness
+# ---------------------------------------------------------------------------
+
+def test_the_exploiter_never_reads_the_cards_it_is_exploiting(game):
+    """
+    LBR must decide from its own cards, the board and the betting. Swapping the
+    opponent's holding behind its back cannot change what it estimates, because
+    it is not entitled to have seen it.
+    """
+    lbr = LocalBestResponse(game, {}, rollout_samples=30, candidates=8)
+    state = dealt(game)
+
+    mine = state.hole[0]
+    spare = [c for c in range(52) if c not in set(mine)][:4]
+    first = state._replace(hole=(mine, (spare[0], spare[1])))
+    second = state._replace(hole=(mine, (spare[2], spare[3])))
+
+    def estimate(where):
+        candidates = lbr._deal_range(where, 0, np.random.default_rng(4))
+        return lbr._win_probability(where, 0, candidates,
+                                    np.random.default_rng(5))
+
+    assert estimate(first) == estimate(second)

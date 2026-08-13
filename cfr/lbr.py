@@ -17,20 +17,26 @@ the direction of the guarantee and worth stating whenever the number is quoted.
 
 Two design choices specific to this implementation:
 
-* **The opponent's range is tracked over buckets, not over hands.** That is not
-  an approximation here — the opponent's strategy is keyed on its bucket, so two
-  hands in the same bucket are played identically by construction. Tracking six
-  buckets instead of 1,225 hands is exact for the belief update and roughly two
-  hundred times cheaper.
+* **The opponent's range is a weighted set of candidate hands**, resampled once
+  per hand and reweighted by Bayes as the opponent acts. The obvious cheaper
+  alternative — carrying a distribution over bucket indices — does not work
+  here, because :class:`~abstraction.buckets.CardAbstraction` fits a *separate*
+  clustering per street. Bucket 3 on the flop and bucket 3 on the turn are
+  unrelated categories, so a belief accumulated over one street's indices cannot
+  be carried into the next. Tracking hands and re-bucketing them against
+  whatever board is actually out keeps every lookup on the street it belongs to.
 
 * **After the modelled action the hand is rolled out to showdown**, with no
   further betting. This is the standard LBR simplification and it is why the
   result is a bound rather than the true value: LBR never plans a second barrel.
+
+LBR sees only what a real opponent would: its own cards, the board, and the
+betting. It never reads ``state.hole`` for the player it is exploiting.
 """
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Dict, Hashable, List, Optional, Sequence
+from typing import Dict, Hashable, List, Optional, Sequence, Tuple
 
 import numpy as np
 
@@ -63,6 +69,28 @@ class LBRResult:
                 f"[{low:+.3f}, {high:+.3f}] — {verdict}")
 
 
+class Range:
+    """
+    What LBR believes about the opponent's hand: candidate hands and weights.
+
+    The buckets are cached against the board they were computed for, so a new
+    street invalidates them and they are recomputed lazily — a hand that ends on
+    the flop never pays for turn and river bucketing.
+    """
+
+    __slots__ = ("hands", "weights", "buckets", "board")
+
+    def __init__(self, hands: List[Tuple[int, int]], weights: np.ndarray):
+        self.hands = hands
+        self.weights = weights
+        self.buckets: List[int] = []
+        self.board: Optional[Tuple[int, ...]] = None
+
+    def live(self) -> np.ndarray:
+        """Indices of candidates still carrying weight."""
+        return np.flatnonzero(self.weights > 0.0)
+
+
 class LocalBestResponse:
     """
     A greedy exploiter of a fixed strategy in an abstracted no-limit game.
@@ -71,107 +99,178 @@ class LocalBestResponse:
         game: The :class:`~games.nolimit.NoLimitHoldem` being played.
         strategy: The strategy under test, keyed as the game keys its
             information sets.
-        rollout_samples: Opponent hands sampled per decision to estimate the
-            chance of winning a showdown.
+        rollout_samples: Showdowns sampled per decision to estimate the chance of
+            winning.
+        candidates: Opponent hands carried as the range. More is a finer read on
+            what the betting revealed; the cost is one bucket lookup each per
+            street actually reached.
     """
 
     def __init__(self, game, strategy: Dict[Hashable, np.ndarray],
-                 rollout_samples: int = 60):
+                 rollout_samples: int = 60, candidates: int = 32):
         self.game = game
         self.strategy = strategy
         self.rollout_samples = rollout_samples
-        self.num_buckets = game.abstraction.postflop_buckets
+        self.candidates = candidates
 
     # ------------------------------------------------------------------
 
-    def _opponent_probabilities(self, state, opponent: int,
-                                bucket: int) -> Optional[np.ndarray]:
-        """The opponent's action probabilities if they held ``bucket``."""
-        key = f"{bucket}|{state.history}"
-        probabilities = self.strategy.get(key)
-        if probabilities is None:
-            return None
-        actions = self.game.legal_actions(state)
-        if probabilities.size != len(actions):
+    def _deal_range(self, state, me: int, rng: np.random.Generator) -> Range:
+        """
+        A fresh uniform range over hands the opponent could hold.
+
+        Sampled from the deck less LBR's own cards. The board is *not* excluded
+        here — it is empty at this point — so candidates that later collide with
+        a board card are dropped as it comes out, which is the same conditioning
+        applied at the right time.
+        """
+        blocked = set(int(c) for c in state.hole[me])
+        available = [c for c in range(len(FULL_DECK)) if c not in blocked]
+
+        hands: List[Tuple[int, int]] = []
+        for _ in range(self.candidates):
+            picked = rng.choice(len(available), size=2, replace=False)
+            hands.append((available[int(picked[0])], available[int(picked[1])]))
+
+        return Range(hands, np.full(len(hands), 1.0 / len(hands)))
+
+    def _sync(self, candidate_range: Range, board: Tuple[int, ...]) -> None:
+        """
+        Bring the range up to date with the board.
+
+        Two things happen when a street lands: candidates holding a card that
+        just appeared on the board become impossible and lose their weight, and
+        every survivor must be re-bucketed against the new board, because the
+        bucket it had on the previous street was drawn from a different
+        clustering entirely.
+        """
+        board = tuple(int(c) for c in board)
+        if candidate_range.board == board:
+            return
+
+        on_board = set(board)
+        possible = np.array([0.0 if (a in on_board or b in on_board) else 1.0
+                             for a, b in candidate_range.hands])
+
+        weights = candidate_range.weights * possible
+        total = weights.sum()
+        if total > 0.0:
+            candidate_range.weights = weights / total
+        elif possible.sum() > 0.0:
+            # Everything that survived the board had already been ruled out by
+            # the betting. Keep the survivors, drop the read.
+            candidate_range.weights = possible / possible.sum()
+        else:
+            # Every candidate collides with the board. Vanishingly rare, but it
+            # must not produce NaNs: fall back to a flat read over all of them.
+            candidate_range.weights = np.full(len(candidate_range.hands),
+                                              1.0 / len(candidate_range.hands))
+
+        candidate_range.buckets = [
+            self.game.bucket_for(hand, board) if weight > 0.0 else -1
+            for hand, weight in zip(candidate_range.hands, candidate_range.weights)
+        ]
+        candidate_range.board = board
+
+    # ------------------------------------------------------------------
+
+    def _action_probabilities(self, candidate_range: Range, index: int,
+                              state, num_actions: int) -> Optional[np.ndarray]:
+        """How a given candidate hand would act here, or None if unmodelled."""
+        probabilities = self.strategy.get(
+            f"{candidate_range.buckets[index]}|{state.history}")
+        if probabilities is None or probabilities.size != num_actions:
             return None
         return probabilities
 
-    def _update_belief(self, belief: np.ndarray, state, opponent: int,
-                       action_index: int) -> np.ndarray:
+    def _update_belief(self, candidate_range: Range, state,
+                       action_index: int) -> None:
         """
-        Bayes: reweight each bucket by how likely it was to take the action.
+        Bayes: reweight each candidate by how likely it was to act this way.
 
-        A bucket the opponent would never have played this way drops out, which
-        is the entire source of LBR's leverage — it is exploiting the
-        information their betting gives away.
+        A hand that would never have played like this drops out, which is the
+        entire source of LBR's leverage — it is exploiting the information the
+        betting gives away. Hands the strategy has no entry for are left alone
+        rather than guessed at, so an unmodelled line neither confirms nor
+        eliminates anything.
         """
-        updated = belief.copy()
-        for bucket in range(self.num_buckets):
-            probabilities = self._opponent_probabilities(state, opponent, bucket)
-            likelihood = (probabilities[action_index] if probabilities is not None
-                          else 1.0 / len(self.game.legal_actions(state)))
-            updated[bucket] *= likelihood
+        self._sync(candidate_range, state.board)
+        num_actions = len(self.game.legal_actions(state))
+        uniform = 1.0 / num_actions
+
+        updated = candidate_range.weights.copy()
+        for index in candidate_range.live():
+            probabilities = self._action_probabilities(candidate_range, index,
+                                                       state, num_actions)
+            likelihood = (uniform if probabilities is None
+                          else probabilities[action_index])
+            updated[index] *= likelihood
 
         total = updated.sum()
-        if total <= 0.0:                       # every bucket ruled out: reset
-            return np.full(self.num_buckets, 1.0 / self.num_buckets)
-        return updated / total
+        if total <= 0.0:
+            # The observed action was impossible for every candidate, so the
+            # strategy is not the one being modelled here. Keep the previous
+            # read rather than inventing a new one.
+            return
+        candidate_range.weights = updated / total
 
-    def _win_probability(self, state, me: int, belief: np.ndarray,
+    def _win_probability(self, state, me: int, candidate_range: Range,
                          rng: np.random.Generator) -> float:
         """
         Chance of winning a showdown against the believed range.
 
-        Opponent hands are sampled from the remaining deck, weighted by how much
-        belief sits on the bucket each one falls into, and the board is completed
-        at random. Ties count half.
+        A candidate is drawn in proportion to its weight, the board is completed
+        around it, and the two hands are compared. Ties count half.
         """
-        known = set(state.board) | set(state.hole[me]) | set(state.hole[1 - me])
-        available = np.array([i for i in range(len(FULL_DECK)) if i not in known])
-        runout = 5 - len(state.board)
-        draw = 2 + runout
+        self._sync(candidate_range, state.board)
+        live = candidate_range.live()
+        if live.size == 0:
+            return 0.5
 
+        probabilities = candidate_range.weights[live]
+        probabilities = probabilities / probabilities.sum()
+
+        known = set(int(c) for c in state.board) | set(int(c) for c in state.hole[me])
+        runout = 5 - len(state.board)
         mine = [FULL_DECK[c] for c in state.hole[me]]
         board = [FULL_DECK[c] for c in state.board]
 
-        weighted_wins = 0.0
-        total_weight = 0.0
+        wins = 0.0
         for _ in range(self.rollout_samples):
-            picked = rng.choice(available, size=draw, replace=False)
-            opponent_hand = [FULL_DECK[i] for i in picked[:2]]
-            completed = board + [FULL_DECK[i] for i in picked[2:]]
+            index = int(live[rng.choice(live.size, p=probabilities)])
+            first, second = candidate_range.hands[index]
 
-            bucket = self.game.abstraction.bucket(opponent_hand, completed, rng)
-            weight = belief[min(bucket, self.num_buckets - 1)]
-            if weight <= 0.0:
-                continue
+            blocked = known | {first, second}
+            available = [c for c in range(len(FULL_DECK)) if c not in blocked]
+            drawn = (rng.choice(len(available), size=runout, replace=False)
+                     if runout else ())
+            completed = board + [FULL_DECK[available[int(c)]] for c in drawn]
 
             ours = evaluate_hand_fast(mine + completed)
-            theirs = evaluate_hand_fast(opponent_hand + completed)
-            outcome = 1.0 if ours > theirs else (0.5 if ours == theirs else 0.0)
-            weighted_wins += weight * outcome
-            total_weight += weight
+            theirs = evaluate_hand_fast(
+                [FULL_DECK[first], FULL_DECK[second]] + completed)
+            wins += 1.0 if ours > theirs else (0.5 if ours == theirs else 0.0)
 
-        if total_weight <= 0.0:
-            return 0.5
-        return weighted_wins / total_weight
+        return wins / self.rollout_samples
 
-    def _fold_probability(self, state, opponent: int, belief: np.ndarray) -> float:
+    def _fold_probability(self, state, candidate_range: Range) -> float:
         """Chance the opponent folds to the action just taken, over the range."""
         actions = self.game.legal_actions(state)
         if FOLD not in actions:
             return 0.0
         index = list(actions).index(FOLD)
 
+        self._sync(candidate_range, state.board)
         total = 0.0
-        for bucket in range(self.num_buckets):
-            probabilities = self._opponent_probabilities(state, opponent, bucket)
+        for candidate in candidate_range.live():
+            probabilities = self._action_probabilities(candidate_range, candidate,
+                                                       state, len(actions))
             if probabilities is None:
                 continue
-            total += belief[bucket] * probabilities[index]
+            total += candidate_range.weights[candidate] * probabilities[index]
         return float(np.clip(total, 0.0, 1.0))
 
-    def _choose(self, state, me: int, belief: np.ndarray,
+    def _choose(self, state, me: int, candidate_range: Range,
                 rng: np.random.Generator) -> int:
         """
         Index of the action with the highest one-step value.
@@ -182,11 +281,10 @@ class LocalBestResponse:
         """
         actions = list(self.game.legal_actions(state))
         opponent = 1 - me
-        win = self._win_probability(state, me, belief, rng)
+        win = self._win_probability(state, me, candidate_range, rng)
 
         mine_in = state.contributions[me]
         theirs_in = state.contributions[opponent]
-        to_call = max(state.committed[opponent] - state.committed[me], 0)
 
         values: List[float] = []
         for action in actions:
@@ -204,7 +302,7 @@ class LocalBestResponse:
                 values.append(showdown)
             else:
                 # A raise also wins outright whenever they fold.
-                folds = self._fold_probability(after, opponent, belief)
+                folds = self._fold_probability(after, candidate_range)
                 values.append(folds * theirs_in + (1.0 - folds) * showdown)
 
         return int(np.argmax(values))
@@ -231,7 +329,7 @@ class LocalBestResponse:
         """One hand with LBR in seat ``me``; returns chips won by LBR."""
         game = self.game
         state = game.initial_state()
-        belief = np.full(self.num_buckets, 1.0 / self.num_buckets)
+        candidate_range = None
         guard = 0
 
         while not game.is_terminal(state):
@@ -241,20 +339,22 @@ class LocalBestResponse:
 
             if game.is_chance(state):
                 state = game.next_state(state, game.sample_chance(state, rng))
+                if candidate_range is None and state.hole:
+                    candidate_range = self._deal_range(state, me, rng)
                 continue
 
             player = game.current_player(state)
             actions = list(game.legal_actions(state))
 
             if player == me:
-                index = self._choose(state, me, belief, rng)
+                index = self._choose(state, me, candidate_range, rng)
             else:
                 key = game.information_set(state, player)
                 probabilities = self.strategy.get(key)
                 if probabilities is None or probabilities.size != len(actions):
                     probabilities = np.full(len(actions), 1.0 / len(actions))
                 index = int(rng.choice(len(actions), p=probabilities))
-                belief = self._update_belief(belief, state, player, index)
+                self._update_belief(candidate_range, state, index)
 
             state = game.next_state(state, actions[index])
 
@@ -263,12 +363,15 @@ class LocalBestResponse:
 
 def lbr_value(game, strategy: Dict[Hashable, np.ndarray], hands: int = 2000,
               rng: Optional[np.random.Generator] = None,
-              rollout_samples: int = 60) -> LBRResult:
+              rollout_samples: int = 60, candidates: int = 32) -> LBRResult:
     """
     Lower bound on the exploitability of ``strategy``, in chips per hand.
 
     Positive and clear of zero means the strategy is provably exploitable by at
     least this much. Near zero means only that LBR failed to exploit it — not
-    that it is close to equilibrium.
+    that it is close to equilibrium. A negative value is not negative
+    exploitability, which cannot exist: it means this particular greedy
+    exploiter lost money, so the bound is slack and says nothing at all.
     """
-    return LocalBestResponse(game, strategy, rollout_samples).play(hands, rng)
+    return LocalBestResponse(game, strategy, rollout_samples,
+                             candidates).play(hands, rng)
