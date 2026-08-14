@@ -1,0 +1,29 @@
+Head to head: equity bucketing vs made-hand bucketing.
+3 seeds, 20,000 hands per matchup, seats alternating.
+Positive favours equity. Both agents get the same wall-clock budget.
+
+      seed 0      40s  equity     975 it  vs  made_hand   4,825 it    -3.026 +/- 0.408 chips/hand  made_hand
+      seed 0     160s  equity   3,475 it  vs  made_hand  16,900 it    -1.858 +/- 0.318 chips/hand  made_hand
+      seed 0     640s  equity  13,550 it  vs  made_hand  70,650 it    +0.053 +/- 0.215 chips/hand  not separated
+      seed 0    2560s  equity  54,975 it  vs  made_hand 271,975 it    +1.152 +/- 0.161 chips/hand  equity
+
+      seed 1      40s  equity   1,050 it  vs  made_hand   5,300 it    -4.450 +/- 0.354 chips/hand  made_hand
+      seed 1     160s  equity   3,850 it  vs  made_hand  20,025 it    -1.401 +/- 0.265 chips/hand  made_hand
+      seed 1     640s  equity  14,225 it  vs  made_hand  70,025 it    +0.088 +/- 0.209 chips/hand  not separated
+      seed 1    2560s  equity  60,175 it  vs  made_hand 290,725 it    +0.786 +/- 0.168 chips/hand  equity
+
+      seed 2      40s  equity   1,200 it  vs  made_hand   6,675 it    -1.932 +/- 0.300 chips/hand  made_hand
+      seed 2     160s  equity   4,100 it  vs  made_hand  22,350 it    -1.335 +/- 0.249 chips/hand  made_hand
+      seed 2     640s  equity  16,775 it  vs  made_hand  78,800 it    +0.678 +/- 0.189 chips/hand  equity
+      seed 2    2560s  equity  65,200 it  vs  made_hand 301,450 it    +0.811 +/- 0.155 chips/hand  equity
+
+
+  budget    equity iters   made_hand iters      chips/hand           verdict
+----------------------------------------------------------------------------
+     40s           1,075             5,600    -3.136 +/-0.729   made_hand ahead
+    160s           3,808            19,758    -1.531 +/-0.164   made_hand ahead
+    640s          14,850            73,158     0.273 +/-0.203     not separated
+   2560s          60,117           288,050     0.916 +/-0.118      equity ahead
+
+made_hand is ahead from 40s. The lead changes hands at 2560s — that crossover is the result worth reporting.
+Wrote results/cfr/head_to_head.json

@@ -2,6 +2,14 @@
 
 **Practical example scripts demonstrating advanced usage patterns**
 
+> **Superseded.** These examples drive the evolutionary training system, whose results
+> `../CODEBASE_AUDIT.md` shows were produced by a fitness function that scored the wrong
+> player. The `training/` modules they import were themselves found sound and are retained,
+> so the code below still runs — but the workflow it demonstrates is not the current line of
+> work, and `hall_of_fame/champions/` no longer holds champions to train against. See
+> `../README.md` for what replaced it and `../BACKLOG.md` for the open decision on this
+> directory.
+
 ---
 
 ## Overview
@@ -122,48 +130,22 @@ config = TrainingConfig(
 
 ---
 
-## Comparison with CLI Scripts
+## Running these
 
-### CLI Approach (scripts/training/train.py)
-- Best for standard workflows
-- Command-line interface
-- Pre-configured defaults
-- Automatic checkpoint management
+The CLI entry points these examples were written alongside — `scripts/training/train.py`,
+the hyperparameter sweeps and the analysis tools — were removed from master on 13 August
+2026. The Python API they use is unaffected, so the remaining route is to copy an example
+and edit it:
 
-### Python API Approach (examples/)
-- Best for custom experiments
-- Full programmatic control
-- Easy to extend and modify
-- Can integrate with notebooks or pipelines
-
-**Both approaches use the same underlying training system**, so results are equivalent.
-
----
-
-## Recommended Workflows
-
-### 1. Quick Experiments
-Use CLI scripts for standard training:
 ```bash
-python scripts/training/train.py --pop 20 --gens 50
-```
-
-### 2. Advanced Customization
-Use examples as templates:
-```bash
-# Copy and modify an example
 cp examples/train_vs_champions.py my_experiment.py
-# Edit my_experiment.py
 python my_experiment.py
 ```
 
-### 3. Integration with Analysis
-Combine Python API with analysis scripts:
-```python
-# In your script
-trainer.train()
-# Then use CLI tools
-# python scripts/analysis/plot_history.py checkpoints/my_experiment
+To recover a deleted CLI script for reference:
+
+```bash
+git show pre-cfr-pipeline:scripts/training/train.py
 ```
 
 ---
@@ -188,10 +170,9 @@ trainer.train()
 
 ## Related Documentation
 
-- [scripts/README.md](../scripts/README.md) - Complete CLI scripts reference
-- [training/README.md](../training/README.md) - Training system internals
-- [SWEEP_WORKFLOW_GUIDE.md](../SWEEP_WORKFLOW_GUIDE.md) - Hyperparameter optimization workflows
-- [HOF_IMPACT_ANALYSIS.md](../HOF_IMPACT_ANALYSIS.md) - Hall of Fame training benefits
+- [README.md](../README.md) — what the project does now
+- [CODEBASE_AUDIT.md](../CODEBASE_AUDIT.md) — why this pipeline's results were withdrawn
+- [BACKLOG.md](../BACKLOG.md) — open work, including the decision on this directory
 
 ---
 

@@ -291,13 +291,25 @@ class NoLimitHoldem(Game):
         bucket = abstraction.bucket(hole, board, np.random.default_rng(seed))
         return f"{bucket}|{state.history}"
 
-    def _bucket(self, state: NoLimitState, player: int) -> int:
-        key = (state.hole[player], state.board)
+    def bucket_for(self, hole: Tuple[int, ...], board: Tuple[int, ...]) -> int:
+        """
+        The bucket a holding falls into on a board, as this game keys it.
+
+        Public because anything reasoning about what a *hypothetical* holding
+        would have done — an exploiter tracking the opponent's range, say — must
+        ask the question exactly as the solver was asked it. Computing the bucket
+        separately would risk a different rng draw and therefore a different
+        answer for the same situation, which would silently break the lookup.
+        """
+        key = (tuple(int(c) for c in hole), tuple(int(c) for c in board))
         cached = self._bucket_cache.get(key)
         if cached is None:
-            hole = [FULL_DECK[c] for c in state.hole[player]]
-            board = [FULL_DECK[c] for c in state.board]
-            cached = self.abstraction.bucket(hole, board,
+            cards = [FULL_DECK[c] for c in key[0]]
+            community = [FULL_DECK[c] for c in key[1]]
+            cached = self.abstraction.bucket(cards, community,
                                              np.random.default_rng(hash(key) % (2 ** 32)))
             self._bucket_cache[key] = cached
         return cached
+
+    def _bucket(self, state: NoLimitState, player: int) -> int:
+        return self.bucket_for(state.hole[player], state.board)
