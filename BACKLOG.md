@@ -62,18 +62,36 @@ In the literature LBR gets its teeth by playing *outside* the bot's abstraction:
 sizes and off-tree actions the solver never planned against. That is the fix, and it reorders
 what is left:
 
-1. **Give LBR an action set the solver does not have.** This is the fix; the rest is
-   refinement around it. Two parts, and the second is where the difficulty lives:
-   - Let LBR propose bet sizes outside `RAISE_FRACTION`. `NoLimitHoldem._apply` understands
-     only the six abstract actions, so an arbitrary raise amount needs a path through it.
-   - **Action translation.** Once LBR bets off-tree the strategy has no entry for that
-     history, so predicting the opponent's reply means mapping the off-tree action back onto
-     the abstraction. This is the standard translation problem; a naive mapping makes the
-     exploiter look strong for the wrong reason, which is worse than a weak bound.
+1. ~~**Give LBR an action set the solver does not have.**~~ **Built 14 August. It bought
+   nothing.** LBR now chooses from eleven pot fractions (0.25 to 3.5) against the
+   abstraction's three, with pseudo-harmonic translation (`abstraction/translation.py`) so an
+   off-tree bet is perceived as a probabilistic mixture of its neighbours rather than snapped
+   to the nearest. Measured on the same 59,050-iteration strategy, 1,000 hands:
+
+   | exploiter | LBR | 95% CI | verdict |
+   |---|---|---|---|
+   | on-tree control | −0.402 ± 0.981 | [−2.32, +1.52] | slack |
+   | off-tree | −0.415 ± 0.859 | [−2.10, +1.27] | slack |
+
+   A difference of −0.013 against a combined error near 1.3. The diagnosis in this section
+   was confident and appears to be wrong, or at least incomplete: escaping the action
+   abstraction is not what was holding the bound down.
+
+   **The diagnostic that would explain it was not run** — it was lost with the scratchpad
+   when WSL restarted. Before concluding anything, instrument `_choose` and count how often
+   an off-tree size is actually selected. If LBR almost always picks check/call or all-in,
+   the eleven sizes are inert and the null result says nothing about action abstraction.
+
+   The other live hypothesis is `raise_cap=1`. Every measurement in this project has used it,
+   so there is at most one raise per street and almost no sizing structure to exploit. An
+   exploiter cannot punish bet sizing in a game that barely has any. Re-measuring at
+   `raise_cap=2` is the cheaper of the two checks and may make the whole question moot.
+
 2. **More hands** — but only once the mean is reliably positive. Tightening an interval around
    zero buys nothing.
-3. **The second barrel**, last: the rollout assumes no betting after the modelled action,
-   which is the standard LBR simplification and the remaining structural slack.
+3. **The second barrel**, now the leading candidate rather than the last resort: the rollout
+   assumes no betting after the modelled action. With the action-set hypothesis measured and
+   dead, this is the largest remaining structural simplification.
 
 There is a consequence for item 3 below worth stating plainly: an exploiter confined to the
 abstraction cannot distinguish *two* abstractions either, because it evaluates each on its
@@ -183,6 +201,14 @@ What it demonstrates — training against Hall of Fame champions — no longer h
 train against: `hall_of_fame/` holds nothing but `FAULTY_PIPELINE_NOTICE.md`. Its README was
 patched on 13 August to remove links to four documents that no longer exist, but patching is
 not a decision. Same question as `scripts/testing/`: keep, or remove with the rest.
+
+### Long-running checkpoints must not live in /tmp
+
+WSL restarted on 14 August and wiped the scratchpad, taking `deep_solver.pkl` — a
+59,050-iteration solver that cost about 49 minutes to train — along with the rollout sweep
+and off-tree measurement files. The checkpointing worked exactly as designed; it was
+checkpointing to volatile storage. Anything that takes more than a few minutes to regenerate
+belongs under `results/` or another path that survives a reboot, even when it is scratch work.
 
 ### Experiment logs are not versioned
 
