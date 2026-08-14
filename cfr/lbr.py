@@ -42,7 +42,27 @@ import numpy as np
 
 from abstraction.betting import ALL_IN, CHECK_CALL, FOLD
 from abstraction.equity import FULL_DECK
+from abstraction.translation import translate, translation_distribution
 from engine.hand_eval_fast import evaluate_hand_fast
+from games.nolimit import RAISE_FRACTION
+
+#: Raise sizes LBR may choose from, as fractions of the pot. Deliberately finer
+#: than the abstraction's 0.5 / 1.0 / 2.0, and extending past both ends: a bet
+#: the solver never planned against is the entire point, and the sizes between
+#: its own are where a strategy trained on three sizes is least prepared.
+DEFAULT_BET_SIZES = (0.25, 0.35, 0.5, 0.65, 0.8, 1.0, 1.25, 1.6, 2.0, 2.75, 3.5)
+
+
+@dataclass(frozen=True)
+class Move:
+    """
+    A chosen action: either one the abstraction contains, or a raw bet size.
+
+    Exactly one field is set. ``fraction`` carries a raise the abstraction does
+    not have, which must be translated before an opponent can be asked about it.
+    """
+    action: Optional[int]
+    fraction: Optional[float]
 
 
 @dataclass(frozen=True)
@@ -107,11 +127,13 @@ class LocalBestResponse:
     """
 
     def __init__(self, game, strategy: Dict[Hashable, np.ndarray],
-                 rollout_samples: int = 60, candidates: int = 32):
+                 rollout_samples: int = 60, candidates: int = 32,
+                 bet_sizes: Sequence[float] = DEFAULT_BET_SIZES):
         self.game = game
         self.strategy = strategy
         self.rollout_samples = rollout_samples
         self.candidates = candidates
+        self.bet_sizes = tuple(bet_sizes)
 
     # ------------------------------------------------------------------
 
@@ -270,14 +292,45 @@ class LocalBestResponse:
             total += candidate_range.weights[candidate] * probabilities[index]
         return float(np.clip(total, 0.0, 1.0))
 
-    def _choose(self, state, me: int, candidate_range: Range,
-                rng: np.random.Generator) -> int:
-        """
-        Index of the action with the highest one-step value.
+    def _abstract_raises(self, actions: Sequence[int]) -> Tuple[List[int], List[float]]:
+        """The legal sized raises and their pot fractions, smallest first."""
+        sized = sorted((RAISE_FRACTION[a], a) for a in actions if a in RAISE_FRACTION)
+        return [action for _, action in sized], [fraction for fraction, _ in sized]
 
-        Folding is worth losing what we already put in. Any other action is
-        valued by rolling the hand out to showdown, plus — for a raise — the
-        chance the opponent simply folds.
+    def _fold_probability_off_tree(self, state, fraction: float,
+                                   perceived: Sequence[int],
+                                   sizes: Sequence[float],
+                                   candidate_range: Range) -> float:
+        """
+        How often the opponent folds to a bet the abstraction does not contain.
+
+        The bet is perceived as one of the neighbouring abstract sizes, so the
+        answer is an average over both perceptions weighted by how likely each
+        is — not the answer to whichever one happens to be nearer.
+        """
+        weights = translation_distribution(sizes, fraction)
+        total = 0.0
+        for weight, action in zip(weights, perceived):
+            if weight <= 0.0:
+                continue
+            after = self.game.raise_by_fraction(state, fraction, action)
+            total += weight * self._fold_probability(after, candidate_range)
+        return total
+
+    def _choose(self, state, me: int, candidate_range: Range,
+                rng: np.random.Generator) -> "Move":
+        """
+        The move with the highest one-step value.
+
+        Folding is worth losing what we already put in. Any other move is valued
+        by rolling the hand out to showdown, plus — for a raise — the chance the
+        opponent simply folds.
+
+        The raises considered are **not** restricted to the abstraction's. A
+        best response is not confined to its opponent's action set, and an
+        exploiter that is confined to it measures nothing: the strategy has
+        converged inside that set, so playing there is playing the game it is
+        already near-optimal at. Off-tree sizes are what give the bound teeth.
         """
         actions = list(self.game.legal_actions(state))
         opponent = 1 - me
@@ -286,26 +339,55 @@ class LocalBestResponse:
         mine_in = state.contributions[me]
         theirs_in = state.contributions[opponent]
 
+        def raise_value(after, folds: float) -> float:
+            showdown = (win * after.contributions[opponent]
+                        - (1.0 - win) * after.contributions[me])
+            return folds * theirs_in + (1.0 - folds) * showdown
+
+        moves: List[Move] = []
         values: List[float] = []
+
         for action in actions:
             if action == FOLD:
+                moves.append(Move(action, None))
                 values.append(-float(mine_in))
-                continue
+            elif action == CHECK_CALL:
+                after = self.game.next_state(state, action)
+                moves.append(Move(action, None))
+                values.append(win * after.contributions[opponent]
+                              - (1.0 - win) * after.contributions[me])
+            elif action == ALL_IN:
+                after = self.game.next_state(state, action)
+                moves.append(Move(action, None))
+                values.append(raise_value(
+                    after, self._fold_probability(after, candidate_range)))
 
-            after = self.game.next_state(state, action)
-            my_total = after.contributions[me]
-            their_total = after.contributions[opponent]
+        perceived, sizes = self._abstract_raises(actions)
+        if perceived:
+            for fraction in self.bet_sizes:
+                after = self.game.raise_by_fraction(state, fraction, perceived[0])
+                folds = self._fold_probability_off_tree(
+                    state, fraction, perceived, sizes, candidate_range)
+                moves.append(Move(None, fraction))
+                values.append(raise_value(after, folds))
 
-            showdown = win * their_total - (1.0 - win) * my_total
+        return moves[int(np.argmax(values))]
 
-            if action == CHECK_CALL:
-                values.append(showdown)
-            else:
-                # A raise also wins outright whenever they fold.
-                folds = self._fold_probability(after, candidate_range)
-                values.append(folds * theirs_in + (1.0 - folds) * showdown)
+    def _apply_move(self, state, move: "Move", rng: np.random.Generator):
+        """
+        Play a chosen move, translating it if the abstraction lacks it.
 
-        return int(np.argmax(values))
+        The perception is *sampled* rather than rounded. A deterministic mapping
+        has a boundary, and a boundary is a thing an exploiter sits just inside
+        of — which would inflate the bound with an artifact of the mapping
+        rather than a fact about the strategy.
+        """
+        if move.fraction is None:
+            return self.game.next_state(state, move.action)
+
+        perceived, sizes = self._abstract_raises(self.game.legal_actions(state))
+        index = translate(sizes, move.fraction, rng)
+        return self.game.raise_by_fraction(state, move.fraction, perceived[index])
 
     # ------------------------------------------------------------------
 
@@ -347,15 +429,16 @@ class LocalBestResponse:
             actions = list(game.legal_actions(state))
 
             if player == me:
-                index = self._choose(state, me, candidate_range, rng)
-            else:
-                key = game.information_set(state, player)
-                probabilities = self.strategy.get(key)
-                if probabilities is None or probabilities.size != len(actions):
-                    probabilities = np.full(len(actions), 1.0 / len(actions))
-                index = int(rng.choice(len(actions), p=probabilities))
-                self._update_belief(candidate_range, state, index)
+                state = self._apply_move(
+                    state, self._choose(state, me, candidate_range, rng), rng)
+                continue
 
+            key = game.information_set(state, player)
+            probabilities = self.strategy.get(key)
+            if probabilities is None or probabilities.size != len(actions):
+                probabilities = np.full(len(actions), 1.0 / len(actions))
+            index = int(rng.choice(len(actions), p=probabilities))
+            self._update_belief(candidate_range, state, index)
             state = game.next_state(state, actions[index])
 
         return game.utility(state, me)
@@ -363,7 +446,8 @@ class LocalBestResponse:
 
 def lbr_value(game, strategy: Dict[Hashable, np.ndarray], hands: int = 2000,
               rng: Optional[np.random.Generator] = None,
-              rollout_samples: int = 60, candidates: int = 32) -> LBRResult:
+              rollout_samples: int = 60, candidates: int = 32,
+              bet_sizes: Sequence[float] = DEFAULT_BET_SIZES) -> LBRResult:
     """
     Lower bound on the exploitability of ``strategy``, in chips per hand.
 
@@ -373,5 +457,5 @@ def lbr_value(game, strategy: Dict[Hashable, np.ndarray], hands: int = 2000,
     exploitability, which cannot exist: it means this particular greedy
     exploiter lost money, so the bound is slack and says nothing at all.
     """
-    return LocalBestResponse(game, strategy, rollout_samples,
-                             candidates).play(hands, rng)
+    return LocalBestResponse(game, strategy, rollout_samples, candidates,
+                             bet_sizes).play(hands, rng)

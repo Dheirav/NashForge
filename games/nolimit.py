@@ -177,30 +177,52 @@ class NoLimitHoldem(Game):
 
     def _apply(self, state: NoLimitState, action: int) -> NoLimitState:
         player = self.current_player(state)
+        return self._commit(state, player, self._cost(state, player, action),
+                            str(action))
+
+    def _cost(self, state: NoLimitState, player: int, action: int) -> int:
+        """Chips ``action`` costs ``player`` here."""
         opponent = 1 - player
         to_call = state.committed[opponent] - state.committed[player]
 
+        if action == FOLD:
+            return 0
+        if action == CHECK_CALL:
+            return min(max(to_call, 0), state.stacks[player])
+        if action == ALL_IN:
+            return state.stacks[player]
+        return self._raise_cost(state, player, RAISE_FRACTION[action])
+
+    def _raise_cost(self, state: NoLimitState, player: int, fraction: float) -> int:
+        """Chips a raise of ``fraction`` times the pot costs, calling included."""
+        opponent = 1 - player
+        to_call = state.committed[opponent] - state.committed[player]
+        pot = sum(state.contributions) + to_call
+        raise_by = int(round(fraction * pot))
+        return min(max(to_call, 0) + max(raise_by, self.big_blind),
+                   state.stacks[player])
+
+    def _commit(self, state: NoLimitState, player: int, pay: int,
+                recorded: str) -> NoLimitState:
+        """
+        Move ``pay`` chips and append ``recorded`` to the history.
+
+        The two are separate arguments because they are separate things. A
+        player betting a size the abstraction does not contain still moves the
+        real chips, while the history — which is what an opponent's strategy is
+        keyed on — can only name an action the abstraction has. See
+        :meth:`raise_by_fraction`.
+        """
         contributions = list(state.contributions)
         committed = list(state.committed)
         stacks = list(state.stacks)
-
-        if action == FOLD:
-            pay = 0
-        elif action == CHECK_CALL:
-            pay = min(max(to_call, 0), stacks[player])
-        elif action == ALL_IN:
-            pay = stacks[player]
-        else:
-            pot = sum(contributions) + to_call
-            raise_by = int(round(RAISE_FRACTION[action] * pot))
-            pay = min(max(to_call, 0) + max(raise_by, self.big_blind), stacks[player])
 
         contributions[player] += pay
         committed[player] += pay
         stacks[player] -= pay
 
         updated = state._replace(
-            history=state.history + str(action),
+            history=state.history + recorded,
             contributions=tuple(contributions),
             committed=tuple(committed),
             stacks=tuple(stacks),
@@ -210,6 +232,31 @@ class NoLimitHoldem(Game):
         if updated.street == len(STREET_NAMES) - 1 and self._street_closed(updated):
             return updated._replace(street=len(STREET_NAMES))
         return updated
+
+    def raise_by_fraction(self, state: NoLimitState, fraction: float,
+                          perceived: int) -> NoLimitState:
+        """
+        Raise ``fraction`` times the pot, recorded in the history as ``perceived``.
+
+        This is how a player bets outside the abstraction. The pot grows by what
+        was actually wagered, so every payoff is exact; the history names one of
+        the abstract raises, so an opponent keyed on ``bucket|history`` still has
+        an entry to answer with. Which abstract raise is a translation question,
+        and not one this method decides — see :mod:`abstraction.translation`.
+
+        Args:
+            state: The state to act in.
+            fraction: Real raise size, as a multiple of the pot.
+            perceived: The abstract raise action the opponent is to believe it
+                faced. Must be one the abstraction contains.
+        """
+        if perceived not in RAISE_FRACTION and perceived != ALL_IN:
+            raise ValueError(
+                f"perceived must be an abstract raise, got {perceived!r}")
+        player = self.current_player(state)
+        return self._commit(state, player,
+                            self._raise_cost(state, player, fraction),
+                            str(perceived))
 
     # ---- chance ----------------------------------------------------------
 

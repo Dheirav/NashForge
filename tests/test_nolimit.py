@@ -256,3 +256,68 @@ def test_alternating_seats_cancels_position(game):
     result = play_hands(game, [uniform_policy(), uniform_policy()], 400,
                         np.random.default_rng(0), alternate_seats=True)
     assert abs(result.mean) < 4 * max(result.stderr, 1e-9)
+
+
+# ---------------------------------------------------------------------------
+# Betting outside the abstraction
+# ---------------------------------------------------------------------------
+
+def test_an_off_tree_raise_moves_real_chips_but_records_an_abstract_one(game):
+    """
+    The pot must reflect what was actually wagered while the history names an
+    action the opponent's strategy can answer. If the recorded action drove the
+    chips instead, every payoff downstream of an off-tree bet would be wrong.
+    """
+    rng = np.random.default_rng(0)
+    root = game.initial_state()
+    dealt = game.next_state(root, game.sample_chance(root, rng))
+
+    on_tree = game.next_state(dealt, RAISE_POT)          # 1.0x pot
+    off_tree = game.raise_by_fraction(dealt, 0.7, RAISE_POT)
+
+    # Perceived identically: same key, so the opponent answers the same way.
+    assert off_tree.history == on_tree.history == str(RAISE_POT)
+
+    # Paid differently: 0.7 pot is genuinely cheaper than 1.0 pot.
+    actor = game.current_player(dealt)
+    assert off_tree.contributions[actor] < on_tree.contributions[actor]
+    assert off_tree.stacks[actor] > on_tree.stacks[actor]
+
+
+def test_an_off_tree_raise_conserves_chips(game):
+    """The accounting property that matters most, on the new path too."""
+    rng = np.random.default_rng(1)
+    root = game.initial_state()
+    dealt = game.next_state(root, game.sample_chance(root, rng))
+
+    for fraction in (0.25, 0.7, 1.4, 3.0):
+        after = game.raise_by_fraction(dealt, fraction, RAISE_POT)
+        assert sum(after.contributions) + sum(after.stacks) == TOTAL_CHIPS, fraction
+        assert all(s >= 0 for s in after.stacks), fraction
+
+
+def test_an_off_tree_raise_is_capped_by_the_stack(game):
+    """A player cannot wager more than they have, whatever fraction is asked for."""
+    rng = np.random.default_rng(2)
+    root = game.initial_state()
+    dealt = game.next_state(root, game.sample_chance(root, rng))
+
+    actor = game.current_player(dealt)
+    huge = game.raise_by_fraction(dealt, 50.0, RAISE_POT)
+    assert huge.stacks[actor] == 0
+    assert sum(huge.contributions) + sum(huge.stacks) == TOTAL_CHIPS
+
+
+def test_the_recorded_action_must_be_one_the_abstraction_has(game):
+    """
+    Recording a fold or a call as the perception of a raise would corrupt the
+    history, and the corruption would only surface much later as a strategy
+    lookup that quietly missed.
+    """
+    rng = np.random.default_rng(3)
+    root = game.initial_state()
+    dealt = game.next_state(root, game.sample_chance(root, rng))
+
+    for invalid in (FOLD, CHECK_CALL):
+        with pytest.raises(ValueError):
+            game.raise_by_fraction(dealt, 0.7, invalid)
