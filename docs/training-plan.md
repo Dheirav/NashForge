@@ -204,8 +204,21 @@ against a benchmark that does not share their lineage.
 **`reset_hand()` does not restore stacks.** Once a player busts, every subsequent hand is
 instantly over with no player to act, and a loop that only calls `reset_hand()` spins forever
 producing nothing — silently, with no error raised. This hung the feature audit's sampler
-before it was found. Any training or evaluation loop that reuses a table across hands must
-rebuild it when a stack reaches zero. **Check `training/fitness.py` for this before Phase 2.**
+before it was found.
+
+*Checked, 15 August: the existing training paths are safe.* `training/fitness.py` never calls
+`reset_hand` — its game pool calls `game.__init__` with fresh stacks per hand, which is the
+correct cash-game semantics. `training/self_play.play_match` reuses a table but guards it,
+resetting every stack once fewer than two players have chips. New code that reuses a table
+still needs the guard; the existing code has it.
+
+**Six-max stack drift in `play_match`, for Phase 5.** That guard fires only when fewer than
+*two* players remain solvent. Six-handed, a player who busts stays at zero while the other five
+play on, so a long match drifts from a cash game toward a tournament with progressively unequal
+stacks. Per-hand chip deltas stay correct — `hand_start_stacks` measures from the top of each
+hand — but the *game being played* changes as it goes, and short stacks play differently.
+Heads-up is unaffected: one bust leaves one solvent player, the guard fires, both stacks reset.
+Worth resolving before six-max evaluation, not before heads-up.
 
 **The machine is memory-limited, not CPU-limited.** 16 cores against 7.7 GiB, and WSL has been
 terminated twice under memory pressure this week. Torch has CUDA available, so PPO can train
