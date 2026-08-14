@@ -73,8 +73,8 @@ python scripts/analysis/analyze_tournament_history.py --top-n 10
 ## Performance Impact
 
 **Hall of Fame training provides significant benefits** - see detailed analyses:
-- [HOF_IMPACT_ANALYSIS.md](../HOF_IMPACT_ANALYSIS.md) - Focused HoF impact study
-- [TRAINING_FINDINGS_REPORT.md](../TRAINING_FINDINGS_REPORT.md) - Comprehensive research report
+- [HOF_IMPACT_ANALYSIS.md](../docs/HOF_IMPACT_ANALYSIS.md) - Focused HoF impact study
+- [TRAINING_FINDINGS_REPORT.md](../docs/TRAINING_FINDINGS_REPORT.md) - Comprehensive research report
 
 **Key Results**:
 - **+52.2% relative improvement** in average win rate

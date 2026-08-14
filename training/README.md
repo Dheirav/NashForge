@@ -3,8 +3,8 @@
 **Evolutionary poker AI training through self-play**
 
 **See Also**: 
-- [HOF_IMPACT_ANALYSIS.md](../HOF_IMPACT_ANALYSIS.md) - Hall of Fame training provides +52% win rate improvement
-- [TRAINING_FINDINGS_REPORT.md](../TRAINING_FINDINGS_REPORT.md) - Comprehensive formal research report
+- [HOF_IMPACT_ANALYSIS.md](../docs/HOF_IMPACT_ANALYSIS.md) - Hall of Fame training provides +52% win rate improvement
+- [TRAINING_FINDINGS_REPORT.md](../docs/TRAINING_FINDINGS_REPORT.md) - Comprehensive formal research report
 
 ---
 

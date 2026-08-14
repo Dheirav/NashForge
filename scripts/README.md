@@ -766,7 +766,7 @@ python scripts/analysis/extract_hyperparameter_relationships.py
 
 **See Also**: 
 - [HOF_MEMBER_TRACKING_IMPLEMENTATION.md](../HOF_MEMBER_TRACKING_IMPLEMENTATION.md) - HOF tracking system
-- [HYPERPARAMETER_RELATIONSHIPS.md](../HYPERPARAMETER_RELATIONSHIPS.md) - Detailed mathematical analysis
+- [HYPERPARAMETER_RELATIONSHIPS.md](../docs/HYPERPARAMETER_RELATIONSHIPS.md) - Detailed mathematical analysis
 
 ---
 
@@ -809,7 +809,7 @@ python scripts/analysis/visualize_hyperparameter_relationships.py
 - More matchups better than more hands per matchup
 - Sigma decreases as population increases
 
-**See Also**: [HYPERPARAMETER_RELATIONSHIPS.md](../HYPERPARAMETER_RELATIONSHIPS.md) for detailed analysis
+**See Also**: [HYPERPARAMETER_RELATIONSHIPS.md](../docs/HYPERPARAMETER_RELATIONSHIPS.md) for detailed analysis
 
 ---
 

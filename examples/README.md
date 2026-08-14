@@ -190,8 +190,8 @@ trainer.train()
 
 - [scripts/README.md](../scripts/README.md) - Complete CLI scripts reference
 - [training/README.md](../training/README.md) - Training system internals
-- [SWEEP_WORKFLOW_GUIDE.md](../SWEEP_WORKFLOW_GUIDE.md) - Hyperparameter optimization workflows
-- [HOF_IMPACT_ANALYSIS.md](../HOF_IMPACT_ANALYSIS.md) - Hall of Fame training benefits
+- [SWEEP_WORKFLOW_GUIDE.md](../docs/SWEEP_WORKFLOW_GUIDE.md) - Hyperparameter optimization workflows
+- [HOF_IMPACT_ANALYSIS.md](../docs/HOF_IMPACT_ANALYSIS.md) - Hall of Fame training benefits
 
 ---
 
