@@ -80,11 +80,11 @@ PokerBot/
 - [examples/README.md](examples/README.md) - Example scripts and usage patterns
 
 **Key Research & Analysis**:
-- [TRAINING_FINDINGS_REPORT.md](TRAINING_FINDINGS_REPORT.md) - Comprehensive empirical analysis (formal research report)
-- [GLOBAL_SYNTHESIS_REPORT.md](GLOBAL_SYNTHESIS_REPORT.md) - Cross-document synthesis of all research findings
-- [HYPERPARAMETER_RELATIONSHIPS.md](HYPERPARAMETER_RELATIONSHIPS.md) - Proven hyperparameter design rules
-- [HOF_IMPACT_ANALYSIS.md](HOF_IMPACT_ANALYSIS.md) - Hall of Fame training impact (+52% win rate improvement)
-- [SWEEP_WORKFLOW_GUIDE.md](SWEEP_WORKFLOW_GUIDE.md) - Step-by-step workflow for hyperparameter optimization
+- [TRAINING_FINDINGS_REPORT.md](docs/TRAINING_FINDINGS_REPORT.md) - Comprehensive empirical analysis (formal research report)
+- [GLOBAL_SYNTHESIS_REPORT.md](docs/GLOBAL_SYNTHESIS_REPORT.md) - Cross-document synthesis of all research findings
+- [HYPERPARAMETER_RELATIONSHIPS.md](docs/HYPERPARAMETER_RELATIONSHIPS.md) - Proven hyperparameter design rules
+- [HOF_IMPACT_ANALYSIS.md](docs/HOF_IMPACT_ANALYSIS.md) - Hall of Fame training impact (+52% win rate improvement)
+- [SWEEP_WORKFLOW_GUIDE.md](docs/SWEEP_WORKFLOW_GUIDE.md) - Step-by-step workflow for hyperparameter optimization
 
 ---
 
@@ -725,7 +725,7 @@ python scripts/test_cli.py
   - Learning impact analysis
   - Recommended next steps
 
-- **[OPTIMIZATION_SUMMARY.md](OPTIMIZATION_SUMMARY.md)**
+- **[OPTIMIZATION_SUMMARY.md](docs/OPTIMIZATION_SUMMARY.md)**
   - **Purpose**: Quick reference for all optimizations
   - One-page summary of speedups
   - Phase-by-phase breakdown
@@ -748,35 +748,35 @@ python scripts/test_cli.py
 
 ### Research & Methodology Documentation
 
-- **[TRAINING_FINDINGS_REPORT.md](TRAINING_FINDINGS_REPORT.md)** (Comprehensive)
+- **[TRAINING_FINDINGS_REPORT.md](docs/TRAINING_FINDINGS_REPORT.md)** (Comprehensive)
   - **Purpose**: Formal research report on training experiments
   - Empirical analysis of hyperparameter relationships
   - Tournament results and statistical significance
   - Methodology and experimental design
   - Recommendations for future research
 
-- **[GLOBAL_SYNTHESIS_REPORT.md](GLOBAL_SYNTHESIS_REPORT.md)** (Research Synthesis)
+- **[GLOBAL_SYNTHESIS_REPORT.md](docs/GLOBAL_SYNTHESIS_REPORT.md)** (Research Synthesis)
   - **Purpose**: Meta-analysis of all research documents
   - Cross-document insights and themes
   - Consolidated best practices
   - Knowledge integration across experiments
   - High-level strategic recommendations
 
-- **[HOF_IMPACT_ANALYSIS.md](HOF_IMPACT_ANALYSIS.md)** (Impact Study)
+- **[HOF_IMPACT_ANALYSIS.md](docs/HOF_IMPACT_ANALYSIS.md)** (Impact Study)
   - **Purpose**: Hall of Fame training effectiveness analysis
   - 52% win rate improvement with HoF opponents
   - Small population optimization strategies
   - Comparison: with vs without HoF training
   - Cost-benefit analysis for compute efficiency
 
-- **[HYPERPARAMETER_RELATIONSHIPS.md](HYPERPARAMETER_RELATIONSHIPS.md)** (Design Guide)
+- **[HYPERPARAMETER_RELATIONSHIPS.md](docs/HYPERPARAMETER_RELATIONSHIPS.md)** (Design Guide)
   - **Purpose**: Proven hyperparameter design principles
   - Empirically validated relationships
   - Population-matchups-hands tradeoffs
   - Mutation sigma guidance
   - Configuration recommendations by scenario
 
-- **[SWEEP_WORKFLOW_GUIDE.md](SWEEP_WORKFLOW_GUIDE.md)** (Process Guide)
+- **[SWEEP_WORKFLOW_GUIDE.md](docs/SWEEP_WORKFLOW_GUIDE.md)** (Process Guide)
   - **Purpose**: End-to-end hyperparameter sweep workflow
   - Initial sweep → deep sweep → tournament process
   - Tool selection guide (standard/benchmark/HoF sweeps)

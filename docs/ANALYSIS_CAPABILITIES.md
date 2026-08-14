@@ -216,8 +216,8 @@ hands_optimal = 375-500  # Based on variety > depth principle
 
 - **[HOF_MEMBER_TRACKING_IMPLEMENTATION.md](HOF_MEMBER_TRACKING_IMPLEMENTATION.md)** - Complete HOF tracking system details
 - **[HYPERPARAMETER_RELATIONSHIPS.md](HYPERPARAMETER_RELATIONSHIPS.md)** - Detailed mathematical analysis
-- **[scripts/README.md](scripts/README.md)** - All analysis scripts documentation
-- **[training/README.md](training/README.md)** - Training system with HOF tracking
+- **[scripts/README.md](../scripts/README.md)** - All analysis scripts documentation
+- **[training/README.md](../training/README.md)** - Training system with HOF tracking
 
 ---
 

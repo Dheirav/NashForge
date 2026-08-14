@@ -122,7 +122,7 @@ Both documents reference each other:
 - OPTIMIZATION_GUIDE.md links to OPTIMIZATION_SUMMARY.md for quick reference
 
 Additional related documentation:
-- [README.md](README.md) - Main project overview
-- [training/README.md](training/README.md) - Training system details
-- [engine/README.md](engine/README.md) - Engine optimization notes
+- [README.md](../README.md) - Main project overview
+- [training/README.md](../training/README.md) - Training system details
+- [engine/README.md](../engine/README.md) - Engine optimization notes
 

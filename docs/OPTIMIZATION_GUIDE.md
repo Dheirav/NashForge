@@ -1713,7 +1713,7 @@ See [OPTIMIZATION_STATUS.md](OPTIMIZATION_STATUS.md) for the complete roadmap.
 
 ---
 
-**For implementation assistance, see [OPTIMIZATION_STATUS.md](OPTIMIZATION_STATUS.md) and [README.md](README.md)**
+**For implementation assistance, see [OPTIMIZATION_STATUS.md](OPTIMIZATION_STATUS.md) and [README.md](../README.md)**
 # Part 3: Forward Batch Integration - Performance Boost
 
 **Date**: January 23, 2026  

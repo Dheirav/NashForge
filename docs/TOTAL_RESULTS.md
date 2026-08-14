@@ -722,7 +722,7 @@ Features `[15]` (aggression) is currently hardcoded to `0.5` — a placeholder n
 #### Fix 1 — Add Opponent Aggression Feature ★★★★☆
 `Status: NOT STARTED | Effort: Low | Impact: High`
 
-Replace the hardcoded `features[15] = 0.5` in [engine/features.py](engine/features.py) with a real rolling aggression metric: `(num_bets + num_raises) / num_actions` over the last N actions. This is a 1-line change in the feature extractor. Requires re-training — all existing checkpoints would need to be migrated or retrained.
+Replace the hardcoded `features[15] = 0.5` in [engine/features.py](../engine/features.py) with a real rolling aggression metric: `(num_bets + num_raises) / num_actions` over the last N actions. This is a 1-line change in the feature extractor. Requires re-training — all existing checkpoints would need to be migrated or retrained.
 
 #### Fix 2 — Add Stack Depth Relative to Opponents ★★★☆☆
 `Status: NOT STARTED | Effort: Low | Impact: Medium`
@@ -749,7 +749,7 @@ The single highest-leverage change. Add:
 - `features[20]`: number of players who have already acted this street
 - `features[21]`: pot odds relative to all-in (SPR proxy)
 
-This requires: updating [engine/features.py](engine/features.py), updating `input_size=17` in [training/config.py](training/config.py) to 22, retraining all configs from scratch. Existing checkpoints become incompatible (architecture mismatch — genome_transform can adapt them but with information loss).
+This requires: updating [engine/features.py](../engine/features.py), updating `input_size=17` in [training/config.py](../training/config.py) to 22, retraining all configs from scratch. Existing checkpoints become incompatible (architecture mismatch — genome_transform can adapt them but with information loss).
 
 ### Architecture Change Decision Point
 

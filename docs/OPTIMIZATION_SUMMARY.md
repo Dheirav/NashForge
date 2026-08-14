@@ -149,14 +149,14 @@ python scripts/train.py --pop 20 --gens 100
 ## 📚 Documentation
 
 ### Core Documentation
-- [README.md](README.md) - Project overview and quick start
+- [README.md](../README.md) - Project overview and quick start
 - [OPTIMIZATION_STATUS.md](OPTIMIZATION_STATUS.md) - Complete optimization analysis
 - [NUMBA_JIT_GUIDE.md](NUMBA_JIT_GUIDE.md) - Numba implementation guide
 
 ### Module Documentation
-- [engine/README.md](engine/README.md) - Poker engine documentation
-- [training/README.md](training/README.md) - Training system documentation
-- [utils/README.md](utils/README.md) - Utilities documentation
+- [engine/README.md](../engine/README.md) - Poker engine documentation
+- [training/README.md](../training/README.md) - Training system documentation
+- [utils/README.md](../utils/README.md) - Utilities documentation
 
 ### Optimization Guides
 - [FORWARD_BATCH_INTEGRATION.md](FORWARD_BATCH_INTEGRATION.md) - Batched inference
