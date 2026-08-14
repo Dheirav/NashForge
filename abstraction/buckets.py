@@ -171,6 +171,23 @@ class CardAbstraction:
             raise ValueError(
                 f"strength must be one of {STRENGTH_SIGNALS}, got {self.strength!r}")
 
+    def __setstate__(self, state):
+        """
+        Restore, rebuilding any derived field the pickle predates.
+
+        A fitted abstraction is pickled alongside the strategy it produced,
+        precisely so a result outlives the code that produced it. That makes
+        derived fields a hazard: ``_centroid_list`` was added later, as a plain
+        mirror of ``_centroids`` for the binary-search lookup, and an older
+        pickle arrives with it absent — whereupon the dataclass default supplies
+        ``None`` and every postflop lookup raises. Rebuilding beats refitting,
+        which would silently answer with a different clustering.
+        """
+        self.__dict__.update(state)
+        if getattr(self, "_centroid_list", None) is None and self._centroids:
+            self._centroid_list = {street: centroids.tolist()
+                                   for street, centroids in self._centroids.items()}
+
     def _postflop_strength(self, hole, board,
                            rng: Optional[np.random.Generator] = None) -> float:
         """

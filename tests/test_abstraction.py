@@ -124,6 +124,37 @@ def fitted():
                            samples=150, equity_samples=60).fit(np.random.default_rng(0))
 
 
+def test_a_pickle_predating_the_lookup_table_still_buckets(fitted):
+    """
+    An abstraction is pickled so a result outlives the code that produced it,
+    which makes every derived field a compatibility hazard. `_centroid_list` was
+    added after `results/cfr/nolimit_strategy.pkl` was written, and that file now
+    unpickles with it set to None — so every postflop lookup raises rather than
+    answering. Restoring must rebuild it, and rebuild it to the *same* clustering
+    rather than refitting to a plausible different one.
+    """
+    aged = fitted.__dict__.copy()
+    aged.pop("_centroid_list", None)          # as an older pickle carries it
+
+    revived = CardAbstraction.__new__(CardAbstraction)
+    revived.__setstate__(aged)
+
+    hole, board = [C("Ah"), C("Kh")], [C("Qh"), C("7d"), C("2s")]
+    assert revived.bucket(hole, board, np.random.default_rng(0)) == \
+        fitted.bucket(hole, board, np.random.default_rng(0))
+
+
+def test_pickling_an_abstraction_round_trips(fitted):
+    """The ordinary path must keep working, not just the aged one."""
+    import pickle
+
+    revived = pickle.loads(pickle.dumps(fitted))
+    hole, board = [C("Ah"), C("Kh")], [C("Qh"), C("7d"), C("2s")]
+    assert revived.bucket(hole, board, np.random.default_rng(0)) == \
+        fitted.bucket(hole, board, np.random.default_rng(0))
+    assert revived.describe() == fitted.describe()
+
+
 def test_preflop_buckets_order_hands_by_strength(fitted):
     """Aces must not land in a weaker bucket than seven-deuce."""
     aces = fitted.bucket([C("Ah"), C("Ad")], [])
