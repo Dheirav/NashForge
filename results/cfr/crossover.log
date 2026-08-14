@@ -1,0 +1,78 @@
+[2026-08-13 00:39:16] watcher started; polling every 10 minutes
+[2026-08-13 00:39:16] waiting for pid 7233 to exit
+[2026-08-13 00:39:16]   pid 7233 still running (load 14.22)
+[2026-08-13 00:49:16]   pid 7233 still running (load 14.27)
+[2026-08-13 00:59:16]   pid 7233 still running (load 14.72)
+[2026-08-13 01:09:16]   pid 7233 still running (load 14.47)
+[2026-08-13 01:19:16]   pid 7233 still running (load 14.05)
+[2026-08-13 01:29:16]   pid 7233 still running (load 14.01)
+[2026-08-13 01:39:16]   pid 7233 still running (load 14.11)
+[2026-08-13 01:49:16]   pid 7233 still running (load 14.07)
+[2026-08-13 01:59:16]   pid 7233 still running (load 11.14)
+[2026-08-13 02:09:16]   pid 7233 still running (load 14.10)
+[2026-08-13 02:19:16]   pid 7233 still running (load 14.04)
+[2026-08-13 02:29:16]   pid 7233 still running (load 14.06)
+[2026-08-13 02:39:16]   pid 7233 still running (load 14.00)
+[2026-08-13 02:49:16]   pid 7233 still running (load 14.00)
+[2026-08-13 02:59:16]   pid 7233 still running (load 14.00)
+[2026-08-13 03:09:16]   pid 7233 still running (load 14.00)
+[2026-08-13 03:19:16]   pid 7233 still running (load 14.04)
+[2026-08-13 03:29:16]   pid 7233 still running (load 14.00)
+[2026-08-13 03:39:16]   pid 7233 still running (load 14.00)
+[2026-08-13 03:49:16]   pid 7233 still running (load 11.72)
+[2026-08-13 03:59:16]   pid 7233 still running (load 14.00)
+[2026-08-13 04:09:16]   pid 7233 still running (load 14.08)
+[2026-08-13 04:19:16]   pid 7233 still running (load 14.06)
+[2026-08-13 04:29:16]   pid 7233 still running (load 14.00)
+[2026-08-13 04:39:16]   pid 7233 still running (load 14.00)
+[2026-08-13 04:49:16]   pid 7233 still running (load 14.00)
+[2026-08-13 04:59:17]   pid 7233 still running (load 14.00)
+[2026-08-13 05:09:17]   pid 7233 still running (load 14.00)
+[2026-08-13 05:19:17]   pid 7233 still running (load 14.04)
+[2026-08-13 05:29:17]   pid 7233 still running (load 14.00)
+[2026-08-13 05:39:17]   pid 7233 still running (load 3.11)
+[2026-08-13 05:49:17] pid 7233 has exited
+[2026-08-13 05:49:17] waiting for load to settle below 4.0
+[2026-08-13 05:49:17]   load 0.00 — quiet (1/2)
+[2026-08-13 05:59:17]   load 0.00 — quiet (2/2)
+[2026-08-13 05:59:17] machine is quiet; starting the crossover experiment
+Exploitability against training budget, both bucketing signals.
+3 seeds, 1000 LBR hands per measurement.
+Lower LBR is better. LBR is a lower bound on exploitability.
+
+      equity     seed 0      40s    1,200 iters  LBR +6.072 +/- 1.010  (load 0.5)
+      equity     seed 0     160s    4,075 iters  LBR +3.366 +/- 1.001  (load 1.0)
+      equity     seed 0     640s   14,800 iters  LBR +2.188 +/- 1.360  (load 1.0)
+      equity     seed 0    2560s   59,050 iters  LBR -4.328 +/- 1.205  (load 1.0)
+      equity     seed 1      40s    1,100 iters  LBR +5.965 +/- 1.576  (load 1.0)
+      equity     seed 1     160s    4,000 iters  LBR +5.396 +/- 1.301  (load 1.0)
+      equity     seed 1     640s   14,900 iters  LBR -0.211 +/- 1.340  (load 1.0)
+      equity     seed 1    2560s   60,900 iters  LBR -5.452 +/- 1.167  (load 1.0)
+      equity     seed 2      40s    1,200 iters  LBR +7.277 +/- 1.121  (load 1.0)
+      equity     seed 2     160s    4,075 iters  LBR +4.354 +/- 1.029  (load 1.0)
+      equity     seed 2     640s   16,775 iters  LBR +0.880 +/- 1.067  (load 1.0)
+      equity     seed 2    2560s   66,050 iters  LBR -2.401 +/- 0.910  (load 1.0)
+
+      made_hand  seed 0      40s    5,375 iters  LBR +3.201 +/- 1.347  (load 1.0)
+      made_hand  seed 0     160s   20,550 iters  LBR +1.284 +/- 0.966  (load 1.1)
+      made_hand  seed 0     640s   77,350 iters  LBR +1.103 +/- 1.108  (load 1.0)
+      made_hand  seed 0    2560s  290,700 iters  LBR -3.055 +/- 1.056  (load 1.0)
+      made_hand  seed 1      40s    5,475 iters  LBR +3.848 +/- 1.073  (load 1.0)
+      made_hand  seed 1     160s   20,825 iters  LBR -0.721 +/- 0.840  (load 1.0)
+      made_hand  seed 1     640s   71,250 iters  LBR +2.062 +/- 0.950  (load 1.0)
+      made_hand  seed 1    2560s  295,225 iters  LBR -0.730 +/- 0.883  (load 1.0)
+      made_hand  seed 2      40s    6,725 iters  LBR +5.503 +/- 0.992  (load 1.0)
+      made_hand  seed 2     160s   22,600 iters  LBR +1.452 +/- 0.847  (load 1.0)
+      made_hand  seed 2     640s   79,875 iters  LBR +0.435 +/- 1.031  (load 1.0)
+      made_hand  seed 2    2560s  305,225 iters  LBR -1.554 +/- 0.991  (load 1.0)
+
+
+  budget            equity LBR         made_hand LBR      difference
+--------------------------------------------------------------------
+     40s         6.438 +/-1.236          4.184 +/-1.137    not separated
+    160s         4.372 +/-1.110          0.672 +/-0.884  made_hand ahead
+    640s         0.952 +/-1.256          1.200 +/-1.030    not separated
+   2560s        -4.060 +/-1.094         -1.780 +/-0.977     equity ahead
+
+Crossover found: the equity abstraction is ahead from 2560s onward.
+Wrote results/cfr/crossover.json
