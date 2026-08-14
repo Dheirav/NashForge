@@ -19,9 +19,10 @@ find and cheap to forget.
 | 3 | Re-run the crossover experiment | **Closed** — superseded by item 2, will not be done |
 | 4 | Recover the paper | **Largely superseded** by `docs/abstraction-crossover.html` |
 
-What remains is a handful of decisions that are the maintainer's to make, two audit findings
-deferred by choice with their triggers recorded, and one substantial piece of work — the second
-barrel — that nothing else depends on.
+What remains is **two audit findings deferred by choice**, each with the condition that would
+make them worth doing, and **one substantial piece of work** — the second barrel — that nothing
+else depends on. The four maintainer decisions that stood open all week were made on 15 August;
+they are recorded below with what was removed and why.
 
 The project's result is the crossover (item 2). It requires none of the LBR machinery, and it
 is written up in [`docs/abstraction-crossover.html`](docs/abstraction-crossover.html).
@@ -315,37 +316,52 @@ assuming either is complete. Otherwise this is closed.
 
 ---
 
-## Open decisions
+## Decisions, now made
 
-### `scripts/testing/` — three scripts exercising the old feature layer
+All four were settled on 15 August. Kept rather than deleted: each names something that was
+removed, and the reason is easier to find here than in a commit message.
 
-`test_ai_features.py`, `test_ai_hands.py` and `test_cli.py` (482 lines) predate the audit and
-target the observation vector that E5 below describes as needing rebuilding. They were left
-in place when the rest of the evolutionary pipeline was removed on 13 August, because they
-were outside the agreed scope, not because they were judged worth keeping. Decide.
+### ~~`scripts/testing/`~~ — reviewed and removed, 15 August
 
-### `examples/` — one script and a README for the removed workflow
+482 lines of hand-run scripts written when `tests/` was an empty directory. They imported only
+from `engine/` — the verified, retained part — so they were never pipeline leftovers, only
+superseded ones. Reviewed against the suite before deleting rather than after: most of what
+they touched is now covered, and what they checked *uniquely* they checked by printing it,
+which is not a check.
 
-`train_vs_champions.py` imports only from `training/`, which is retained, so it still runs.
-What it demonstrates — training against Hall of Fame champions — no longer has champions to
-train against: `hall_of_fame/` holds nothing but `FAULTY_PIPELINE_NOTICE.md`. Its README was
-patched on 13 August to remove links to four documents that no longer exist, but patching is
-not a decision. Same question as `scripts/testing/`: keep, or remove with the rest.
+Four things had no coverage at all and are now in `tests/test_engine_surface.py` with
+assertions: raise-sizing hints and their agreement with the action mask, the action history the
+engine records, hand-history logging, and whether `engine/cli.py` can play a hand — the only
+path a person drives the engine by hand, and imported by nothing else.
 
-### Experiment logs are not versioned
+The CLI test hung on first run, which is its own small finding: the CLI re-prompts on an
+illegal action, and a fallback answer of `check` is illegal when facing a bet. It now falls
+back to `fold` and carries a prompt budget, so a loop fails with a message instead of hanging
+the suite.
 
-`.gitignore` excludes `logs/`, so `logs/crossover.log` — which timestamps every poll, records
-when the machine went quiet and carries the per-measurement load average — is untracked. For
-a wall-clock experiment that log *is* part of the evidence. Either carve out an exception or
-copy the relevant log into `results/cfr/` alongside the JSON.
+### ~~`examples/`~~ — removed, 15 August
 
-### Loose artifacts at the repository root
+One script demonstrating training against Hall of Fame champions, and a 194-line README for a
+workflow that no longer exists. `hall_of_fame/` holds nothing but `FAULTY_PIPELINE_NOTICE.md`,
+so the example could not have run. Recoverable from `pre-cfr-pipeline` alongside the pipeline
+it belonged to.
 
-`trained_demo_agent.npy` is an untracked genome from the superseded pipeline. `.agent.md` is
-an untracked agent definition for generating academic reports, unrelated to the poker work.
-Neither is referenced by anything. Delete or place deliberately.
+A worked example of the *current* stack — fit an abstraction, train a solver, measure head to
+head — would be worth having. That is new work rather than a decision, and is not started.
 
----
+### ~~Experiment logs are not versioned~~ — resolved by convention, 15 August
+
+`logs/` stays gitignored for routine output. When an experiment's timing is part of its claim,
+its run log is committed beside the JSON it produced: `results/cfr/crossover.log` and
+`results/cfr/head_to_head.log` are there now. Both record per-rung load average, which is what
+makes a wall-clock-budgeted result auditable rather than merely reported.
+
+### ~~Loose artifacts at the repository root~~ — removed, 15 August
+
+`trained_demo_agent.npy` was a genome from the invalidated pipeline. `.agent.md` was an
+academic-report-generator agent definition, superseded by
+[`docs/abstraction-crossover.html`](docs/abstraction-crossover.html), which was written from
+the measurements. Neither was referenced by anything; both are in git history if wanted.
 
 ## Closed, and the lessons kept
 
