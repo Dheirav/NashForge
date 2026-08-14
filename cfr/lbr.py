@@ -236,86 +236,129 @@ class LocalBestResponse:
             return
         candidate_range.weights = updated / total
 
-    def _win_probability(self, state, me: int, candidate_range: Range,
-                         rng: np.random.Generator) -> float:
+    def _showdown_samples(self, state, me: int, candidate_range: Range,
+                          rng: np.random.Generator):
         """
-        Chance of winning a showdown against the believed range.
+        Sample showdowns once, so every action can be priced against them.
 
-        A candidate is drawn in proportion to its weight, the board is completed
-        around it, and the two hands are compared. Ties count half.
+        Each sample records *which* candidate hand it came from alongside the
+        result, which is what lets the same draws be re-weighted per action
+        rather than resampled. That matters because the range LBR is up against
+        is not the same for every action: an opponent who calls a large bet is
+        stronger than the same opponent's range as a whole. Pricing each action
+        against its own conditioned range would otherwise cost one full set of
+        rollouts per candidate bet.
+
+        Candidates are drawn uniformly over the live ones rather than by belief,
+        so the samples carry no weighting of their own and any weighting can be
+        applied afterwards.
         """
         self._sync(candidate_range, state.board)
         live = candidate_range.live()
         if live.size == 0:
-            return 0.5
-
-        probabilities = candidate_range.weights[live]
-        probabilities = probabilities / probabilities.sum()
+            return None
 
         known = set(int(c) for c in state.board) | set(int(c) for c in state.hole[me])
         runout = 5 - len(state.board)
         mine = [FULL_DECK[c] for c in state.hole[me]]
         board = [FULL_DECK[c] for c in state.board]
 
-        wins = 0.0
-        for _ in range(self.rollout_samples):
-            index = int(live[rng.choice(live.size, p=probabilities)])
+        drawn_from = np.empty(self.rollout_samples, dtype=np.int64)
+        outcomes = np.empty(self.rollout_samples, dtype=np.float64)
+
+        for sample in range(self.rollout_samples):
+            index = int(live[rng.integers(live.size)])
             first, second = candidate_range.hands[index]
 
             blocked = known | {first, second}
             available = [c for c in range(len(FULL_DECK)) if c not in blocked]
-            drawn = (rng.choice(len(available), size=runout, replace=False)
-                     if runout else ())
-            completed = board + [FULL_DECK[available[int(c)]] for c in drawn]
+            picked = (rng.choice(len(available), size=runout, replace=False)
+                      if runout else ())
+            completed = board + [FULL_DECK[available[int(c)]] for c in picked]
 
             ours = evaluate_hand_fast(mine + completed)
             theirs = evaluate_hand_fast(
                 [FULL_DECK[first], FULL_DECK[second]] + completed)
-            wins += 1.0 if ours > theirs else (0.5 if ours == theirs else 0.0)
 
-        return wins / self.rollout_samples
+            drawn_from[sample] = index
+            outcomes[sample] = (1.0 if ours > theirs
+                                else 0.5 if ours == theirs else 0.0)
 
-    def _fold_probability(self, state, candidate_range: Range) -> float:
-        """Chance the opponent folds to the action just taken, over the range."""
+        return drawn_from, outcomes
+
+    @staticmethod
+    def _win_against(samples, weights: np.ndarray) -> float:
+        """Chance of winning against a range described by ``weights``."""
+        if samples is None:
+            return 0.5
+        drawn_from, outcomes = samples
+        applied = weights[drawn_from]
+        total = applied.sum()
+        if total <= 0.0:
+            return 0.5
+        return float((applied * outcomes).sum() / total)
+
+    def _win_probability(self, state, me: int, candidate_range: Range,
+                         rng: np.random.Generator) -> float:
+        """Chance of winning a showdown against the believed range as it stands."""
+        samples = self._showdown_samples(state, me, candidate_range, rng)
+        return self._win_against(samples, candidate_range.weights)
+
+    def _fold_probabilities(self, state, candidate_range: Range) -> np.ndarray:
+        """
+        How often *each* candidate hand folds to the action just taken.
+
+        Per hand rather than pooled, because the pooled figure cannot answer the
+        question that matters for pricing a bet: who is left when they do not
+        fold. A hand the strategy has no entry for is treated as never folding,
+        which keeps it in the calling range rather than quietly assuming it goes
+        away.
+        """
+        folds = np.zeros(len(candidate_range.hands))
         actions = self.game.legal_actions(state)
         if FOLD not in actions:
-            return 0.0
+            return folds
         index = list(actions).index(FOLD)
 
         self._sync(candidate_range, state.board)
-        total = 0.0
         for candidate in candidate_range.live():
             probabilities = self._action_probabilities(candidate_range, candidate,
                                                        state, len(actions))
-            if probabilities is None:
-                continue
-            total += candidate_range.weights[candidate] * probabilities[index]
-        return float(np.clip(total, 0.0, 1.0))
+            if probabilities is not None:
+                folds[candidate] = probabilities[index]
+        return folds
+
+    def _fold_probability(self, state, candidate_range: Range) -> float:
+        """Chance the opponent folds to the action just taken, over the range."""
+        folds = self._fold_probabilities(state, candidate_range)
+        return float(np.clip((candidate_range.weights * folds).sum(), 0.0, 1.0))
 
     def _abstract_raises(self, actions: Sequence[int]) -> Tuple[List[int], List[float]]:
         """The legal sized raises and their pot fractions, smallest first."""
         sized = sorted((RAISE_FRACTION[a], a) for a in actions if a in RAISE_FRACTION)
         return [action for _, action in sized], [fraction for fraction, _ in sized]
 
-    def _fold_probability_off_tree(self, state, fraction: float,
-                                   perceived: Sequence[int],
-                                   sizes: Sequence[float],
-                                   candidate_range: Range) -> float:
+    def _fold_probabilities_off_tree(self, state, fraction: float,
+                                     perceived: Sequence[int],
+                                     sizes: Sequence[float],
+                                     candidate_range: Range) -> np.ndarray:
         """
-        How often the opponent folds to a bet the abstraction does not contain.
+        How often each candidate folds to a bet the abstraction does not contain.
 
         The bet is perceived as one of the neighbouring abstract sizes, so the
         answer is an average over both perceptions weighted by how likely each
-        is — not the answer to whichever one happens to be nearer.
+        is — not the answer to whichever one happens to be nearer. Per hand
+        rather than pooled, because the caller needs to know who is left when
+        they do not fold.
         """
         weights = translation_distribution(sizes, fraction)
-        total = 0.0
+        folds = np.zeros(len(candidate_range.hands))
         for weight, action in zip(weights, perceived):
             if weight <= 0.0:
                 continue
             after = self.game.raise_by_fraction(state, fraction, action)
-            total += weight * self._fold_probability(after, candidate_range)
-        return total
+            folds += weight * self._fold_probabilities(after, candidate_range)
+        return folds
 
     def _choose(self, state, me: int, candidate_range: Range,
                 rng: np.random.Generator) -> "Move":
@@ -326,21 +369,44 @@ class LocalBestResponse:
         by rolling the hand out to showdown, plus — for a raise — the chance the
         opponent simply folds.
 
+        **A raise is priced against the range that would call it**, which is not
+        the range as a whole. Folding removes the weak hands, so whoever calls is
+        stronger than average, and more so the larger the bet. Valuing the
+        called branch against the unconditioned range therefore overstates LBR's
+        equity by an amount that grows with bet size, which makes shoving look
+        free: measured directly, that mistake had LBR aggressive on 52% of
+        decisions against a converged strategy and losing 4.9 chips a hand.
+
+        Its predecessor erred the other way — counting no call at all, so every
+        chip bet was pure downside and the cheapest legal bet won by
+        construction. Both are approximations of the same correct treatment:
+        condition on the response, then evaluate.
+
+        The showdowns are sampled once and re-weighted per candidate, so
+        conditioning each bet on its own calling range costs almost nothing.
+
         The raises considered are **not** restricted to the abstraction's. A
-        best response is not confined to its opponent's action set, and an
-        exploiter that is confined to it measures nothing: the strategy has
-        converged inside that set, so playing there is playing the game it is
-        already near-optimal at. Off-tree sizes are what give the bound teeth.
+        best response is not confined to its opponent's action set.
         """
         actions = list(self.game.legal_actions(state))
         opponent = 1 - me
-        win = self._win_probability(state, me, candidate_range, rng)
+
+        samples = self._showdown_samples(state, me, candidate_range, rng)
+        belief = candidate_range.weights
 
         mine_in = state.contributions[me]
         theirs_in = state.contributions[opponent]
 
-        def raise_value(after, folds: float) -> float:
-            showdown = (win * after.contributions[opponent]
+        def priced(after, folds_each: np.ndarray) -> float:
+            """Value a raise, conditioning the showdown on being called."""
+            folds = float(np.clip((belief * folds_each).sum(), 0.0, 1.0))
+
+            calling = belief * (1.0 - folds_each)
+            win = self._win_against(samples, calling)
+
+            to_call = max(after.committed[me] - after.committed[opponent], 0)
+            called = min(to_call, after.stacks[opponent])
+            showdown = (win * (after.contributions[opponent] + called)
                         - (1.0 - win) * after.contributions[me])
             return folds * theirs_in + (1.0 - folds) * showdown
 
@@ -353,23 +419,24 @@ class LocalBestResponse:
                 values.append(-float(mine_in))
             elif action == CHECK_CALL:
                 after = self.game.next_state(state, action)
+                win = self._win_against(samples, belief)
                 moves.append(Move(action, None))
                 values.append(win * after.contributions[opponent]
                               - (1.0 - win) * after.contributions[me])
             elif action == ALL_IN:
                 after = self.game.next_state(state, action)
                 moves.append(Move(action, None))
-                values.append(raise_value(
-                    after, self._fold_probability(after, candidate_range)))
+                values.append(priced(after, self._fold_probabilities(
+                    after, candidate_range)))
 
         perceived, sizes = self._abstract_raises(actions)
         if perceived:
             for fraction in self.bet_sizes:
                 after = self.game.raise_by_fraction(state, fraction, perceived[0])
-                folds = self._fold_probability_off_tree(
+                folds_each = self._fold_probabilities_off_tree(
                     state, fraction, perceived, sizes, candidate_range)
                 moves.append(Move(None, fraction))
-                values.append(raise_value(after, folds))
+                values.append(priced(after, folds_each))
 
         return moves[int(np.argmax(values))]
 

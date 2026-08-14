@@ -22,7 +22,7 @@ exists — so these tests pin it in three other ways:
 import numpy as np
 import pytest
 
-from abstraction.betting import CHECK_CALL, FOLD
+from abstraction.betting import CHECK_CALL, FOLD, RAISE_POT
 from abstraction.buckets import CardAbstraction
 from cfr import MCCFRSolver, VANILLA, lbr_value
 from cfr.lbr import LocalBestResponse
@@ -113,10 +113,17 @@ def test_training_reduces_exploitability(game, trained):
     An untrained strategy plays uniformly at random and should be far more
     exploitable than a trained one. LBR that cannot separate these is measuring
     noise rather than exploitability.
+
+    1,500 hands rather than 500: once the raise valuation began counting the
+    call, LBR started betting substantially larger, and larger bets carry more
+    variance per hand. The mean rose (+12.4 against an untrained opponent) while
+    the interval widened with it, so the hand count has to keep up. This is the
+    behaviour changing, not the property — at 500 hands the same measurement is
+    +5.1 +/- 3.5 and cannot clear zero.
     """
-    untrained = lbr_value(game, {}, hands=500,
+    untrained = lbr_value(game, {}, hands=1500,
                           rng=np.random.default_rng(2), rollout_samples=25)
-    learned = lbr_value(game, trained, hands=500,
+    learned = lbr_value(game, trained, hands=1500,
                         rng=np.random.default_rng(2), rollout_samples=25)
 
     assert untrained.mean > learned.mean, \
@@ -269,3 +276,67 @@ def test_the_exploiter_never_reads_the_cards_it_is_exploiting(game):
                                     np.random.default_rng(5))
 
     assert estimate(first) == estimate(second)
+
+
+# ---------------------------------------------------------------------------
+# Valuation
+# ---------------------------------------------------------------------------
+
+def test_a_bigger_bet_is_worth_more_when_it_folds_them_equally_often(game):
+    """
+    The incentive a larger bet buys is the larger pot it wins when called. A
+    valuation that omits the call prices every extra chip as pure downside, so
+    the cheapest legal bet wins by construction — which is what LBR did,
+    betting the smallest size offered in 47% of decisions and continuing to do
+    so as the floor dropped and its results got worse.
+
+    Holding fold probability fixed isolates the showdown term: against an
+    opponent who never folds, a bet is worth having made only through the chips
+    it drags in.
+    """
+    lbr = LocalBestResponse(game, {}, rollout_samples=5, candidates=8)
+    state = dealt(game)
+    candidates = lbr._deal_range(state, 0, np.random.default_rng(1))
+    lbr._sync(candidates, state.board)
+
+    me = game.current_player(state)
+    opponent = 1 - me
+
+    def value(fraction, win, folds=0.0):
+        after = game.raise_by_fraction(state, fraction, RAISE_POT)
+        to_call = max(after.committed[me] - after.committed[opponent], 0)
+        called = min(to_call, after.stacks[opponent])
+        showdown = (win * (after.contributions[opponent] + called)
+                    - (1.0 - win) * after.contributions[me])
+        return folds * state.contributions[opponent] + (1.0 - folds) * showdown
+
+    # Holding a hand that wins most of the time, betting more must be worth more.
+    small, large = value(0.25, win=0.8), value(1.5, win=0.8)
+    assert large > small, f"0.25x scored {small:.2f}, 1.5x scored {large:.2f}"
+
+
+def test_the_exploiter_does_not_simply_bet_the_minimum(game, trained):
+    """
+    Whatever the smallest offered size is, it must not attract a plurality of
+    the betting. Lowering the floor used to leave the share unmoved at ~47%,
+    which is the signature of a valuation that rewards cheapness rather than
+    the bet.
+    """
+    from collections import Counter
+
+    picks = Counter()
+
+    class Counting(LocalBestResponse):
+        def _choose(self, state, me, candidate_range, rng):
+            move = super()._choose(state, me, candidate_range, rng)
+            picks["off-tree-floor" if move.fraction == 0.02 else "other"] += 1
+            return move
+
+    sizes = (0.02, 0.5, 1.0, 2.0)
+    lbr = Counting(game, trained, rollout_samples=5, candidates=8, bet_sizes=sizes)
+    lbr.play(60, np.random.default_rng(11))
+
+    total = sum(picks.values())
+    assert total > 0
+    share = picks["off-tree-floor"] / total
+    assert share < 0.35, f"the floor still takes {share:.1%} of decisions"

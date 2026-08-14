@@ -8,7 +8,59 @@ than here; this file is only what is still to do.
 
 ---
 
-## 1. Blocking — the exploitability bound is too weak to answer the question it was built for
+## 1. LBR does not produce a usable bound on a converged strategy — investigation closed
+
+> **Conclusion, 14 August.** Four defects fixed and three successive valuation models later,
+> LBR still cannot beat a 59,050-iteration strategy at either raise cap. The investigation is
+> stopped deliberately rather than abandoned: at some point the honest reading is that a
+> greedy one-step exploiter genuinely cannot beat this strategy, and LBR failing to clear zero
+> is a legitimate — if weak — result rather than a defect still to be chased. **The project's
+> result is the head-to-head crossover (item 2), which needs none of this.**
+>
+> Final measurements, both strategies from the action-abstraction study, 2,000 hands:
+>
+> | | original | first fix | conditioned |
+> |---|---|---|---|
+> | cap 1, on-tree | −0.402 | −3.679 | −3.459 |
+> | cap 1, off-tree | −0.415 | −5.104 | **−0.977** |
+> | cap 2, on-tree | **+2.783** | −1.185 | −2.900 |
+> | cap 2, off-tree | +2.059 | −1.399 | −1.748 |
+>
+> **No exploitability figure produced before 14 August should be quoted.** The cap-2 row is
+> the warning: it read +2.783 and "PROVES EXPLOITABLE" on the afternoon of the 14th, and
+> −2.900 that evening, against an identical untouched strategy. Only the exploiter's internal
+> valuation changed. Every LBR number in this repository's history is sensitive to a modelling
+> choice that was wrong until now.
+>
+> **Off-tree betting does help, once the valuation is right** — worth +2.5 chips/hand at cap 1
+> and +1.2 at cap 2 over the on-tree exploiter. It was worth nothing under the earlier
+> valuations because LBR was using it badly. The machinery is correct and kept.
+>
+> **What remains, if this is ever resumed:** the second barrel. The rollout still assumes no
+> betting after the modelled action, which is the last structural simplification and the
+> largest remaining source of slack in the literature. It is also the most work. Nothing below
+> is blocked on it.
+
+### The three valuation models, and why the first two were wrong
+
+Each was a genuine correctness improvement and each exposed the next layer. Recorded so the
+sequence is not rediscovered.
+
+1. **No call counted.** The showdown was valued against the opponent's contribution *before*
+   they responded, so every extra chip bet was pure downside and fold equity the only upside.
+   The cheapest legal bet won by construction: LBR bet the smallest size offered in 47% of
+   decisions, and kept betting it as the floor was lowered and its results got worse.
+2. **Call counted, range unconditioned.** Adding the called chips fixed the underbetting and
+   broke the other way. Equity was still computed against the opponent's *whole* range, but
+   folding removes the weak hands, so whoever calls is stronger than average — increasingly so
+   as the bet grows. LBR turned aggressive on 52% of decisions against a converged strategy
+   and lost 4.9 chips/hand.
+3. **Call counted, range conditioned on calling.** Each raise is priced against the hands that
+   would actually call it, by reweighting the range by `1 − P(fold)` per hand. Showdowns are
+   sampled once per decision and reweighted per candidate bet, so conditioning each bet on its
+   own calling range costs almost nothing rather than one full set of rollouts each.
+
+### The original diagnosis, kept for the record
 
 The crossover experiment ran to completion on 13 August and could not reach a conclusion:
 across 40/160/640/2560-second budgets and three seeds, only the **40s** rung produced an LBR
