@@ -77,15 +77,57 @@ what is left:
    was confident and appears to be wrong, or at least incomplete: escaping the action
    abstraction is not what was holding the bound down.
 
-   **The diagnostic that would explain it was not run** — it was lost with the scratchpad
-   when WSL restarted. Before concluding anything, instrument `_choose` and count how often
-   an off-tree size is actually selected. If LBR almost always picks check/call or all-in,
-   the eleven sizes are inert and the null result says nothing about action abstraction.
+   **Why it bought nothing: LBR uses the off-tree sizes badly.** Both diagnostics were run on
+   14 August (`~/pokerbot-scratch/action_abstraction_study.py`). Off-tree sizes are chosen
+   constantly — 47.8% of decisions — so the null result is not vacuous. But 97% of those picks
+   are the *smallest size offered*, and lowering the floor shows the choice is degenerate:
 
-   The other live hypothesis is `raise_cap=1`. Every measurement in this project has used it,
-   so there is at most one raise per street and almost no sizing structure to exploit. An
-   exploiter cannot punish bet sizing in a game that barely has any. Re-measuring at
-   `raise_cap=2` is the cheaper of the two checks and may make the whole question moot.
+   | grid | LBR | share at floor |
+   |---|---|---|
+   | floor 0.25 | +6.237 ± 2.021 | 46.6% |
+   | floor 0.10 | +5.499 ± 2.100 | 46.7% |
+   | floor 0.02 | +3.304 ± 1.900 | 48.3% |
+
+   LBR bets the minimum whatever the minimum is, and **its results get worse as the floor
+   drops** while it keeps choosing it. That is a valuation error, not a poker insight. The
+   one-step model reasons "same fold equity for fewer chips, therefore better", because any
+   sub-minimum bet translates to the smallest abstract size deterministically. It misses that
+   a 0.02-pot bet builds no pot to win when the opponent calls, and that the opponent's later
+   play is keyed to a history claiming a raise that never really happened.
+
+   **Fix the valuation before trusting any off-tree number.** Until an exploiter stops
+   choosing bets that lose it money, nothing measured through it means anything.
+
+### `raise_cap=1` was tested too, and the result is confounded
+
+Trained to the same 59,050 iterations at each cap, 1,000 LBR hands:
+
+| | LBR | information sets | iterations/info set |
+|---|---|---|---|
+| cap 1, on-tree | −0.402 ± 0.981 | 25,089 | 2.354 |
+| cap 2, on-tree | **+2.783 ± 1.072** | 446,745 | **0.132** |
+
+The bound clears zero at cap 2 — but holding *iterations* fixed while the game grew 17.8×
+means the cap-2 strategy got 0.132 iterations per information set. Most have been visited
+less than once. It is not a converged strategy that proved exploitable; it is an untrained
+one, and untrained strategies were already known to be exploitable.
+
+The corroboration is in this project's own data: the crossover run measured cap 1 at 4,075
+iterations (≈0.177 iterations/info set) at **+3.366 ± 1.001** — indistinguishable from cap 2's
++2.783 at 0.132. Different raise caps, near-identical training density, near-identical
+exploitability.
+
+**So exploitability tracks training density, not raise cap**, and the conclusion printed by
+the study script ("raise_cap=1 was the constraint") does not follow. The confound was designed
+in: varying raise_cap while holding iterations constant necessarily varies convergence too.
+
+The useful consequence: the bound going slack at cap 1 / 59,050 iterations is a fact about the
+*strategy* — a converged strategy resists a greedy one-step exploiter even in a coarse
+abstraction — rather than a defect in the measurement. It still proves nothing about nearness
+to equilibrium, since LBR only ever bounds from below.
+
+Answering the raise-cap question properly needs cap 2 trained to matched density, about 1.05M
+iterations — roughly 18× the cost, and not worth spending before the valuation is fixed.
 
 2. **More hands** — but only once the mean is reliably positive. Tightening an interval around
    zero buys nothing.
