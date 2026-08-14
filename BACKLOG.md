@@ -83,7 +83,49 @@ and it means re-running the crossover before fixing this would fail the same way
 Until then, `crossover.py` correctly reports "bound is slack" rather than naming a winner.
 Do not weaken that check to obtain a result.
 
-## 2. Answer the crossover question directly, by playing the two agents against each other
+## 2. ~~Answer the crossover question directly~~ — DONE, 14 August
+
+**The crossover exists.** `scripts/cfr/head_to_head.py`, 3 seeds, 20,000 hands per matchup,
+seats alternating. Positive favours equity; results in `results/cfr/head_to_head.json`.
+
+| budget | equity iters | made_hand iters | chips/hand | verdict |
+|---|---|---|---|---|
+| 40s | 1,075 | 5,600 | −3.136 ± 0.729 | made_hand ahead |
+| 160s | 3,808 | 19,758 | −1.531 ± 0.164 | made_hand ahead |
+| 640s | 14,850 | 73,158 | +0.273 ± 0.203 | not separated |
+| 2560s | 60,117 | 288,050 | **+0.916 ± 0.118** | **equity ahead** |
+
+Made-hand bucketing wins at short budgets on sheer iteration count, the lead vanishes around
+640s, and equity takes a separated lead by 2560s at about 7.8σ — winning on roughly a fifth
+of the opponent's iterations (60,117 against 288,050). The crossing point lies between 640s
+and 2560s; the budgets tested do not locate it more precisely than that.
+
+All three seeds agree on direction at every rung. At 2560s they give +1.152, +0.786, +0.811
+— individually separated as well as pooled. The 640s rung is where they disagree (+0.053,
++0.088, +0.678), which is why it pools to "not separated" rather than to a narrow result.
+
+The wide error bar at 40s (±0.729, against per-seed errors near 0.35) is between-seed
+disagreement, not measurement noise: the seeds give −3.026, −4.450, −1.932. Short budgets
+produce genuinely different strategies from different seeds, which is worth remembering
+before quoting any single-seed figure at that end of the scale.
+
+**Contention did not distort it.** Recorded load was 4.0 and 4.5 for seed 0's first two rungs
+and about 1.0 everywhere else. Seed 0's values at those rungs sit inside the spread of the
+quiet seeds, and at 2560s the busiest seed gave the *largest* result, so there is no
+detectable systematic effect. Not proof of none — see the instrumentation gap below.
+
+**What this does not establish.** Beating the other abstraction says nothing about distance
+from equilibrium. Both agents may be far from it, and the one that wins is merely less bad.
+Item 1 remains the only route to that claim.
+
+### Follow-up: record load per training window, not per measurement
+
+The two signals are trained sequentially within a rung, and `run_seed` samples
+`/proc/loadavg` once, after both are done. A spike landing during one agent's window and not
+the other's would bias that rung directly and leave no trace in the record. Sample inside
+`train_to` and store one figure per signal.
+
+### The original rationale, kept
 
 Not blocked by item 1, and worth doing first because it is assembly rather than algorithm
 work.
