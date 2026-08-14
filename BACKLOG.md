@@ -2,9 +2,29 @@
 
 Open work, in the order it unblocks other work. Items carry a file reference where one
 exists. Anything already settled lives in [`CODEBASE_AUDIT.md`](CODEBASE_AUDIT.md) rather
-than here; this file is only what is still to do.
+than here; this file is what is still to do, plus the reasoning behind what was closed.
 
-**Last reviewed:** 13 August 2026.
+**Last reviewed:** 15 August 2026.
+
+## State of play
+
+Nothing here is blocking. Items 1–4 are all closed, and the reasoning is kept rather than
+deleted because three of them were closed by a negative result — the kind that is expensive to
+find and cheap to forget.
+
+| | | |
+|---|---|---|
+| 1 | Exploitability bound (LBR) | **Closed** — investigation stopped deliberately; no usable bound |
+| 2 | Which bucketing to use | **Done** — the crossover, measured at 7.8σ |
+| 3 | Re-run the crossover experiment | **Closed** — superseded by item 2, will not be done |
+| 4 | Recover the paper | **Largely superseded** by `docs/abstraction-crossover.html` |
+
+What remains is a handful of decisions that are the maintainer's to make, two audit findings
+deferred by choice with their triggers recorded, and one substantial piece of work — the second
+barrel — that nothing else depends on.
+
+The project's result is the crossover (item 2). It requires none of the LBR machinery, and it
+is written up in [`docs/abstraction-crossover.html`](docs/abstraction-crossover.html).
 
 ---
 
@@ -259,23 +279,39 @@ show either is near equilibrium, so this does not replace item 1. It answers the
 question, not the theoretical one. Size the hand count from the measured noise floor rather
 than convention — `play_hands` reports the standard error needed to do that.
 
-## 3. Re-run the crossover experiment
+## 3. ~~Re-run the crossover experiment~~ — CLOSED, will not be done
 
-The numbers in `results/cfr/crossover.json` were produced by an LBR carrying three defects,
-all fixed on 13 August (see the changelog below). They should not be quoted. The run costs
-roughly seven hours on a quiet machine and checkpoints per measurement, so it resumes from
-an interruption rather than restarting.
+`results/cfr/crossover.json` measures the two bucketings by comparing their exploitability,
+and its numbers came from an LBR carrying four defects. The plan was to fix the exploiter and
+run it again. **That plan is dead, and the file should be treated as a record of how the
+question was first attempted rather than as a result.**
 
-Sequence it *after* item 1 — re-running against the same weak bound would reproduce the same
-non-conclusion at the same cost.
+Two independent reasons, either sufficient:
 
-## 4. Recover or replace the paper
+- **The exploiter never got strong enough.** Item 1 closed with LBR unable to clear zero on a
+  converged strategy at either raise cap. A re-run would reproduce the same non-conclusion at
+  the same seven-hour cost.
+- **The question was answered another way.** Item 2 settled it by playing the agents against
+  each other — conclusively, at 7.8σ, in about four hours. Exploitability was never required
+  to answer "which bucketing should I use given N seconds".
+
+Nothing is lost by closing it. If a working exploitability bound ever exists, the interesting
+experiment is not this one re-run but a new one: whether the *head-to-head* winner is also the
+less exploitable agent. Those can disagree, and the disagreement would be the finding.
+
+## 4. Recover or replace the paper — largely superseded
 
 `CODEBASE_AUDIT.md:264` defers every remaining open question to the threats-to-validity
 section of `IEEE_CFR_Poker_Engine_Paper_v3.pdf`. **That file is not in the repository, not in
-git history, and not anywhere under the home directory.** Whatever was recorded there is the
-real backlog for the CFR work and is currently lost. Either recover the PDF or reconstruct
-its threats-to-validity section here.
+git history, and not anywhere under the home directory.**
+
+`docs/abstraction-crossover.html` (15 August) now covers that ground: the withdrawn results,
+the CFR validation, the crossover, the LBR investigation, and a threats-to-validity section
+written from the measurements rather than recovered from the PDF. What it cannot recover is
+anything the original recorded that nobody has since re-derived.
+
+**Remaining action:** if the PDF turns up on another machine, reconcile the two rather than
+assuming either is complete. Otherwise this is closed.
 
 ---
 
@@ -296,6 +332,26 @@ train against: `hall_of_fame/` holds nothing but `FAULTY_PIPELINE_NOTICE.md`. It
 patched on 13 August to remove links to four documents that no longer exist, but patching is
 not a decision. Same question as `scripts/testing/`: keep, or remove with the rest.
 
+### Experiment logs are not versioned
+
+`.gitignore` excludes `logs/`, so `logs/crossover.log` — which timestamps every poll, records
+when the machine went quiet and carries the per-measurement load average — is untracked. For
+a wall-clock experiment that log *is* part of the evidence. Either carve out an exception or
+copy the relevant log into `results/cfr/` alongside the JSON.
+
+### Loose artifacts at the repository root
+
+`trained_demo_agent.npy` is an untracked genome from the superseded pipeline. `.agent.md` is
+an untracked agent definition for generating academic reports, unrelated to the poker work.
+Neither is referenced by anything. Delete or place deliberately.
+
+---
+
+## Closed, and the lessons kept
+
+Resolved, but recorded rather than deleted: each cost real time to discover and the
+hazard behind it recurs.
+
 ### Long-running checkpoints must not live in /tmp
 
 WSL restarted on 14 August and wiped the scratchpad, taking `deep_solver.pkl` — a
@@ -303,13 +359,6 @@ WSL restarted on 14 August and wiped the scratchpad, taking `deep_solver.pkl` �
 and off-tree measurement files. The checkpointing worked exactly as designed; it was
 checkpointing to volatile storage. Anything that takes more than a few minutes to regenerate
 belongs under `results/` or another path that survives a reboot, even when it is scratch work.
-
-### Experiment logs are not versioned
-
-`.gitignore` excludes `logs/`, so `logs/crossover.log` — which timestamps every poll, records
-when the machine went quiet and carries the per-measurement load average — is untracked. For
-a wall-clock experiment that log *is* part of the evidence. Either carve out an exception or
-copy the relevant log into `results/cfr/` alongside the JSON.
 
 ### ~~`results/cfr/nolimit_strategy.pkl` cannot be loaded by current code~~ — DONE, 14 August
 
@@ -343,14 +392,6 @@ Either re-save the artifact from a current run, or give `CardAbstraction` a
 `__setstate__` that reconstructs the derived field. The second is worth preferring: this
 class is pickled precisely so results outlive the code that produced them, and a derived
 field that silently arrives as `None` will do this again.
-
-### Loose artifacts at the repository root
-
-`trained_demo_agent.npy` is an untracked genome from the superseded pipeline. `.agent.md` is
-an untracked agent definition for generating academic reports, unrelated to the poker work.
-Neither is referenced by anything. Delete or place deliberately.
-
----
 
 ## Deferred by choice
 
