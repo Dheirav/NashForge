@@ -2,6 +2,10 @@
 
 Start from the [project README](../README.md).
 
+- **[training-plan.md](training-plan.md)** — the plan for the next phase: evolutionary
+  search and PPO, heads-up first, measured against the CFR agent. Includes the 15 August
+  audit of the 17-feature observation and what it says to do about it.
+
 - **[abstraction-crossover.html](abstraction-crossover.html)** — the project report.
   What was withdrawn and why, how the CFR solver was validated, the training-budget
   crossover between the two card abstractions, and the exploitability investigation

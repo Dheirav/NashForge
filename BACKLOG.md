@@ -19,6 +19,10 @@ find and cheap to forget.
 | 3 | Re-run the crossover experiment | **Closed** — superseded by item 2, will not be done |
 | 4 | Recover the paper | **Largely superseded** by `docs/abstraction-crossover.html` |
 
+**Next phase planned, not started:** [`docs/training-plan.md`](docs/training-plan.md) — GA and
+PPO heads-up, measured against the CFR agent. It supersedes the E5 trigger below: the
+observation was audited on 15 August and the feature decision is recorded there.
+
 What remains is **two audit findings deferred by choice**, each with the condition that would
 make them worth doing, and **one substantial piece of work** — the second barrel — that nothing
 else depends on. The four maintainer decisions that stood open all week were made on 15 August;
