@@ -111,14 +111,33 @@ def build(signal, seed, args):
     return abstraction, game, MCCFRSolver(game, rule=VANILLA, seed=seed)
 
 
-def train_to(solver, seconds):
-    """Train until ``seconds`` more have elapsed. Returns (elapsed, gained)."""
+def train_to(solver, seconds, sample_every=10.0):
+    """
+    Train until ``seconds`` more have elapsed.
+
+    Load is sampled *during* the window rather than read once afterwards. The
+    two signals are trained one after the other, so a spike landing in one
+    agent's window and not the other's biases that rung directly — and a single
+    reading taken after both have finished cannot show it happened.
+
+    Returns (elapsed, iterations gained, mean load over the window).
+    """
     before = solver.iterations
     started = time.perf_counter()
     deadline = started + seconds
+
+    samples = []
+    next_sample = started
     while time.perf_counter() < deadline:
         solver.train(25)
-    return time.perf_counter() - started, solver.iterations - before
+        now = time.perf_counter()
+        if now >= next_sample:
+            samples.append(load_average())
+            next_sample = now + sample_every
+
+    elapsed = time.perf_counter() - started
+    load = statistics.fmean(samples) if samples else load_average()
+    return elapsed, solver.iterations - before, load
 
 
 def run_seed(seed, budgets, args, on_measurement=None):
@@ -135,8 +154,10 @@ def run_seed(seed, budgets, args, on_measurement=None):
     for budget in budgets:
         elapsed = {}
         gained = {}
+        load = {}
         for signal in SIGNALS:
-            elapsed[signal], gained[signal] = train_to(solvers[signal], budget - spent)
+            elapsed[signal], gained[signal], load[signal] = train_to(
+                solvers[signal], budget - spent)
         spent = budget
 
         policies = [strategy_policy(solvers[signal].average_strategy(),
@@ -151,22 +172,31 @@ def run_seed(seed, budgets, args, on_measurement=None):
             "ci95": list(outcome.ci95),
             "separated_from_zero": outcome.separated_from_zero,
             "hands": outcome.hands,
-            "load_avg": load_average(),
+            # Kept as the mean of the two windows so old and new records stay
+            # comparable; the per-signal figures are what a fairness check needs.
+            "load_avg": statistics.fmean(load.values()),
+            "load_imbalance": abs(load[SIGNALS[0]] - load[SIGNALS[1]]),
         }
         for signal in SIGNALS:
             row[f"{signal}_iterations"] = solvers[signal].iterations
             row[f"{signal}_ms_per_iteration"] = (elapsed[signal]
                                                  / max(1, gained[signal]) * 1000)
+            row[f"{signal}_load_avg"] = load[signal]
         measurements.append(row)
 
         winner = ("equity" if outcome.separated_from_zero and outcome.mean > 0
                   else "made_hand" if outcome.separated_from_zero
                   else "not separated")
+        # A rung where the two agents trained under noticeably different load is
+        # one where the budget was not really equal. Say so at the time rather
+        # than leaving it to be discovered in the JSON afterwards.
+        skew = ("" if row["load_imbalance"] < 1.0 else
+                f"  [!] load {load['equity']:.1f} vs {load['made_hand']:.1f}")
         print(f"      seed {seed}  {budget:>6.0f}s  "
               f"equity {solvers['equity'].iterations:>7,} it  vs  "
               f"made_hand {solvers['made_hand'].iterations:>7,} it   "
               f"{outcome.mean:+7.3f} +/- {outcome.stderr:.3f} chips/hand  "
-              f"{winner}", flush=True)
+              f"{winner}{skew}", flush=True)
 
         if on_measurement is not None:
             on_measurement(seed, measurements)

@@ -118,12 +118,14 @@ detectable systematic effect. Not proof of none — see the instrumentation gap 
 from equilibrium. Both agents may be far from it, and the one that wins is merely less bad.
 Item 1 remains the only route to that claim.
 
-### Follow-up: record load per training window, not per measurement
+### ~~Follow-up: record load per training window~~ — DONE, 14 August
 
-The two signals are trained sequentially within a rung, and `run_seed` samples
-`/proc/loadavg` once, after both are done. A spike landing during one agent's window and not
-the other's would bias that rung directly and leave no trace in the record. Sample inside
-`train_to` and store one figure per signal.
+`train_to` now samples `/proc/loadavg` every 10 seconds *during* each agent's window and
+returns the mean, so a rung records `equity_load_avg`, `made_hand_load_avg` and their
+`load_imbalance` rather than one reading taken after both had finished. An imbalance above
+1.0 prints a `[!]` marker at the time, since a rung whose two agents trained under different
+load did not really give them equal budgets. `load_avg` is retained as the mean of the two so
+the existing result file stays comparable.
 
 ### The original rationale, kept
 
@@ -188,6 +190,17 @@ not a decision. Same question as `scripts/testing/`: keep, or remove with the re
 when the machine went quiet and carries the per-measurement load average — is untracked. For
 a wall-clock experiment that log *is* part of the evidence. Either carve out an exception or
 copy the relevant log into `results/cfr/` alongside the JSON.
+
+### ~~`results/cfr/nolimit_strategy.pkl` cannot be loaded by current code~~ — DONE, 14 August
+
+`CardAbstraction.__setstate__` now rebuilds `_centroid_list` from `_centroids` when a pickle
+predates it, so the artifact loads unaided. Rebuilt rather than refitted: refitting would
+answer with a different clustering and look like it had worked. Two tests cover it — one
+restoring a state dict with the field removed, one round-tripping an ordinary pickle, since a
+`__setstate__` that fixes the old path and breaks the new one is the obvious way to get this
+wrong.
+
+The original report follows, since the same hazard applies to the next derived field added.
 
 ### `results/cfr/nolimit_strategy.pkl` cannot be loaded by current code
 
