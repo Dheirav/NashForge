@@ -7,8 +7,8 @@
 
 **See Also**: 
 - [HYPERPARAMETER_RELATIONSHIPS.md](HYPERPARAMETER_RELATIONSHIPS.md) - Original v1 findings
-- [HYPERPARAMETER_RELATIONSHIPS_v2.md](HYPERPARAMETER_RELATIONSHIPS_v2.md) - v2 with tournament synthesis
-- [HYPERPARAMETER_RELATIONSHIPS_v3.md](HYPERPARAMETER_RELATIONSHIPS_v3.md) - v3 comprehensive meta-analysis
+- HYPERPARAMETER_RELATIONSHIPS_v2.md - v2 with tournament synthesis
+- HYPERPARAMETER_RELATIONSHIPS_v3.md - v3 comprehensive meta-analysis
 
 ---
 

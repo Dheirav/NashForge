@@ -386,7 +386,7 @@ from numpy.random import PCG64, Generator
 rng = Generator(PCG64(seed))
 ```
 
-**See**: [NUMBA_JIT_GUIDE.md](../NUMBA_JIT_GUIDE.md) for JIT implementation details
+**See**: NUMBA_JIT_GUIDE.md for JIT implementation details
 
 ---
 
@@ -589,7 +589,7 @@ python scripts/analysis/extract_hyperparameter_relationships.py
 ```
 
 **See Also**:
-- [HOF_MEMBER_TRACKING_IMPLEMENTATION.md](../HOF_MEMBER_TRACKING_IMPLEMENTATION.md) - Complete implementation details
+- HOF_MEMBER_TRACKING_IMPLEMENTATION.md - Complete implementation details
 - [extract_hyperparameter_relationships.py](../scripts/analysis/extract_hyperparameter_relationships.py) - Analysis with HOF tracking
 
 ---

@@ -34,7 +34,7 @@ This project implements a **Texas Hold'em poker AI** trained through evolutionar
 
 **Bottom line**: Install Numba (`pip install numba`) for maximum performance!
 
-**See**: [OPTIMIZATION_STATUS.md](OPTIMIZATION_STATUS.md) for complete optimization roadmap
+**See**: OPTIMIZATION_STATUS.md for complete optimization roadmap
 
 ---
 
@@ -529,7 +529,7 @@ All training and evaluation scripts use batched neural network inference for maj
 
 **How to verify:**
 - Run `python scripts/utilities/benchmark_jit.py` to see batch inference speedup.
-- See [FORWARD_BATCH_INTEGRATION.md](FORWARD_BATCH_INTEGRATION.md) for technical details.
+- See FORWARD_BATCH_INTEGRATION.md for technical details.
 
 **No changes needed**—batching is automatic if Numba is installed.
 
@@ -571,9 +571,9 @@ Current (Numba): 4-6 sec/gen (400-500×)  ← YOU ARE HERE
 **Potential**: Additional 5-10× speedup available (would reach ~0.5-1 sec/generation)
 
 **Documentation**:
-- [OPTIMIZATION_STATUS.md](OPTIMIZATION_STATUS.md) - Complete optimization roadmap
-- [NUMBA_JIT_GUIDE.md](NUMBA_JIT_GUIDE.md) - Numba JIT implementation guide
-- [FORWARD_BATCH_INTEGRATION.md](FORWARD_BATCH_INTEGRATION.md) - Batched inference details
+- OPTIMIZATION_STATUS.md - Complete optimization roadmap
+- NUMBA_JIT_GUIDE.md - Numba JIT implementation guide
+- FORWARD_BATCH_INTEGRATION.md - Batched inference details
 
 ---
 
@@ -717,7 +717,7 @@ python scripts/test_cli.py
 
 ### Optimization Documentation (Performance & Implementation)
 
-- **[OPTIMIZATION_STATUS.md](OPTIMIZATION_STATUS.md)** (625 lines)
+- **OPTIMIZATION_STATUS.md** (625 lines)
   - **Purpose**: Complete optimization roadmap and status
   - 11 implemented optimizations (400-500× speedup achieved)
   - Available but not implemented (C++/GPU/Cython)
@@ -731,7 +731,7 @@ python scripts/test_cli.py
   - Phase-by-phase breakdown
   - Current performance metrics
 
-- **[NUMBA_JIT_GUIDE.md](NUMBA_JIT_GUIDE.md)** (1062 lines)
+- **NUMBA_JIT_GUIDE.md** (1062 lines)
   - **Purpose**: Complete Numba JIT implementation guide
   - How to install and use Numba
   - JIT-compiled functions reference
@@ -739,7 +739,7 @@ python scripts/test_cli.py
   - Troubleshooting and debugging
   - Before/after benchmarks
 
-- **[FORWARD_BATCH_INTEGRATION.md](FORWARD_BATCH_INTEGRATION.md)** (270 lines)
+- **FORWARD_BATCH_INTEGRATION.md** (270 lines)
   - **Purpose**: Batched neural network inference documentation
   - 1.4-1.5× speedup explanation
   - Technical implementation details
@@ -883,8 +883,8 @@ python scripts/test_cli.py
 - Tournament bracket system
 
 **See**:
-- [OPTIMIZATION_STATUS.md](OPTIMIZATION_STATUS.md) for detailed optimization roadmap
-- [NUMBA_JIT_GUIDE.md](NUMBA_JIT_GUIDE.md) for JIT compilation patterns
+- OPTIMIZATION_STATUS.md for detailed optimization roadmap
+- NUMBA_JIT_GUIDE.md for JIT compilation patterns
 - Module READMEs for component-specific improvements
 
 ---

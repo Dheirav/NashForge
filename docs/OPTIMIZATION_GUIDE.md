@@ -98,7 +98,7 @@ For a quick summary, see [OPTIMIZATION_SUMMARY.md](OPTIMIZATION_SUMMARY.md)
 
 **Learning impact**: ✅ ZERO - Same calculations, just compiled to machine code
 
-**Documentation**: See [NUMBA_JIT_GUIDE.md](NUMBA_JIT_GUIDE.md)
+**Documentation**: See NUMBA_JIT_GUIDE.md
 
 ---
 
@@ -311,7 +311,7 @@ except:
 
 **Learning impact**: ✅ ZERO - Same calculations, just faster
 
-**See**: [NUMBA_JIT_GUIDE.md](NUMBA_JIT_GUIDE.md) for complete implementation details
+**See**: NUMBA_JIT_GUIDE.md for complete implementation details
 
 ---
 
@@ -1709,11 +1709,11 @@ With Numba complete, the next highest-impact optimizations would be:
 2. **GPU acceleration** with CuPy/JAX (3-5× on large batches)
 3. **Cython compilation** for critical paths (1.5-2×)
 
-See [OPTIMIZATION_STATUS.md](OPTIMIZATION_STATUS.md) for the complete roadmap.
+See OPTIMIZATION_STATUS.md for the complete roadmap.
 
 ---
 
-**For implementation assistance, see [OPTIMIZATION_STATUS.md](OPTIMIZATION_STATUS.md) and [README.md](../README.md)**
+**For implementation assistance, see OPTIMIZATION_STATUS.md and [README.md](../README.md)**
 # Part 3: Forward Batch Integration - Performance Boost
 
 **Date**: January 23, 2026  
@@ -1954,7 +1954,7 @@ At each step, collect pending decisions from all games and process them in one b
 
 ## Next Potential Optimizations
 
-From [ALL_POSSIBLE_OPTIMIZATIONS.md](ALL_POSSIBLE_OPTIMIZATIONS.md), remaining high-impact items:
+From ALL_POSSIBLE_OPTIMIZATIONS.md, remaining high-impact items:
 
 1. **Numba JIT** (2-3×, 4-8 hours)
    - JIT-compile feature extraction

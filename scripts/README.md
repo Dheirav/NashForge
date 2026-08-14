@@ -765,7 +765,7 @@ python scripts/analysis/extract_hyperparameter_relationships.py
 **Time**: 10-30 seconds depending on data size
 
 **See Also**: 
-- [HOF_MEMBER_TRACKING_IMPLEMENTATION.md](../HOF_MEMBER_TRACKING_IMPLEMENTATION.md) - HOF tracking system
+- HOF_MEMBER_TRACKING_IMPLEMENTATION.md - HOF tracking system
 - [HYPERPARAMETER_RELATIONSHIPS.md](../docs/HYPERPARAMETER_RELATIONSHIPS.md) - Detailed mathematical analysis
 
 ---
@@ -1100,7 +1100,7 @@ All training and evaluation scripts use batched neural network inference for maj
 python scripts/utilities/benchmark_jit.py
 ```
 
-See [FORWARD_BATCH_INTEGRATION.md](../FORWARD_BATCH_INTEGRATION.md) for technical details.
+See FORWARD_BATCH_INTEGRATION.md for technical details.
 
 
 ### Convergence Status Detection

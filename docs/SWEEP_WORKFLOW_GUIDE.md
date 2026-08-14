@@ -363,4 +363,4 @@ Returns:
 See the main documentation:
 - [GLOBAL_SYNTHESIS_REPORT.md](GLOBAL_SYNTHESIS_REPORT.md) - Overall training findings
 - [HYPERPARAMETER_RELATIONSHIPS.md](HYPERPARAMETER_RELATIONSHIPS.md) - Validated parameter relationships
-- [SWEEP_REFACTORING_SUMMARY.md](SWEEP_REFACTORING_SUMMARY.md) - Technical changes
+- SWEEP_REFACTORING_SUMMARY.md - Technical changes
