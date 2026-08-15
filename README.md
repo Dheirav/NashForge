@@ -143,7 +143,10 @@ exploitable bot. That is why the current work is CFR.
 
 ## Open work
 
-[`BACKLOG.md`](BACKLOG.md).
+**[`NEXT.md`](NEXT.md)** — one page, what to do next and how to pick it up cold.
+
+[`BACKLOG.md`](BACKLOG.md) holds the reasoning and everything closed;
+[`docs/training-plan.md`](docs/training-plan.md) holds the phase plan and its results.
 
 ## License
 
