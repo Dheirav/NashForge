@@ -1,4 +1,4 @@
-# PokerBot documentation
+# NashForge documentation
 
 Start from the [project README](../README.md).
 
