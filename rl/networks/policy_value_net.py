@@ -44,7 +44,7 @@ class ActorCriticNet(nn.Module):
 
     Parameters
     ----------
-    obs_size:    Length of the observation vector.  Default: 17 (engine features).
+    obs_size:    Length of the observation vector.  Default: 19 (engine features).
     num_actions: Size of discrete action space.     Default: 6 (abstract actions).
     hidden_size: Width of each hidden layer.        Default: 128.
     num_layers:  Depth of shared trunk.             Default: 2.
@@ -52,7 +52,7 @@ class ActorCriticNet(nn.Module):
 
     def __init__(
         self,
-        obs_size:    int = 17,
+        obs_size:    int = 19,
         num_actions: int = 6,
         hidden_size: int = 128,
         num_layers:  int = 2,

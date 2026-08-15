@@ -18,8 +18,12 @@ from training.policy_network import PolicyNetwork, create_action_mask
 from training.fitness import (play_hand, play_hands_batched, evaluate_matchup,
                               abstract_action_to_engine_action)
 
-GENOME_SIZE = 3430          # 17 -> 64 -> 32 -> 6
 NET_CONFIG = NetworkConfig(hidden_sizes=[64, 32])
+# Derived rather than written down: the observation width is defined by
+# engine.get_feature_names(), and a constant here would silently disagree with
+# it the next time the feature layer changes — which is exactly what happened
+# when it went from 17 slots to 19.
+GENOME_SIZE = PolicyNetwork(NET_CONFIG).genome_size
 
 
 def make_net(rng):

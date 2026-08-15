@@ -16,7 +16,7 @@ Episode = one poker hand (reset_hand → apply actions until showdown).
 
 Observation
 -----------
-17-dimensional float32 feature vector produced by engine.get_state_vector().
+19-dimensional float32 feature vector produced by engine.get_state_vector().
 
 Action space
 ------------
@@ -146,7 +146,7 @@ class PokerEnv:
     seed:             Random seed for reproducibility.
     """
 
-    OBS_SIZE   = 17
+    OBS_SIZE   = 19
     NUM_ACTIONS = 6
 
     def __init__(

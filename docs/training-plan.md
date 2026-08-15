@@ -144,10 +144,10 @@ Updated as work lands. "Blocked" means waiting on a decision, and the decision i
 |---|---|---|
 | 0a | Tests for `rl/` | **done** — 9 tests, `tests/test_rl.py` |
 | 0b | Duplicate play | **done** — `cfr/play.py`, ~14% noise reduction |
-| 0c | Benchmark harness | not started |
-| 1 | Rebuild the observation, 17 → 19 | not started — approved, unblocked |
-| 2 | Evolutionary search, heads-up | blocked on 1 |
-| 3 | PPO with self-play, heads-up | blocked on 1; needs snapshot pooling built |
+| 0c | Benchmark harness | **done** — `evaluation/`, 9 tests |
+| 1 | Rebuild the observation, 17 → 19 | **done** — effective dimensions 6 → 9 |
+| 2 | Evolutionary search, heads-up | **unblocked** — next |
+| 3 | PPO with self-play, heads-up | unblocked; still needs snapshot pooling built |
 | 4 | The comparison | blocked on 2 and 3 |
 | 5 | Six-max | blocked on 4; also needs the `play_match` stack-drift fix below |
 
@@ -180,15 +180,34 @@ The audit's Step 1, never carried out for networks.
   **CFR agent**. Error bars on every figure, seats duplicated, hand counts sized from the
   measured noise floor rather than convention.
 
-### Phase 1 — rebuild the observation
+### Phase 1 — rebuild the observation — DONE, 15 August
 
-As decided above: 17 → 19, remove two redundant slots, add four card features. Delete
-`engine.features.get_state_features` while here — it is a board-*blind* twin of the live path
-that nothing currently calls but everything could, and it is exported from `engine/__init__.py`
-where the next person will find it.
+17 → 19: `commitment` and `players_in_hand` removed, four draw and texture features added,
+`get_state_features` deleted. Re-running `scripts/audit_observation.py` confirms it did what
+this document claimed:
 
-Re-run `scripts/audit_observation.py` afterwards. Effective dimensionality and postflop R²
-should both rise; if they do not, the change did not do what this document claims.
+| | before | after |
+|---|---|---|
+| effective dimensions | 6 of 17 | **9 of 19** |
+| dead slots (std ≈ 0) | 1 | **0** |
+| perfect duplicate pairs | 2 | 1 (kept for six-max) |
+| R² against true equity | 0.421 | **0.499** |
+| R² postflop | 0.475 | **0.633** |
+| within-group equity std | 0.175 | **0.086** |
+
+The last row is the one that matters, and measuring it required correcting the audit. It had
+grouped states by `hand_strength` alone — which *was* the entire card signature and no longer
+is. Grouped by all five card features, states the agent genuinely cannot distinguish now
+differ in true equity by half as much. Grouping on strength alone would have understated the
+gain while appearing to measure the same thing.
+
+**The change needed nine coordinated edits, not the four predicted.** The Phase 0a tripwire
+caught `PokerEnv.OBS_SIZE` and `PPOConfig.obs_size`; the failing suite caught three more that
+nothing pointed at: `FeatureCache.__slots__`, whose declared attribute list rejected the two
+new cache fields on assignment; `training/config.py`'s `input_size`, which was still building
+networks with 17 inputs; and a hardcoded `GENOME_SIZE = 3430` in the tests. That constant is
+now derived from the network config, since a written-down width is exactly what disagreed with
+reality here.
 
 ### Phase 2 — evolutionary search, heads-up
 

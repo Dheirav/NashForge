@@ -274,7 +274,7 @@ class EvolutionTrainer:
                 # For now, raise if cannot infer
                 target_arch = self.factory._network.layer_sizes
                 # Try to infer source_arch by matching possible layer configs
-                def infer_arch(genome_len, output_size=6, input_size=17, max_hidden=4):
+                def infer_arch(genome_len, output_size=6, input_size=19, max_hidden=4):
                     # Try all reasonable hidden layer configs
                     for h1 in range(1, 257):
                         for h2 in range(0, 257):
