@@ -1,0 +1,966 @@
+<title>NashForge Assignment Report</title>
+<style>
+  /* ---- tokens ---------------------------------------------------------- */
+  :root {
+    color-scheme: light;
+    --desk:        #e9eaec;   /* the surface the page sits on */
+    --page:        #ffffff;   /* the page itself */
+    --ink:         #16191c;
+    --ink-soft:    #33393e;
+    --ink-muted:   #5c646a;
+    --ink-faint:   #8b9298;
+    --rule:        #d8dcdf;
+    --rule-strong: #b9c0c5;
+    --accent:      #2f4858;
+    --panel:       #f7f8f9;
+
+    --series-1:    #2a78d6;
+    --series-2:    #eb6834;
+    --series-3:    #1baf7a;
+    --series-4:    #eda100;
+    --pole-pos:    #2a78d6;
+    --pole-neg:    #e34948;
+    --pole-none:   #a7adb1;
+
+    --serif: "Iowan Old Style", "Charter", "Palatino Linotype", Palatino,
+             "Book Antiqua", Georgia, serif;
+    --sans: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    --mono: ui-monospace, "SF Mono", "Cascadia Code", "JetBrains Mono", Menlo,
+            Consolas, monospace;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      color-scheme: dark;
+      --desk:        #0d0f11;
+      --page:        #16191b;
+      --ink:         #e9eaea;
+      --ink-soft:    #c6cacd;
+      --ink-muted:   #9aa1a6;
+      --ink-faint:   #767d82;
+      --rule:        #2b3033;
+      --rule-strong: #3d4448;
+      --accent:      #8fa8b8;
+      --panel:       #1c2023;
+      --series-1:    #3987e5;
+      --series-2:    #d95926;
+      --series-3:    #199e70;
+      --series-4:    #c98500;
+      --pole-pos:    #3987e5;
+      --pole-neg:    #e66767;
+      --pole-none:   #6e7477;
+    }
+  }
+  :root[data-theme="dark"] {
+    color-scheme: dark;
+    --desk:        #0d0f11;
+    --page:        #16191b;
+    --ink:         #e9eaea;
+    --ink-soft:    #c6cacd;
+    --ink-muted:   #9aa1a6;
+    --ink-faint:   #767d82;
+    --rule:        #2b3033;
+    --rule-strong: #3d4448;
+    --accent:      #8fa8b8;
+    --panel:       #1c2023;
+    --series-1:    #3987e5;
+    --series-2:    #d95926;
+    --series-3:    #199e70;
+    --series-4:    #c98500;
+    --pole-pos:    #3987e5;
+    --pole-neg:    #e66767;
+    --pole-none:   #6e7477;
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    background: var(--desk);
+    color: var(--ink);
+    font-family: var(--serif);
+    font-size: 11.5pt;
+    line-height: 1.62;
+    margin: 0;
+    padding: 28px 16px 56px;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  /* the sheet */
+  .wrap {
+    background: var(--page);
+    max-width: 210mm;
+    margin: 0 auto;
+    padding: 24mm 22mm 26mm;
+    border: 1px solid var(--rule);
+    border-radius: 2px;
+  }
+
+  /* ---- title block ----------------------------------------------------- */
+  header.title {
+    text-align: center;
+    padding-bottom: 20px;
+    margin-bottom: 8px;
+    border-bottom: 1.5px solid var(--ink);
+  }
+  .eyebrow {
+    font-family: var(--sans); font-size: 9.5pt; font-weight: 600;
+    letter-spacing: .16em; text-transform: uppercase; color: var(--ink-muted);
+    margin: 0 0 14px;
+  }
+  h1 {
+    font-size: 25pt; line-height: 1.16; font-weight: 600;
+    letter-spacing: -.01em; margin: 0 0 10px; text-wrap: balance;
+  }
+  .subtitle {
+    font-size: 12pt; font-style: italic; color: var(--ink-soft);
+    margin: 0 auto 22px; max-width: 44ch; line-height: 1.45; text-wrap: pretty;
+  }
+  .submitted {
+    display: inline-flex; flex-wrap: wrap; justify-content: center;
+    gap: 6px 30px; font-family: var(--sans); font-size: 10pt;
+    color: var(--ink-soft); margin: 0;
+  }
+  .submitted b { font-weight: 600; color: var(--ink); }
+
+  /* ---- numbered sections ------------------------------------------------ */
+  .wrap { counter-reset: section; }
+  h2 {
+    counter-increment: section;
+    font-family: var(--sans); font-size: 12pt; font-weight: 700;
+    letter-spacing: .01em; color: var(--ink);
+    margin: 26pt 0 10pt; padding-bottom: 5pt;
+    border-bottom: 1px solid var(--rule-strong);
+    break-after: avoid; page-break-after: avoid;
+  }
+  h2::before {
+    content: counter(section) ". ";
+    color: var(--accent); font-variant-numeric: tabular-nums;
+  }
+  h3 {
+    font-family: var(--sans); font-size: 10.5pt; font-weight: 700;
+    color: var(--ink); margin: 15pt 0 5pt; text-wrap: balance;
+    break-after: avoid; page-break-after: avoid;
+  }
+
+  p { margin: 0 0 9pt; text-align: justify; hyphens: auto; text-wrap: pretty; }
+  strong { font-weight: 650; }
+  code, .num { font-family: var(--mono); font-size: .86em; font-variant-numeric: tabular-nums; }
+
+  ol, ul { margin: 0 0 9pt; padding-left: 20pt; }
+  li { margin-bottom: 5pt; text-align: justify; }
+  li::marker { color: var(--ink-faint); }
+
+  /* ---- tables ----------------------------------------------------------- */
+  .tablewrap { overflow-x: auto; margin: 12pt 0 14pt; break-inside: avoid; page-break-inside: avoid; }
+  table { border-collapse: collapse; width: 100%; min-width: 420px;
+          font-family: var(--sans); font-size: 9pt; }
+  caption {
+    text-align: left; font-family: var(--sans); font-size: 9pt; font-weight: 700;
+    color: var(--ink); padding-bottom: 6pt;
+  }
+  th, td { padding: 5pt 8pt; text-align: right; font-variant-numeric: tabular-nums; }
+  th:first-child, td:first-child { text-align: left; }
+  thead th {
+    font-size: 8pt; font-weight: 700; letter-spacing: .04em; text-transform: uppercase;
+    color: var(--ink-muted); border-bottom: 1px solid var(--ink);
+  }
+  tbody tr { border-bottom: 1px solid var(--rule); }
+  tbody tr:last-child { border-bottom: 1px solid var(--rule-strong); }
+  tbody td { color: var(--ink-soft); }
+  tbody td:first-child { color: var(--ink); }
+  .hi { color: var(--ink); font-weight: 650; }
+
+  /* ---- figures ---------------------------------------------------------- */
+  figure {
+    margin: 14pt 0 16pt; background: var(--panel); border: 1px solid var(--rule);
+    padding: 12pt 12pt 9pt; display: flex; flex-direction: column; gap: 8pt;
+    break-inside: avoid; page-break-inside: avoid;
+  }
+  .fig-title { font-family: var(--sans); font-size: 9pt; font-weight: 700; color: var(--ink); }
+  .fig-sub { font-size: 9.5pt; color: var(--ink-soft); line-height: 1.4; }
+  .plot { width: 100%; overflow-x: auto; }
+  .plot svg { display: block; min-width: 420px; width: 100%; height: auto; }
+  figcaption {
+    font-size: 9pt; color: var(--ink-muted); line-height: 1.45;
+    border-top: 1px solid var(--rule); padding-top: 7pt; text-align: justify;
+  }
+  .legend {
+    display: flex; flex-wrap: wrap; gap: 5pt 16pt;
+    font-family: var(--sans); font-size: 8.5pt; color: var(--ink-soft);
+  }
+  .legend span { display: inline-flex; align-items: center; gap: 5px; }
+  .swatch { width: 9px; height: 9px; border-radius: 2px; flex: none; }
+
+  .ax { font-family: var(--sans); font-size: 10px; fill: var(--ink-faint); }
+  .val { font-family: var(--sans); font-size: 11px; fill: var(--ink); font-weight: 700; }
+  .dlabel { font-family: var(--sans); font-size: 10px; font-weight: 700; }
+  .rowlab { font-family: var(--sans); font-size: 11px; fill: var(--ink-soft); }
+
+  /* ---- key-figure strip -------------------------------------------------- */
+  .tiles {
+    display: grid; grid-template-columns: repeat(4, 1fr);
+    gap: 8pt; margin: 12pt 0 14pt; break-inside: avoid;
+  }
+  .tile {
+    background: var(--panel); border: 1px solid var(--rule);
+    border-top: 2px solid var(--accent); padding: 8pt 9pt; text-align: center;
+  }
+  .tile .n {
+    font-family: var(--sans); font-size: 15pt; font-weight: 700;
+    font-variant-numeric: tabular-nums; display: block; color: var(--ink);
+  }
+  .tile .k {
+    font-family: var(--sans); font-size: 8pt; color: var(--ink-muted);
+    line-height: 1.3; display: block; margin-top: 3px;
+  }
+
+  /* ---- print ------------------------------------------------------------- */
+  @page { size: A4; margin: 18mm 16mm; }
+  @media print {
+    body { background: #fff; padding: 0; font-size: 10.5pt; }
+    .wrap { border: 0; border-radius: 0; max-width: none; padding: 0; }
+    header.title { padding-top: 0; }
+    h2 { margin-top: 20pt; }
+    figure, .tablewrap, .tiles { break-inside: avoid; page-break-inside: avoid; }
+    a { text-decoration: none; color: inherit; }
+  }
+
+  @media (max-width: 640px) {
+    body { padding: 12px 8px 32px; font-size: 11pt; }
+    .wrap { padding: 16mm 12mm; }
+    .tiles { grid-template-columns: repeat(2, 1fr); }
+  }
+  @media (prefers-reduced-motion: reduce) { * { animation: none !important; transition: none !important; } }
+</style>
+
+<div class="wrap">
+
+<header class="title">
+  <p class="eyebrow">Artificial Intelligence — Project Report</p>
+  <h1>NashForge</h1>
+  <p class="subtitle">A Multi-Agent Framework for Comparative Evaluation of Game-Theoretic,
+  Evolutionary, and Reinforcement Learning Agents in Imperfect-Information Games</p>
+  <p class="submitted"><span>Submitted by &nbsp;<b>DHEIRAV</b></span><span>Roll No. &nbsp;<b>2023103027</b></span></p>
+</header>
+
+<h2>Abstract</h2>
+
+<p>
+Imperfect-information games such as poker present a fundamentally harder problem than
+perfect-information games like chess, because a player must act without knowing the opponent's
+private cards and must therefore reason about probability distributions over hidden states
+rather than about a single known position. Conventional approaches to building poker agents
+rely on hand-crafted heuristics or on machine learning methods that optimise an agent against
+opponents drawn from its own population, which produces systems that appear to improve while
+having no measurable relationship to strong play.
+</p>
+
+<p>
+This project proposes <strong>NashForge</strong>, a framework for training and — more
+importantly — <em>comparatively evaluating</em> three distinct families of agent on a single
+verified poker engine: counterfactual regret minimization, which converges provably toward a
+game-theoretic equilibrium; evolutionary search, which optimises a population by selection and
+mutation; and proximal policy optimization, a reinforcement learning method that improves a
+policy from experience. The three are measured against a common benchmark panel using
+identical instrumentation, so that differences between them reflect the algorithms rather than
+differences in how each was evaluated.
+</p>
+
+<p>
+The framework's distinguishing characteristic is that its measurement apparatus is itself
+validated before any result is reported. The solver is checked against Kuhn poker's
+analytically known game value of −1/18 and against exact exploitability computed by full tree
+traversal on Leduc Hold'em; the card abstraction's cost and benefit are measured rather than
+assumed; and every published figure carries a confidence interval. During development this
+discipline caused several previously published results to be formally withdrawn, and that
+correction is reported here as a finding in its own right rather than omitted. The system is
+covered by 195 automated regression tests.
+</p>
+
+<h2>Literature Survey</h2>
+
+<p>
+The work below is grouped by the problem it addresses: establishing the theory, making it
+scale, reducing the game to a tractable size, measuring the result honestly, and the systems
+and learning methods that define the current state of the art. Each is summarised together
+with its bearing on the present project.
+</p>
+
+<h3>Theoretical foundations</h3>
+
+<p>
+<strong>Kuhn (1950), "Simplified Two-Person Poker."</strong> Kuhn introduced a three-card poker
+variant small enough to be solved analytically by hand, and derived its exact game value of
+−1/18 to the first player along with the full family of equilibrium strategies. Although the
+game is far too simple to be interesting as poker, its analytic solution makes it the standard
+first test for any solver: an implementation that fails to reproduce −1/18 is provably
+incorrect, regardless of how plausible its behaviour appears. NashForge uses precisely this
+property, treating Kuhn as a correctness check performed before any larger game is attempted.
+</p>
+
+<p>
+<strong>Zinkevich, Johanson, Bowling and Piccione (2007), "Regret Minimization in Games with
+Incomplete Information."</strong> This paper introduced Counterfactual Regret Minimization, the
+algorithm underpinning essentially all subsequent progress in computer poker. Its central
+insight is that the overall regret of a strategy in an extensive-form game can be decomposed
+into independent regret terms at each information set, so that minimising regret locally
+minimises it globally, and the <em>average</em> strategy over many iterations — not the current
+one — converges to a Nash equilibrium. This decomposition is what makes an otherwise
+intractable optimisation possible, and it is the algorithm NashForge implements as its
+game-theoretic agent and validates against known game values.
+</p>
+
+<h3>Making the algorithm scale</h3>
+
+<p>
+<strong>Lanctot, Waugh, Zinkevich and Bowling (2009), "Monte Carlo Sampling for Regret
+Minimization in Extensive Games."</strong> Vanilla CFR must traverse the entire game tree on
+every iteration, which is impossible for games the size of no-limit Hold'em. The authors
+introduced a family of sampling variants, of which external sampling is the most widely used:
+chance outcomes and the opponent's actions are sampled while the traverser's own actions are
+still fully enumerated, preserving the convergence guarantee in expectation while reducing the
+per-iteration cost by orders of magnitude. NashForge implements external-sampling MCCFR as the
+only practical route to training on no-limit, and retains vanilla CFR for the small games where
+exact traversal remains feasible.
+</p>
+
+<p>
+<strong>Tammelin (2014), "Solving Large Imperfect Information Games Using CFR+."</strong> CFR+
+modifies the regret update so that accumulated regrets are floored at zero rather than allowed
+to become arbitrarily negative, and weights the average strategy linearly by iteration. The
+paper reports order-of-magnitude faster convergence than vanilla CFR, and the method was
+subsequently used to essentially solve heads-up limit Hold'em. NashForge implements CFR+ as one
+of four comparable update rules; notably, the present experiments found it converging
+<em>more slowly</em> than vanilla under external sampling, a discrepancy attributed to the rule
+having been designed for full traversal.
+</p>
+
+<p>
+<strong>Brown and Sandholm (2019), "Solving Imperfect-Information Games via Discounted Regret
+Minimization."</strong> This work generalises the weighting idea by discounting early regrets
+and strategy contributions according to tunable schedules, on the reasoning that iterations
+performed before the strategy has stabilised carry misleading information. Discounted CFR and
+Linear CFR are shown to outperform CFR+ on several benchmarks. Both are implemented in
+NashForge, and the comparison between all four rules is reported as an experimental result
+rather than adopted from the literature — a distinction that proved material, since the
+published ordering did not reproduce under this project's sampling regime.
+</p>
+
+<h3>Abstraction</h3>
+
+<p>
+<strong>Johanson, Burch, Valenzano and Bowling (2013), "Evaluating State-Space Abstractions in
+Extensive-Form Games."</strong> Since no-limit Hold'em contains on the order of 10<sup>160</sup>
+information sets, hands must be grouped into a bounded number of buckets before any solver can
+run. This paper systematically evaluates competing bucketing schemes and establishes clustering
+on hand-strength distributions as the strongest general approach. NashForge follows this method
+directly, clustering sampled postflop situations by one-dimensional k-means, and extends it by
+treating the choice of the underlying strength signal as an experimental question rather than a
+settled one.
+</p>
+
+<p>
+<strong>Waugh, Schnizlein, Bowling and Szafron (2009), "Abstraction Pathologies in Extensive
+Games."</strong> This paper reports the counter-intuitive and important finding that refining an
+abstraction — giving the solver a more detailed view of the game — can produce a strategy that
+is <em>more</em> exploitable, not less. The relationship between abstraction granularity and
+final strategy quality is therefore not monotonic and cannot be assumed. This result is the
+direct justification for NashForge's central experiment: rather than presuming the finer card
+abstraction is better, the project measures the two against each other across a range of
+training budgets and finds that which one wins depends on the budget available.
+</p>
+
+<p>
+<strong>Ganzfried and Sandholm (2013), "Action Translation in Extensive-Form Games with Large
+Action Spaces."</strong> An agent trained on a handful of discrete bet sizes must still respond
+when a human or another program bets an amount outside that set. The authors show that the
+obvious solution — rounding to the nearest available size — is exploitable, because the mapping
+has a deterministic boundary that an opponent can deliberately sit just inside, and they derive
+the pseudo-harmonic mapping, which distributes an off-tree bet probabilistically across its two
+neighbours in a way that bounds this exploitation. NashForge implements this mapping so that its
+adversarial evaluator can bet sizes the solver never trained against without the resulting
+measurement being an artifact of the translation itself.
+</p>
+
+<h3>Measuring strategy quality</h3>
+
+<p>
+<strong>Southey, Bowling, Larson, Piccione, Burch, Billings and Rayner (2005), "Bayes' Bluff:
+Opponent Modelling in Poker."</strong> Alongside its contribution on Bayesian opponent
+modelling, this paper introduced Leduc Hold'em, a six-card two-round variant deliberately sized
+so that exact best responses and true exploitability can be computed by exhaustive traversal
+while the game still exhibits genuine bluffing and card-abstraction structure. Leduc has since
+become the standard intermediate benchmark, and NashForge uses it exactly as intended: as the
+largest game in which the solver's convergence can be verified against ground truth rather
+than estimated.
+</p>
+
+<p>
+<strong>Lisý and Bowling (2017), "Equilibrium Approximation Quality of Current No-Limit Poker
+Bots."</strong> Because exact exploitability cannot be computed for no-limit, the authors
+propose Local Best Response, a computationally cheap adversary that maintains a belief over the
+opponent's holdings and greedily selects the action maximising immediate expected value under a
+one-step lookahead. Since LBR explores only a subset of the strategies available to a true best
+response, whatever it wins constitutes a rigorous <em>lower bound</em> on exploitability: a
+large value proves an agent is weak, while a small value proves nothing at all. The paper's
+striking result was that several published bots proved far more exploitable than their
+head-to-head records suggested. NashForge implements LBR and reports this one-sided guarantee
+explicitly, having found — after correcting four defects in its own implementation — that a
+converged strategy in this abstraction resists it entirely.
+</p>
+
+<h3>Landmark systems</h3>
+
+<p>
+<strong>Moravčík, Schmid, Burch, Lisý, Morrill, Bard, Davis, Waugh, Johanson and Bowling (2017),
+"DeepStack: Expert-Level Artificial Intelligence in Heads-Up No-Limit Poker."</strong> DeepStack
+was the first program to defeat professional players at heads-up no-limit, and it did so by
+replacing precomputed abstraction with continual re-solving: rather than looking up a strategy
+from a table computed in advance, it solves a local subgame at every decision, using deep neural
+networks to estimate the values of states beyond its lookahead horizon. The work demonstrated
+that the abstraction bottleneck NashForge measures directly can, given sufficient computational
+resources, be substantially circumvented.
+</p>
+
+<p>
+<strong>Brown and Sandholm (2018), "Superhuman AI for Heads-Up No-Limit Poker: Libratus Beats
+Top Professionals."</strong> Libratus defeated four top professionals over 120,000 hands, using
+a three-part architecture: a blueprint strategy computed over a coarse abstraction, nested
+subgame solving that refines the strategy in real time as a hand progresses, and a
+self-improvement module that repairs the parts of the abstraction opponents were successfully
+exploiting. Its significance for the present project lies in the third component, which
+illustrates that a fixed abstraction is a persistent liability rather than a one-time
+simplification — the same weakness this project quantifies at much smaller scale.
+</p>
+
+<p>
+<strong>Brown and Sandholm (2019), "Superhuman AI for Multiplayer Poker."</strong> Pluribus
+extended these results to six-player no-limit, where the theoretical guarantees of two-player
+zero-sum games no longer apply, since a Nash equilibrium in a multiplayer game need not be
+either unique or safe to play. It nevertheless defeated elite professionals using a
+comparatively inexpensive blueprint combined with limited-lookahead search. This work motivates
+NashForge's deliberate ordering of heads-up before six-max: the guarantees that make the
+two-player case measurable simply do not transfer.
+</p>
+
+<h3>Learning-based approaches</h3>
+
+<p>
+<strong>Schulman, Wolski, Dhariwal, Radford and Klimov (2017), "Proximal Policy Optimization
+Algorithms."</strong> PPO improves a policy from sampled experience while constraining each
+update through a clipped surrogate objective, preventing the destructively large policy changes
+that destabilise simpler policy-gradient methods, at a fraction of the implementation complexity
+of trust-region approaches. Its robustness and simplicity have made it a default choice across
+reinforcement learning. NashForge adopts PPO as its reinforcement learning agent, while noting
+the theoretical caveat that self-play policy gradient does not converge to a Nash equilibrium in
+imperfect-information games and therefore yields a strong but exploitable strategy.
+</p>
+
+<p>
+<strong>Heinrich and Silver (2016), "Deep Reinforcement Learning from Self-Play in
+Imperfect-Information Games."</strong> Neural Fictitious Self-Play combines reinforcement
+learning against the opponent's average strategy with supervised learning of the agent's own
+average behaviour, approximating fictitious play with neural networks and converging toward
+equilibrium in imperfect-information games without domain-specific abstraction. The work is
+directly relevant as the principled alternative to plain self-play, and identifies precisely the
+weakness NashForge expects its PPO agent to exhibit.
+</p>
+
+<p>
+<strong>Brown, Lerer, Gross and Sandholm (2019), "Deep Counterfactual Regret
+Minimization."</strong> Deep CFR replaces CFR's explicit regret tables with neural networks
+trained to approximate them, removing the requirement for a hand-designed card abstraction and
+allowing the method to generalise across similar information sets. It represents the natural
+continuation of the trajectory this project follows, and is the approach NashForge's tabular
+solver would most sensibly be extended toward once the abstraction limits it measures become
+binding.
+</p>
+
+<p>
+<strong>Salimans, Ho, Chen, Sidor and Sutskever (2017), "Evolution Strategies as a Scalable
+Alternative to Reinforcement Learning."</strong> This paper demonstrates that a
+population-based black-box optimiser, perturbing network parameters and selecting on total
+episode return, can rival gradient-based reinforcement learning on demanding control tasks while
+parallelising far more cleanly, since workers need exchange only scalar returns. It provides the
+justification for including an evolutionary agent in this comparison — though it also implies
+the limitation NashForge expects to observe, namely that an optimiser receiving one scalar per
+episode performs no credit assignment across the individual decisions within it.
+</p>
+
+<h2>Modular Architecture</h2>
+
+<p>
+The system is organised as nine modules arranged in a layered pipeline, in which each layer
+depends only on the layers beneath it. This separation is what allows three very different
+learning algorithms to be compared fairly: they share the game, the abstraction, and the
+evaluation harness, and differ only in the module that produces a strategy.
+</p>
+
+<h3>1. Poker Engine</h3>
+<p>
+The foundation of the system is a complete Texas Hold'em implementation that handles card
+dealing, the four betting rounds, minimum-raise enforcement, side pots for all-in situations,
+and hand evaluation across all eleven hand categories. It is built as an <strong>event-driven
+state machine</strong> in which each player action transitions the game to a new legal state.
+Correctness here is non-negotiable, since every result in the project is denominated in chips
+this module accounts for: it was verified by driving 2,400 randomised hands and confirming
+exact chip conservation, correct side-pot allocation, and agreement between two independent
+hand evaluators over 2,000 random seven-card showdowns.
+</p>
+
+<h3>2. Traversable Game Interface</h3>
+<p>
+Counterfactual regret minimization does not <em>play</em> a game, it <em>traverses</em> one:
+at every decision it must recurse into all available actions and back up, which a conventional
+simulator cannot support because it mutates state in place and consumes a dealt deck. This
+module therefore provides an <strong>immutable-state interface</strong> in which each state is
+a value rather than an object being modified, implemented for three games of increasing
+difficulty — Kuhn poker, Leduc Hold'em, and abstracted heads-up no-limit Hold'em. The two
+smaller games exist specifically so the solver can be checked against known answers.
+</p>
+
+<h3>3. Card Abstraction</h3>
+<p>
+No-limit Hold'em contains on the order of 10<sup>160</sup> information sets, which no computer
+can enumerate, so hands must be grouped into a bounded number of strength buckets. This module
+uses <strong>two different clustering strategies</strong>: preflop, all 169 strategically
+distinct starting hands are enumerated exactly and grouped by the Chen formula; postflop,
+where enumeration is impossible, situations are sampled and clustered by one-dimensional
+k-means. Two competing strength signals are implemented — Monte Carlo equity, which accounts
+for draws, and made-hand strength, which is far cheaper but blind to them — and choosing
+between them is treated as an experimental question rather than a design assumption.
+</p>
+
+<h3>4. Bet Abstraction</h3>
+<p>
+Alongside card abstraction, the space of possible bet sizes must also be bounded, since no-limit
+poker permits any wager up to a player's stack. This module defines a <strong>six-action
+space</strong> — fold, check/call, half-pot raise, pot raise, double-pot raise, and all-in —
+and enumerates the resulting betting tree combinatorially, so the size of the abstract game is
+computed exactly rather than estimated. Multiplying that count by the available buckets gives
+the memory requirement before any training is attempted.
+</p>
+
+<h3>5. Regret Minimization Solvers</h3>
+<p>
+This is the game-theoretic learner. It implements <strong>vanilla CFR</strong>, which traverses
+the entire tree and is feasible only for small games, and <strong>external-sampling Monte Carlo
+CFR</strong>, which samples chance outcomes and so scales to no-limit. Four regret update rules
+are implemented and compared experimentally. The module accumulates counterfactual regret at
+every information set and derives the average strategy, which is the quantity that converges
+toward equilibrium — a fact that is easy to state and easy to implement incorrectly, which is
+why the validation module exists.
+</p>
+
+<h3>6. Exploitability Measurement</h3>
+<p>
+An agent's true quality is measured by exploitability: how much a perfectly-informed adversary
+could win against it. On small games this module computes exploitability <strong>exactly</strong>
+by traversing the tree and constructing a best response. On no-limit, where exact computation
+is impossible, it implements <strong>Local Best Response</strong>, a greedy adversary that
+tracks what the opponent's betting reveals about their holding and exploits it. This yields a
+one-sided guarantee — a large value proves an agent is exploitable, whereas a small value
+proves nothing — and the framework reports that asymmetry explicitly rather than treating a
+small number as evidence of strength.
+</p>
+
+<h3>7. Action Translation</h3>
+<p>
+When an adversary bets an amount the abstraction does not contain, something must decide what
+the trained agent believes it faced. This module implements the <strong>pseudo-harmonic
+mapping</strong> of Ganzfried and Sandholm, which maps an off-tree bet probabilistically onto
+its two neighbouring abstract sizes. The obvious alternative — rounding to the nearest size —
+was rejected deliberately, because a deterministic mapping creates a boundary that an
+adversary can sit just inside, inflating the measured exploitability with an artifact of the
+mapping rather than a property of the agent.
+</p>
+
+<h3>8. Evaluation Harness</h3>
+<p>
+This module decides what every reported number means, and is therefore the component whose own
+correctness matters most. It plays two agents against each other using <strong>duplicate
+play</strong>, a variance-reduction technique borrowed from competitive bridge: each hand is
+dealt twice with the seats swapped and the identical cards replayed, so that both position and
+card luck cancel between the two runs rather than being averaged over. Every result carries a
+standard error, and the harness refuses to declare a winner when the difference between two
+agents lies inside its own noise.
+</p>
+
+<h3>9. Observation and Learning Layer</h3>
+<p>
+The evolutionary and reinforcement learning agents do not consume abstract buckets; they
+consume a numerical feature vector describing the current decision. This module extracts that
+vector — position, stack depth, pot odds, betting round, and hand strength — and feeds it to a
+<strong>policy network</strong> trained either by evolutionary selection and mutation or by
+proximal policy optimization. The quality of this representation was itself audited
+experimentally, with results reported below, because a learning algorithm cannot recover
+information its inputs never contained.
+</p>
+
+<h2>Agents Implemented</h2>
+
+<p>
+Six agent types are implemented against a common interface, so that any of them can be
+substituted into any matchup without changing the harness. This uniformity is what makes the
+comparison meaningful.
+</p>
+
+<ol>
+  <li><strong>CFR Agent</strong> — plays a strategy produced by regret minimization. It is the
+  only agent in the system with a theoretical guarantee about what it converges toward, and it
+  therefore serves as the framework's reference point.</li>
+
+  <li><strong>Evolutionary Agent</strong> — a policy network whose weights are optimised by
+  selection and Gaussian mutation across generations, with elite preservation between them.</li>
+
+  <li><strong>PPO Agent</strong> — a policy network trained by proximal policy optimization from
+  self-play experience, using clipped policy updates and generalised advantage estimation.</li>
+
+  <li><strong>Local Best Response Agent</strong> — an adversary rather than a competitor. It
+  exists to attack a trained strategy and thereby measure its exploitability, tracking a belief
+  over the opponent's possible holdings and updating it by Bayes after every action observed.</li>
+
+  <li><strong>Random Agent</strong> — chooses uniformly among legal actions. The floor any
+  trained agent must clear, and a diagnostic when one does not.</li>
+
+  <li><strong>Always-Call Agent</strong> — never folds and never raises. A specific, reproducible
+  weak opponent whose exploitation requires an agent to actually bet for value.</li>
+</ol>
+
+<h2>Technology Stack</h2>
+
+<p>
+The implementation is deliberately dependency-light, because a project whose central claim is
+about measurement should not rest on components it cannot inspect. The engine, the solvers, the
+abstraction and the evaluation harness are written from scratch in <strong>Python 3.12</strong>
+using <strong>NumPy</strong> for vectorised arithmetic and <strong>Numba</strong> for
+just-in-time compilation of the hand evaluator, which sits on the hot path of every traversal.
+The reinforcement learning component uses <strong>PyTorch</strong> for the actor-critic network.
+Testing is by <strong>pytest</strong>, with 195 regression tests; version control and
+reproducibility are handled through <strong>Git</strong>, with every experimental result stored
+as JSON alongside the script that produced it.
+</p>
+
+<h2>Performance Metrics and Analysis</h2>
+
+<div class="tiles">
+  <div class="tile"><span class="n">195</span><span class="k">regression tests, from zero before the audit</span></div>
+  <div class="tile"><span class="n">−1/18</span><span class="k">Kuhn game value reproduced analytically</span></div>
+  <div class="tile"><span class="n">5.4×</span><span class="k">cost of equity over made-hand bucketing</span></div>
+  <div class="tile"><span class="n">7.8σ</span><span class="k">separation of the headline result</span></div>
+</div>
+
+<h3>Validating the solver</h3>
+
+<p>
+Before any comparison is meaningful, the solver must be shown to converge. Leduc Hold'em is
+small enough that exploitability can be computed exactly by traversing the tree, so convergence
+is observed directly rather than inferred. Four regret update rules were run for 64,000
+iterations across three random seeds each.
+</p>
+
+<figure>
+  <span class="fig-title">Figure 1 · Exact exploitability on Leduc Hold'em</span>
+  <span class="fig-sub">Logarithmic on both axes. Lower is closer to equilibrium; a straight
+  descending line is what convergence looks like.</span>
+  <div class="plot">
+    <svg viewBox="0 0 700 290" role="img" aria-label="Exploitability falls from about 0.7 at 1000 iterations to between 0.056 and 0.093 at 64000 iterations for all four update rules.">
+      <g stroke="var(--rule)" stroke-width="1">
+        <line x1="60" y1="30" x2="620" y2="30"/><line x1="60" y1="140" x2="620" y2="140"/><line x1="60" y1="250" x2="620" y2="250"/>
+      </g>
+      <g class="ax" text-anchor="end"><text x="50" y="34">0.80</text><text x="50" y="144">0.20</text><text x="50" y="254">0.05</text></g>
+      <g class="ax" text-anchor="middle"><text x="60" y="272">1k</text><text x="247" y="272">4k</text><text x="433" y="272">16k</text><text x="620" y="272">64k</text></g>
+      <text class="ax" x="340" y="288" text-anchor="middle">training iterations</text>
+
+      <polyline fill="none" stroke="var(--series-1)" stroke-width="2" stroke-linejoin="round" points="60,38.2 247,118.5 433,189.5 620,241.2"><title>linear — 0.7213, 0.2621, 0.1072, 0.0559</title></polyline>
+      <polyline fill="none" stroke="var(--series-2)" stroke-width="2" stroke-linejoin="round" points="60,32.3 247,112.5 433,173.4 620,233.6"><title>vanilla — 0.7769, 0.2831, 0.1313, 0.0615</title></polyline>
+      <polyline fill="none" stroke="var(--series-3)" stroke-width="2" stroke-linejoin="round" points="60,42.4 247,103.4 433,160.6 620,210.9"><title>CFR+ — 0.6843, 0.3173, 0.1542, 0.0819</title></polyline>
+      <polyline fill="none" stroke="var(--series-4)" stroke-width="2" stroke-linejoin="round" points="60,41.4 247,95.6 433,154.2 620,200.8"><title>DCFR — 0.6926, 0.3500, 0.1673, 0.0930</title></polyline>
+
+      <g stroke="var(--surface)" stroke-width="2">
+        <circle cx="620" cy="241.2" r="4" fill="var(--series-1)"/><circle cx="620" cy="233.6" r="4" fill="var(--series-2)"/>
+        <circle cx="620" cy="210.9" r="4" fill="var(--series-3)"/><circle cx="620" cy="200.8" r="4" fill="var(--series-4)"/>
+      </g>
+      <g class="dlabel">
+        <text x="632" y="245" fill="var(--series-1)">linear</text><text x="632" y="231" fill="var(--series-2)">vanilla</text>
+        <text x="632" y="212" fill="var(--series-3)">CFR+</text><text x="632" y="198" fill="var(--series-4)">DCFR</text>
+      </g>
+    </svg>
+  </div>
+  <div class="legend">
+    <span><i class="swatch" style="background:var(--series-1)"></i>linear</span>
+    <span><i class="swatch" style="background:var(--series-2)"></i>vanilla</span>
+    <span><i class="swatch" style="background:var(--series-3)"></i>CFR+</span>
+    <span><i class="swatch" style="background:var(--series-4)"></i>DCFR</span>
+  </div>
+  <figcaption>
+    All four rules converge, which is the property being verified. The ordering is a secondary
+    and slightly awkward observation: CFR+ and DCFR finish <em>worse</em> than plain vanilla
+    (0.0819 and 0.0930 against 0.0615), where the literature reports them substantially faster.
+    The likely explanation is that those rules were designed for full tree traversal while this
+    experiment uses external sampling. It is reported rather than omitted.
+  </figcaption>
+</figure>
+
+<h3>The cost and benefit of card abstraction</h3>
+
+<p>
+The central experiment of the project asks a question a practitioner actually faces: given a
+fixed amount of training time, is the more informative but more expensive card abstraction
+worth using? Monte Carlo equity costs <span class="num">44.05 ms</span> per solver iteration
+against <span class="num">8.11 ms</span> for made-hand strength — a factor of 5.4 — so the
+cheaper signal buys roughly five times more training. Whether the extra iterations outweigh the
+lost information is not obvious, and was resolved by playing the two resulting agents against
+each other across a ladder of training budgets.
+</p>
+
+<figure>
+  <span class="fig-title">Figure 2 · Head-to-head result by training budget</span>
+  <span class="fig-sub">Chips per hand to the equity agent. Bars right of zero mean equity is
+  winning, left means made-hand is. Whiskers are 95% confidence intervals over three seeds.</span>
+  <div class="plot">
+    <svg viewBox="0 0 700 262" role="img" aria-label="At 40 and 160 seconds made-hand bucketing leads; at 640 seconds the difference is not separated from zero; at 2560 seconds equity bucketing leads by 0.92 chips per hand.">
+      <g class="ax" text-anchor="middle">
+        <text x="168.6" y="240">−4</text><text x="261.7" y="240">−3</text><text x="354.8" y="240">−2</text>
+        <text x="447.9" y="240">−1</text><text x="541" y="240">0</text><text x="634.1" y="240">+1</text>
+      </g>
+      <g stroke="var(--rule)" stroke-width="1">
+        <line x1="168.6" y1="46" x2="168.6" y2="226"/><line x1="261.7" y1="46" x2="261.7" y2="226"/>
+        <line x1="354.8" y1="46" x2="354.8" y2="226"/><line x1="447.9" y1="46" x2="447.9" y2="226"/>
+        <line x1="634.1" y1="46" x2="634.1" y2="226"/>
+      </g>
+      <line x1="541" y1="42" x2="541" y2="228" stroke="var(--ink-faint)" stroke-width="1.5"/>
+
+      <text class="rowlab" x="140" y="78" text-anchor="end">40s</text>
+      <rect x="249.1" y="64" width="291.9" height="20" rx="4" fill="var(--pole-neg)"><title>40s — made-hand ahead by 3.136 ± 0.729</title></rect>
+      <g stroke="var(--ink-soft)" stroke-width="1.5"><line x1="181.2" y1="74" x2="317.0" y2="74"/><line x1="181.2" y1="69" x2="181.2" y2="79"/><line x1="317.0" y1="69" x2="317.0" y2="79"/></g>
+      <text class="val" x="241" y="79" text-anchor="end">−3.136</text>
+
+      <text class="rowlab" x="140" y="126" text-anchor="end">160s</text>
+      <rect x="398.5" y="112" width="142.5" height="20" rx="4" fill="var(--pole-neg)"><title>160s — made-hand ahead by 1.531 ± 0.164</title></rect>
+      <g stroke="var(--ink-soft)" stroke-width="1.5"><line x1="383.2" y1="122" x2="413.8" y2="122"/><line x1="383.2" y1="117" x2="383.2" y2="127"/><line x1="413.8" y1="117" x2="413.8" y2="127"/></g>
+      <text class="val" x="375" y="127" text-anchor="end">−1.531</text>
+
+      <text class="rowlab" x="140" y="174" text-anchor="end">640s</text>
+      <rect x="541" y="160" width="25.4" height="20" rx="4" fill="var(--pole-none)"><title>640s — +0.273 ± 0.203, not separated</title></rect>
+      <g stroke="var(--ink-soft)" stroke-width="1.5"><line x1="547.5" y1="170" x2="585.3" y2="170"/><line x1="547.5" y1="165" x2="547.5" y2="175"/><line x1="585.3" y1="165" x2="585.3" y2="175"/></g>
+      <text class="val" x="596" y="175">+0.273</text>
+
+      <text class="rowlab" x="140" y="222" text-anchor="end">2560s</text>
+      <rect x="541" y="208" width="85.3" height="20" rx="4" fill="var(--pole-pos)"><title>2560s — equity ahead by 0.916 ± 0.118</title></rect>
+      <g stroke="var(--ink-soft)" stroke-width="1.5"><line x1="615.3" y1="218" x2="637.3" y2="218"/><line x1="615.3" y1="213" x2="615.3" y2="223"/><line x1="637.3" y1="213" x2="637.3" y2="223"/></g>
+      <text class="val" x="648" y="223">+0.916</text>
+
+      <g class="ax"><text x="168.6" y="36" text-anchor="start">← made-hand ahead</text><text x="660" y="36" text-anchor="end">equity ahead →</text></g>
+    </svg>
+  </div>
+  <div class="legend">
+    <span><i class="swatch" style="background:var(--pole-neg)"></i>made-hand ahead</span>
+    <span><i class="swatch" style="background:var(--pole-none)"></i>not separated</span>
+    <span><i class="swatch" style="background:var(--pole-pos)"></i>equity ahead</span>
+  </div>
+  <figcaption>
+    Three seeds, 20,000 hands per matchup, seats alternating. A crossover exists: the cheap
+    abstraction wins at short budgets, the lead disappears around 640 seconds, and the expensive
+    abstraction wins by 2560 seconds at roughly 7.8σ — while training on 60,117 iterations
+    against its opponent's 288,050.
+  </figcaption>
+</figure>
+
+<div class="tablewrap">
+<table>
+  <caption>Table 1 · The same result, with the iteration counts behind it</caption>
+  <thead><tr><th>Budget</th><th>Equity iterations</th><th>Made-hand iterations</th><th>Chips/hand</th><th>Verdict</th></tr></thead>
+  <tbody>
+    <tr><td>40 s</td><td>1,075</td><td>5,600</td><td>−3.136 ± 0.729</td><td class="hi">made-hand</td></tr>
+    <tr><td>160 s</td><td>3,808</td><td>19,758</td><td>−1.531 ± 0.164</td><td class="hi">made-hand</td></tr>
+    <tr><td>640 s</td><td>14,850</td><td>73,158</td><td>+0.273 ± 0.203</td><td>not separated</td></tr>
+    <tr><td>2560 s</td><td>60,117</td><td>288,050</td><td>+0.916 ± 0.118</td><td class="hi">equity</td></tr>
+  </tbody>
+</table>
+</div>
+
+<h3>Auditing the learning agents' observation</h3>
+
+<p>
+Because the evolutionary and reinforcement learning agents consume a feature vector rather than
+an abstract bucket, the quality of that vector places a ceiling on what either can learn. It was
+therefore audited experimentally: 1,500 decision states were sampled, each state's true equity
+was computed by Monte Carlo simulation, and the vector's ability to recover that equity was
+measured by regression.
+</p>
+
+<figure>
+  <span class="fig-title">Figure 3 · How much of a hand's true value the observation recovers</span>
+  <span class="fig-sub">Coefficient of determination against Monte Carlo equity. Higher is
+  better; 1.0 would mean the vector describes the hand completely.</span>
+  <div class="plot">
+    <svg viewBox="0 0 700 250" role="img" aria-label="R-squared is 0.421 for all features, 0.238 for hand strength alone, and 0.013 with hand strength removed; adding draw features raises the overall figure to 0.503 and the postflop figure from 0.475 to 0.637.">
+      <g stroke="var(--rule)" stroke-width="1">
+        <line x1="250" y1="30" x2="250" y2="200"/><line x1="350" y1="30" x2="350" y2="200"/>
+        <line x1="450" y1="30" x2="450" y2="200"/><line x1="550" y1="30" x2="550" y2="200"/><line x1="650" y1="30" x2="650" y2="200"/>
+      </g>
+      <line x1="250" y1="30" x2="250" y2="206" stroke="var(--ink-faint)" stroke-width="1.5"/>
+      <g class="ax" text-anchor="middle">
+        <text x="250" y="220">0.0</text><text x="350" y="220">0.2</text><text x="450" y="220">0.4</text>
+        <text x="550" y="220">0.6</text><text x="650" y="220">0.8</text>
+      </g>
+      <text class="ax" x="450" y="238" text-anchor="middle">R² against true equity</text>
+
+      <text class="rowlab" x="240" y="52" text-anchor="end">all 17 features</text>
+      <rect x="250" y="38" width="210.5" height="18" rx="4" fill="var(--series-1)"><title>0.421</title></rect>
+      <text class="val" x="468" y="52">0.421</text>
+
+      <text class="rowlab" x="240" y="86" text-anchor="end">hand strength only</text>
+      <rect x="250" y="72" width="119.0" height="18" rx="4" fill="var(--series-1)"><title>0.238</title></rect>
+      <text class="val" x="377" y="86">0.238</text>
+
+      <text class="rowlab" x="240" y="120" text-anchor="end">without hand strength</text>
+      <rect x="250" y="106" width="6.5" height="18" rx="3" fill="var(--series-1)"><title>0.013 — the other sixteen features know almost nothing about the hand</title></rect>
+      <text class="val" x="264" y="120">0.013</text>
+
+      <text class="rowlab" x="240" y="158" text-anchor="end">postflop, as built</text>
+      <rect x="250" y="144" width="237.5" height="18" rx="4" fill="var(--series-2)"><title>0.475</title></rect>
+      <text class="val" x="495" y="158">0.475</text>
+
+      <text class="rowlab" x="240" y="192" text-anchor="end">postflop, + draw features</text>
+      <rect x="250" y="178" width="318.5" height="18" rx="4" fill="var(--series-2)"><title>0.637 — after adding four binary draw and texture features</title></rect>
+      <text class="val" x="576" y="192">0.637</text>
+    </svg>
+  </div>
+  <div class="legend">
+    <span><i class="swatch" style="background:var(--series-1)"></i>all decision states</span>
+    <span><i class="swatch" style="background:var(--series-2)"></i>postflop only</span>
+  </div>
+  <figcaption>
+    The third bar is the finding. Removing a single feature — hand strength — collapses the
+    vector's explanatory power to 0.013, meaning the remaining sixteen features carry almost no
+    information about the player's own cards. Adding four inexpensive binary features (flush
+    draw, open-ended straight draw, paired board, three-to-a-flush) raises the postflop figure
+    from 0.475 to 0.637, a relative improvement of 34%.
+  </figcaption>
+</figure>
+
+<div class="tablewrap">
+<table>
+  <caption>Table 2 · Measured properties, by module</caption>
+  <thead><tr><th>Module</th><th>Property measured</th><th>Result</th></tr></thead>
+  <tbody>
+    <tr><td>Poker Engine</td><td>Chip conservation, 2,400 hands</td><td class="hi">exact</td></tr>
+    <tr><td>Poker Engine</td><td>Evaluator agreement, 2,000 showdowns</td><td class="hi">0 disagreements</td></tr>
+    <tr><td>Traversable Interface</td><td>Kuhn game value vs analytic −1/18</td><td class="hi">reproduced</td></tr>
+    <tr><td>Regret Solvers</td><td>Leduc exploitability at 64k iterations</td><td>0.0559 – 0.0930</td></tr>
+    <tr><td>Card Abstraction</td><td>Cost per iteration, equity vs made-hand</td><td>44.05 / 8.11 ms</td></tr>
+    <tr><td>Bet Abstraction</td><td>Information sets, 6 buckets, 1 raise</td><td>32,800 – 410,000</td></tr>
+    <tr><td>Evaluation Harness</td><td>Noise reduction from duplicate play</td><td>≈ 14%</td></tr>
+    <tr><td>Observation Layer</td><td>Effective dimensionality of 17 slots</td><td class="hi">6</td></tr>
+    <tr><td>Exploitability</td><td>Bound on a converged strategy</td><td>not established</td></tr>
+  </tbody>
+</table>
+</div>
+
+<h2>Final Result Obtained</h2>
+
+<p>
+The final results are produced progressively through the pipeline rather than assigned. A card
+abstraction is first fitted by sampling situations and clustering them into strength buckets.
+The solver then traverses the abstracted game repeatedly, accumulating counterfactual regret at
+each information set and deriving the average strategy, which is the quantity that converges
+toward equilibrium. Two such strategies — one per card abstraction — are trained to identical
+wall-clock budgets and then played against each other through the evaluation harness using
+duplicate play, and the resulting chip differential, together with its confidence interval, is
+the reported figure.
+</p>
+
+<p>
+The headline result is that a crossover exists. Made-hand bucketing wins decisively at short
+budgets, where its fivefold iteration advantage dominates; the advantage disappears at
+approximately 640 seconds; and equity bucketing wins by 2560 seconds at
+<span class="num">+0.916 ± 0.118</span> chips per hand, roughly 7.8 standard errors from zero,
+while training on about one fifth of its opponent's iterations. All three random seeds agree in
+direction at every budget.
+</p>
+
+<h2>Observations of the Output</h2>
+
+<p><strong>Poker Engine.</strong> Chip conservation held exactly across 2,400 randomised hands
+and both hand evaluators agreed on all 2,000 test showdowns. <em>Observation:</em> the engine's
+correctness is the precondition for every other measurement, since all results are denominated
+in chips it accounts for.</p>
+
+<p><strong>Traversable Interface.</strong> The solver reproduced Kuhn poker's analytic value of
+−1/18 and drove Leduc exploitability steadily downward. <em>Observation:</em> these small games
+have no practical value as poker, and exist purely so the solver can be checked against answers
+that are known independently of the implementation.</p>
+
+<p><strong>Card Abstraction.</strong> Monte Carlo equity produced better-informed buckets at
+5.4 times the cost per iteration of made-hand strength. <em>Observation:</em> the trade-off is
+genuine rather than a matter of preference, and its resolution depends on the training budget —
+which is why a single measurement would have produced a misleading answer.</p>
+
+<p><strong>Regret Solvers.</strong> All four update rules converged, but CFR+ and DCFR finished
+worse than plain vanilla, contrary to published results. <em>Observation:</em> those rules were
+designed for full tree traversal, and this system uses external sampling; the discrepancy is
+reported rather than suppressed.</p>
+
+<p><strong>Exploitability Measurement.</strong> Local Best Response could not establish a bound
+on a well-trained strategy despite four defects being corrected and three successive valuation
+models being implemented. <em>Observation:</em> the honest reading is that a greedy one-step
+adversary genuinely cannot beat a converged strategy in this abstraction, which is a legitimate
+if weak result rather than an outstanding defect.</p>
+
+<p><strong>Evaluation Harness.</strong> Duplicate play reduced the standard error by
+approximately 14%, considerably less than expected. <em>Observation:</em> per-hand outcomes swing
+by a whole stack depending on whether an all-in occurred, and that variation is driven by the
+actions taken rather than by the cards dealt, so sharing cards cannot cancel it.</p>
+
+<p><strong>Observation Layer.</strong> The seventeen-slot feature vector was found to carry only
+six independent dimensions, with all card information concentrated in a single feature.
+<em>Observation:</em> two states the agent receives as identical inputs were measured to differ
+by as much as 0.907 in true equity, meaning one hand may be a 5% underdog and the other a 95%
+favourite while appearing indistinguishable — a limit no amount of training can overcome.</p>
+
+<h2>Comparative Analysis</h2>
+
+<div class="tablewrap">
+<table>
+  <caption>Table 3 · NashForge against conventional approaches</caption>
+  <thead><tr><th>Capability</th><th>Heuristic Bot</th><th>Standard RL System</th><th>Proposed NashForge</th></tr></thead>
+  <tbody>
+    <tr><td>Strategy source</td><td>Hand-written rules</td><td>Learned policy</td><td class="hi">Three families compared</td></tr>
+    <tr><td>Theoretical guarantee</td><td>None</td><td>None</td><td class="hi">Equilibrium convergence</td></tr>
+    <tr><td>Correctness of engine</td><td>Assumed</td><td>Assumed</td><td class="hi">Verified, 2,400 hands</td></tr>
+    <tr><td>Validation against known answers</td><td>None</td><td>Rare</td><td class="hi">Kuhn and Leduc</td></tr>
+    <tr><td>Exploitability measurement</td><td>None</td><td>None</td><td class="hi">Exact and bounded</td></tr>
+    <tr><td>Card abstraction</td><td>Fixed</td><td>Implicit</td><td class="hi">Two, compared</td></tr>
+    <tr><td>Benchmark independence</td><td>Self-play only</td><td>Self-play only</td><td class="hi">Unrelated panel</td></tr>
+    <tr><td>Variance reduction</td><td>None</td><td>More hands</td><td class="hi">Duplicate play</td></tr>
+    <tr><td>Confidence intervals</td><td>No</td><td>Rare</td><td class="hi">On every figure</td></tr>
+    <tr><td>Observation quality audited</td><td>No</td><td>No</td><td class="hi">Yes, measured</td></tr>
+  </tbody>
+</table>
+</div>
+
+<h2>Overall Result Analysis</h2>
+
+<p>
+The experimental results indicate that the framework achieves its objective of making three
+distinct learning paradigms comparable on equal terms. The engine and traversable interface
+supply a game whose correctness is verified rather than assumed; the abstraction modules reduce
+an intractable game to one that fits in memory, at a cost that is measured; and the evaluation
+harness converts matches into figures carrying explicit uncertainty. The regret solver provides
+the only agent in the system with a theoretical guarantee, and therefore serves as the reference
+against which the evolutionary and reinforcement learning agents are measured.
+</p>
+
+<p>
+The principal advantage of NashForge is therefore not the strength of any single agent but the
+integrity of the comparison between them. Its most instructive outcome is a negative one: the
+observation audit demonstrated that the feature representation used by the learning agents
+discards most of the information distinguishing a strong hand from a weak one, which places a
+ceiling on those agents that no amount of additional training can raise. Identifying such a
+limit before investing in training is precisely what a measurement-first framework is intended
+to deliver, and it is a conclusion that a system reporting only its successes would never have
+reached.
+</p>
+
+</div>
