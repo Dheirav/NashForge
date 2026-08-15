@@ -6,6 +6,8 @@ than here; this file is what is still to do, plus the reasoning behind what was 
 
 **Last reviewed:** 15 August 2026.
 
+> For the single next action rather than the full picture, see **[`NEXT.md`](NEXT.md)**.
+
 ## State of play
 
 Nothing here is blocking. Items 1–4 are all closed, and the reasoning is kept rather than
