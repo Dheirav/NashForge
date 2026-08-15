@@ -158,3 +158,32 @@ def test_a_strategy_with_no_entries_is_reported_as_missing():
                        misses=misses)
     assert misses[0] > 0, "an empty strategy should miss every lookup"
     assert result.lookup_miss_rate > 0.0, result.summary()
+
+
+# ---------------------------------------------------------------------------
+# The checkpointing convention
+# ---------------------------------------------------------------------------
+
+def test_checkpoints_land_ten_times_across_any_run():
+    """
+    The point of a proportion rather than a constant: the same rule gives ten
+    saves whether the run is fifty generations or sixty thousand iterations.
+    """
+    from evaluation import checkpoint_every, checkpoint_points
+
+    for total in (50, 500, 59_050, 1_000_000):
+        assert len(checkpoint_points(total)) == 10, total
+        assert checkpoint_every(total) == round(total * 0.10)
+
+
+def test_a_short_run_still_checkpoints():
+    """
+    Ten percent of five generations rounds toward zero. A run that saves every
+    zero units saves never, and would look identical to one that was working.
+    """
+    from evaluation import checkpoint_every
+
+    for total in (1, 2, 5, 9):
+        assert checkpoint_every(total) >= 1, total
+    assert checkpoint_every(0) == 1
+    assert checkpoint_every(3) <= 3, "cannot checkpoint less often than never running"

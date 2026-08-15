@@ -100,7 +100,12 @@ class FitnessConfig:
     # weighted average: HU BB/100 * heads_up_fraction + MT BB/100 * (1 - frac).
     # Recommended value for a format-agnostic agent: 0.33 (1-in-3 matchups HU)
     heads_up_fraction: float = 0.0  # 0.0 = all MT, 1.0 = all HU
-    hu_hands_per_matchup: int = 500  # Hands for HU matchups (can differ from MT)
+    # None means 'same as hands_per_matchup'. It used to default to 500, which
+    # made hands_per_matchup silently inert in any heads-up configuration:
+    # with num_players=2 every matchup is a 2-player one, so this branch always
+    # won and the obvious parameter did nothing. Sweeping it compared
+    # configurations that were identical.
+    hu_hands_per_matchup: Optional[int] = None  # Hands for HU matchups; None = same as MT
 
     # ── Per-hand condition randomisation (opt-in) ────────────────────────────
     # These were previously read out of the config with getattr() defaults even
