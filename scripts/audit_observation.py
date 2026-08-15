@@ -217,19 +217,27 @@ def report(num_players, rng):
         print(f"    R² from all features            {r_squared(vectors[postflop][:, live], equities[postflop]):.3f}")
         print(f"    R² from hand_strength alone     {r_squared(strength[postflop].reshape(-1, 1), equities[postflop]):.3f}")
 
-    print("\n  States the agent CANNOT TELL APART — equity spread within each"
-          "\n  group of near-identical hand_strength (postflop):\n")
+    # Group by every card feature the vector carries, not by hand_strength
+    # alone. When hand_strength *was* the whole card signature the two were the
+    # same thing; once draw and texture features exist, grouping on strength
+    # alone measures a signature the agent no longer has, and understates it.
+    card_names = [n for n in ("hand_strength", "flush_draw", "open_ended",
+                              "paired_board", "three_flush") if n in names]
+    card_columns = [names.index(n) for n in card_names]
+    print(f"\n  States the agent CANNOT TELL APART — equity spread within each"
+          f"\n  group sharing all {len(card_names)} card features (postflop):\n")
     buckets = defaultdict(list)
-    for value, equity, is_post in zip(strength, equities, postflop):
-        if is_post:
-            buckets[round(float(value), 2)].append(equity)
+    for index in np.flatnonzero(postflop):
+        signature = tuple(round(float(vectors[index, c]), 2) for c in card_columns)
+        buckets[signature].append(equities[index])
     spreads = [(key, np.ptp(vals), np.std(vals), len(vals))
-               for key, vals in buckets.items() if len(vals) >= 25]
+               for key, vals in buckets.items() if len(vals) >= 15]
     spreads.sort(key=lambda x: -x[1])
-    print(f"    {'hand_strength':>14}{'n':>7}{'equity range':>15}{'std':>9}")
+    print(f"    {'card signature':>26}{'n':>6}{'range':>9}{'std':>8}")
     print("    " + "-" * 45)
     for key, span, deviation, n in spreads[:6]:
-        print(f"    {key:>14.2f}{n:>7}{span:>15.3f}{deviation:>9.3f}")
+        shown = " ".join(f"{value:g}" for value in key)
+        print(f"    {shown:>26}{n:>6}{span:>9.3f}{deviation:>8.3f}")
     if spreads:
         worst = max(s[1] for s in spreads)
         typical = float(np.mean([s[2] for s in spreads]))

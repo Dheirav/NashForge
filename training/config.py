@@ -18,7 +18,7 @@ class NetworkConfig:
         output_size: Number of abstract actions (fold, check/call, raise_half, raise_pot, raise_2x, all-in)
         activation: Activation function ('relu', 'tanh', 'sigmoid')
     """
-    input_size: int = 17          # From engine features
+    input_size: int = 19          # From engine features — see get_feature_names()
     hidden_sizes: List[int] = field(default_factory=lambda: [64, 32])
     output_size: int = 6          # Abstract actions
     activation: str = 'relu'

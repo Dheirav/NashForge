@@ -66,7 +66,7 @@ class PPOConfig:
     """
 
     # ── Network ───────────────────────────────────────────────────────
-    obs_size:    int = 17
+    obs_size:    int = 19
     num_actions: int = 6
     hidden_size: int = 128
     num_layers:  int = 2

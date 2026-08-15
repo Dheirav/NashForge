@@ -8,7 +8,6 @@ from .pot import Pot
 from .hand_eval import evaluate_hand, HandEvalResult, HAND_RANKS
 from .showdown import resolve_showdown
 from .features import (
-    get_state_features, 
     get_state_vector, 
     get_feature_names,
     get_action_mask,
@@ -36,7 +35,6 @@ __all__ = [
     'HandEvalResult',
     'HAND_RANKS',
     'resolve_showdown',
-    'get_state_features',
     'get_state_vector',
     'get_feature_names',
     'get_action_mask',

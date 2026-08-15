@@ -36,7 +36,7 @@ class RolloutBuffer:
     def __init__(
         self,
         n_steps:    int,
-        obs_size:   int   = 17,
+        obs_size:   int   = 19,
         num_actions: int  = 6,
         gamma:      float = 0.999,
         gae_lambda: float = 0.95,

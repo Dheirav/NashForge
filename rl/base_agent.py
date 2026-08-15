@@ -26,7 +26,7 @@ class BaseRLAgent(ABC):
     # Number of abstract actions (fold, check/call, raise×3, all-in)
     NUM_ACTIONS: int = 6
     # Feature vector dimensionality (must match engine.get_state_vector)
-    OBS_SIZE: int = 17
+    OBS_SIZE: int = 19
 
     @abstractmethod
     def act(
