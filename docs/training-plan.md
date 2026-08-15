@@ -143,7 +143,7 @@ Updated as work lands. "Blocked" means waiting on a decision, and the decision i
 | | Item | State |
 |---|---|---|
 | 0a | Tests for `rl/` | **done** — 9 tests, `tests/test_rl.py` |
-| 0b | Duplicate play | not started |
+| 0b | Duplicate play | **done** — `cfr/play.py`, ~14% noise reduction |
 | 0c | Benchmark harness | not started |
 | 1 | Rebuild the observation, 17 → 19 | not started — approved, unblocked |
 | 2 | Evolutionary search, heads-up | blocked on 1 |
@@ -161,11 +161,21 @@ The audit's Step 1, never carried out for networks.
   through the environment, observation shape and bounds, that the policy never emits an
   illegal action, that one PPO update runs without producing NaN. Training against an untested
   environment is how the previous round produced numbers nobody could trust.
-- **Duplicate play.** Deal identical cards to both seats and replay with positions swapped, so
-  card luck cancels between runs rather than being averaged over. The audit measured
-  **±258 BB/100 over 600 hands** six-handed; this reduces variance far more than playing more
-  hands. `cfr/play.py` alternates seats but does not duplicate cards — that is the piece to
-  add, and it belongs in a shared harness rather than in each caller.
+- **Duplicate play.** *Done, 15 August.* `alternate_seats` swapped the policies but drew fresh
+  cards each time, so position cancelled and card luck did not. `_play_one` now records each
+  chance outcome and the replay reuses it, so both policies hold the same cards against the
+  same opposing cards. On by default; `duplicate=False` reproduces the old behaviour.
+
+  **It buys about 14%, not the large factor the audit implied.** Per-hand outcomes swing by a
+  full ±200 stack depending on whether an all-in happened, and that is driven by the action
+  sampling, which sharing cards cannot cancel. It is free and strictly better, so it stays on
+  — but hand count remains the real variance lever, and coupling the action stream is the next
+  option if more is ever needed.
+
+  Guarded by two tests: that the noise drops, averaged over seeds because a single run's
+  standard error is itself noisy; and that the *expectation* does not move, since a duplicate
+  run that drifts off a symmetric matchup's true zero would silently corrupt every comparison
+  built on the harness.
 - **One benchmark harness.** Any agent against a fixed panel: random, always-call, and the
   **CFR agent**. Error bars on every figure, seats duplicated, hand counts sized from the
   measured noise floor rather than convention.
