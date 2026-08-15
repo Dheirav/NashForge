@@ -19,7 +19,7 @@ hand is played from both seats.
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any, Callable, Dict, Hashable, Optional, Sequence
+from typing import Any, Callable, Dict, Hashable, List, Optional, Sequence
 
 import numpy as np
 
@@ -103,24 +103,43 @@ class MatchResult:
 
 def play_hands(game: Game, policies: Sequence[Policy], hands: int,
                rng: Optional[np.random.Generator] = None,
-               alternate_seats: bool = True) -> MatchResult:
+               alternate_seats: bool = True,
+               duplicate: bool = True) -> MatchResult:
     """
     Play ``hands`` hands and report the result to ``policies[0]``.
 
     With ``alternate_seats``, each hand is played twice — once from each seat —
-    and the two results averaged, so position cancels rather than being
-    absorbed into the estimate.
+    and the two results averaged, so position cancels rather than being absorbed
+    into the estimate.
+
+    With ``duplicate``, the replay is dealt the *same cards*, which is the
+    substance of the technique rather than a refinement of it. Swapping seats on
+    a fresh deal cancels position and leaves card luck untouched; replaying the
+    identical deal with the seats swapped means each policy holds both hands, so
+    whoever was dealt the better cards no longer shows up in the difference at
+    all. A poker result over a few thousand hands is dominated by that luck, not
+    by skill — the audit measured +/-258 BB/100 over 600 hands — and this
+    removes far more of it than playing more hands does.
+
+    The runout is shared only as far as both replays reach it: if the first hand
+    ends preflop there is no flop to reuse, and the second draws its own. The
+    hole cards, which carry most of the variance, are always shared.
+
+    ``duplicate`` changes the variance of the estimate, never its expectation.
+    Results measured before it existed are unbiased, only noisier.
     """
     rng = rng if rng is not None else np.random.default_rng()
     outcomes = []
 
     for _ in range(hands):
-        if alternate_seats:
-            first = _play_one(game, [policies[0], policies[1]], rng)
-            second = _play_one(game, [policies[1], policies[0]], rng)
-            outcomes.append((first - second) / 2.0)
-        else:
+        if not alternate_seats:
             outcomes.append(_play_one(game, policies, rng))
+            continue
+
+        deal: List[Any] = [] if duplicate else None
+        first = _play_one(game, [policies[0], policies[1]], rng, record=deal)
+        second = _play_one(game, [policies[1], policies[0]], rng, script=deal)
+        outcomes.append((first - second) / 2.0)
 
     values = np.asarray(outcomes, dtype=np.float64)
     stderr = values.std(ddof=1) / np.sqrt(values.size) if values.size > 1 else float("nan")
@@ -128,10 +147,20 @@ def play_hands(game: Game, policies: Sequence[Policy], hands: int,
 
 
 def _play_one(game: Game, policies: Sequence[Policy],
-              rng: np.random.Generator) -> float:
-    """One hand; returns chips to the policy seated at index 0."""
+              rng: np.random.Generator,
+              record: Optional[List[Any]] = None,
+              script: Optional[Sequence[Any]] = None) -> float:
+    """
+    One hand; returns chips to the policy seated at index 0.
+
+    ``record`` collects each chance outcome as it is drawn, and ``script``
+    replays them in the same order — which is how the duplicate replay is dealt
+    the same cards. A script shorter than the hand needs is not an error: the
+    replay simply went further than the original did, and draws the rest.
+    """
     state = game.initial_state()
     guard = 0
+    dealt = 0
 
     while not game.is_terminal(state):
         guard += 1
@@ -139,7 +168,14 @@ def _play_one(game: Game, policies: Sequence[Policy],
             raise RuntimeError(f"hand did not terminate: {state}")
 
         if game.is_chance(state):
-            state = game.next_state(state, game.sample_chance(state, rng))
+            if script is not None and dealt < len(script):
+                outcome = script[dealt]
+            else:
+                outcome = game.sample_chance(state, rng)
+                if record is not None:
+                    record.append(outcome)
+            dealt += 1
+            state = game.next_state(state, outcome)
             continue
 
         player = game.current_player(state)

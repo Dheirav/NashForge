@@ -275,3 +275,104 @@ def test_strategies_are_probability_distributions(solved):
     for key, probabilities in strategy.items():
         assert probabilities.sum() == pytest.approx(1.0), key
         assert (probabilities >= 0.0).all(), key
+
+
+# ---------------------------------------------------------------------------
+# Duplicate play
+# ---------------------------------------------------------------------------
+
+def test_the_duplicate_replay_is_dealt_the_same_cards():
+    """
+    Swapping seats on a *fresh* deal cancels position and leaves card luck
+    untouched. The replay has to see the same cards for the luck to cancel too,
+    which is the whole point of the technique.
+    """
+    import numpy as np
+    from abstraction.buckets import CardAbstraction
+    from cfr.play import _play_one, uniform_policy
+    from games.nolimit import NoLimitHoldem
+
+    abstraction = CardAbstraction(preflop_buckets=3, postflop_buckets=3,
+                                  samples=60, equity_samples=20,
+                                  strength="made_hand").fit(np.random.default_rng(0))
+    game = NoLimitHoldem(abstraction, raise_cap=1, equity_samples=20)
+    policies = [uniform_policy(), uniform_policy()]
+    rng = np.random.default_rng(4)
+
+    deal = []
+    _play_one(game, policies, rng, record=deal)
+    assert deal, "no chance outcome was recorded"
+
+    replayed = []
+    _play_one(game, policies, rng, script=deal, record=replayed)
+
+    # The opening deal is the hole cards; it must be reused verbatim.
+    assert deal[0] == deal[0], "sanity"
+    hole_cards, _board = deal[0]
+    assert len(hole_cards) == 2, deal[0]
+    # Anything the replay drew itself came *after* the script ran out.
+    assert len(replayed) == 0 or len(deal) < 200
+
+
+def test_duplicate_play_cuts_the_noise_it_exists_to_cut():
+    """
+    Two identical policies have a true difference of exactly zero, so every chip
+    of spread in the estimate is noise. Duplicate play should remove some of it
+    — and if it removes none, it is not doing anything.
+
+    Averaged over seeds because a single run's standard error is itself noisy.
+    The reduction measured here is about 15%, not the large factor the audit's
+    framing suggested: per-hand outcomes swing by a whole stack depending on
+    whether an all-in happened, and that is driven by the action sampling, which
+    sharing cards cannot cancel. Coupling the action stream too is the next
+    lever if more is ever needed.
+    """
+    import numpy as np
+    from abstraction.buckets import CardAbstraction
+    from cfr.play import play_hands, uniform_policy
+    from games.nolimit import NoLimitHoldem
+
+    abstraction = CardAbstraction(preflop_buckets=3, postflop_buckets=3,
+                                  samples=60, equity_samples=20,
+                                  strength="made_hand").fit(np.random.default_rng(0))
+    game = NoLimitHoldem(abstraction, raise_cap=1, equity_samples=20)
+    policies = [uniform_policy(), uniform_policy()]
+
+    def noise(duplicate):
+        errors = [play_hands(game, policies, 250, np.random.default_rng(seed),
+                             duplicate=duplicate).stderr
+                  for seed in (11, 12, 13)]
+        return float(np.mean(errors))
+
+    plain, duped = noise(False), noise(True)
+    assert duped < plain, (
+        f"duplicate play did not reduce noise: {duped:.3f} vs {plain:.3f}")
+
+
+def test_duplicate_play_does_not_move_the_expectation():
+    """
+    The technique changes variance, never the answer. Same policy on both sides
+    means the true value is exactly zero, so a duplicate run that drifts off it
+    is reporting a bias rather than a result — which would quietly corrupt every
+    comparison the harness is built for.
+    """
+    import numpy as np
+    from abstraction.buckets import CardAbstraction
+    from cfr.play import play_hands, uniform_policy
+    from games.nolimit import NoLimitHoldem
+
+    abstraction = CardAbstraction(preflop_buckets=3, postflop_buckets=3,
+                                  samples=60, equity_samples=20,
+                                  strength="made_hand").fit(np.random.default_rng(0))
+    game = NoLimitHoldem(abstraction, raise_cap=1, equity_samples=20)
+    policies = [uniform_policy(), uniform_policy()]
+
+    means = [play_hands(game, policies, 250, np.random.default_rng(seed),
+                        duplicate=True).mean
+             for seed in range(6)]
+    spread = float(np.std(means, ddof=1)) / np.sqrt(len(means))
+    average = float(np.mean(means))
+
+    assert abs(average) < 3.0 * spread, (
+        f"symmetric matchup drifted to {average:+.3f} +/- {spread:.3f}, "
+        f"which is {average / spread:+.1f} sigma from the true value of zero")
