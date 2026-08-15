@@ -53,6 +53,7 @@ from typing import Callable, Dict, Hashable, List, Optional, Sequence
 import numpy as np
 
 from abstraction.betting import ALL_IN, CHECK_CALL, FOLD
+from abstraction.betting import legal_actions as solver_legal_actions
 from engine import Action, PokerGame, get_abstract_action_mask
 from training.fitness import abstract_action_to_engine_action, finish_hand
 
@@ -120,16 +121,41 @@ def always_call_agent() -> Agent:
     return act
 
 
+def _solver_actions(history: str, to_call: int, raise_cap: int):
+    """
+    The action list the solver used at this node, in its own order.
+
+    The solver stores a probability per *legal* action, not one per abstract
+    action: mostly arrays of 2 or 5, and only rarely 6. Reading such an array as
+    though slot i meant abstract action i is meaningless, and rejecting it for
+    being the wrong length throws away a perfectly good entry. Either way the
+    entry has to be placed against the actions it was fitted for, which are
+    reconstructible from the betting so far.
+    """
+    street = history.split("/")[-1]
+    raises_so_far = sum(1 for c in street if int(c) in RAISE_ACTIONS)
+    last = int(street[-1]) if street else None
+    return list(solver_legal_actions(raises_so_far, to_call > 0, raise_cap, last))
+
+
 def cfr_agent(strategy: Dict[Hashable, np.ndarray], abstraction,
-              rng: np.random.Generator, misses: Optional[List[int]] = None) -> Agent:
+              rng: np.random.Generator, misses: Optional[List[int]] = None,
+              raise_cap: int = 1) -> Agent:
     """
     A solved strategy, playing in the engine.
 
     The key is rebuilt here rather than read off the engine: the bucket comes
-    from the cards, which are the same objects in both games, and the history
-    is the one this harness has been maintaining. ``misses`` counts information
-    sets the strategy has no entry for, so a benchmark that has quietly become
-    a random opponent shows up as a number.
+    from the cards, which are the same objects in both games, and the history is
+    the one this harness has been maintaining.
+
+    The stored probabilities are then spread onto the six abstract actions
+    through the solver's own legal-action list for that node. Treating the array
+    as already six-wide was wrong twice over — it discarded 77.5% of successful
+    lookups as "missing", and had the lengths happened to match it would have
+    read the numbers against the wrong actions silently.
+
+    ``misses`` is a two-slot counter, [missed, consulted], so a benchmark that
+    has quietly become a second random opponent shows up as a number.
     """
     def act(game, player_id, mask, history):
         hole = game.players[player_id].hole_cards
@@ -141,17 +167,31 @@ def cfr_agent(strategy: Dict[Hashable, np.ndarray], abstraction,
         if misses is not None:
             misses[1] += 1
 
-        if probabilities is None or probabilities.size != NUM_ACTIONS:
+        def guess():
             if misses is not None:
                 misses[0] += 1
             return int(rng.choice(legal))
 
-        weights = np.asarray(probabilities, dtype=np.float64) * mask
+        if probabilities is None:
+            return guess()
+
+        actor = game.players[player_id]
+        to_call = game.current_bet - actor.bet
+        actions = _solver_actions(history, to_call, raise_cap)
+        if len(actions) != probabilities.size:
+            # The reconstruction disagrees with the stored width, so the entry
+            # cannot be placed reliably. Rare, and counted rather than guessed at
+            # quietly.
+            return guess()
+
+        weights = np.zeros(NUM_ACTIONS, dtype=np.float64)
+        for action, probability in zip(actions, np.asarray(probabilities, dtype=np.float64)):
+            weights[action] = probability
+        weights *= mask
+
         total = weights.sum()
         if total <= 0.0:
-            if misses is not None:
-                misses[0] += 1
-            return int(rng.choice(legal))
+            return guess()
         return int(rng.choice(NUM_ACTIONS, p=weights / total))
     return act
 
