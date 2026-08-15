@@ -126,6 +126,31 @@ nothing of value is lost.
 
 ---
 
+## Decisions taken, 15 August
+
+| | Decision | Why |
+|---|---|---|
+| Feature change | **Approved** — 17 → 19 | Measured; invalidates saved genomes, all of which came from the invalidated pipeline |
+| Layout | **One shared layout** for both table sizes | Two layouts re-open the exact crack the audit found bugs in — `FeatureCache` and `get_state_vector` had drifted apart. Costs two dead slots heads-up |
+| Budget axis | **Hands played**, not wall-clock | GA is CPU-parallel and PPO is not; wall-clock would compare hardware as much as algorithms. Wall-clock is still recorded alongside |
+| PPO device | **CPU**, pending a profile | The network is a small MLP over 19 inputs; the Python engine is almost certainly the bottleneck. GPU adds a second memory pool on a box that has died twice from memory pressure |
+| PPO self-play | Snapshot every ~10 updates, pool of last 5–10 | Sample from the pool most of the time, with some probability of facing the current policy |
+
+## Progress
+
+Updated as work lands. "Blocked" means waiting on a decision, and the decision is named.
+
+| | Item | State |
+|---|---|---|
+| 0a | Tests for `rl/` | **done** — 9 tests, `tests/test_rl.py` |
+| 0b | Duplicate play | not started |
+| 0c | Benchmark harness | not started |
+| 1 | Rebuild the observation, 17 → 19 | not started — approved, unblocked |
+| 2 | Evolutionary search, heads-up | blocked on 1 |
+| 3 | PPO with self-play, heads-up | blocked on 1; needs snapshot pooling built |
+| 4 | The comparison | blocked on 2 and 3 |
+| 5 | Six-max | blocked on 4; also needs the `play_match` stack-drift fix below |
+
 ## Phases
 
 ### Phase 0 — make the measurement trustworthy
