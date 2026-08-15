@@ -1,5 +1,8 @@
 """Build the NashForge report in IEEE conference format."""
+import os
 import re
+
+ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 
 from docx import Document
 from docx.enum.section import WD_SECTION
@@ -9,8 +12,8 @@ from docx.oxml import OxmlElement
 from docx.oxml.ns import qn
 from docx.shared import Inches, Pt, RGBColor
 
-FIGS = "/home/dheirav/pokerbot-scratch/ieee"
-OUT = "/home/dheirav/pokerbot-scratch/NashForge_IEEE.docx"
+FIGS = os.path.join(ROOT, "docs", "figures", "ieee")
+OUT = os.path.join(ROOT, "docs", "NashForge_IEEE.docx")
 FONT = "Times New Roman"
 
 doc = Document()
