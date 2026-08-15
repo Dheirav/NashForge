@@ -1,13 +1,16 @@
 """Build the NashForge assignment as a Word document."""
+import os
 import re
+
+ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 
 from docx import Document
 from docx.enum.table import WD_TABLE_ALIGNMENT
 from docx.enum.text import WD_ALIGN_PARAGRAPH
 from docx.shared import Inches, Pt, RGBColor
 
-FIGS = "/home/dheirav/pokerbot-scratch"
-OUT = "/home/dheirav/pokerbot-scratch/NashForge_Assignment.docx"
+FIGS = os.path.join(ROOT, "docs", "figures")
+OUT = os.path.join(ROOT, "docs", "NashForge_Assignment.docx")
 
 SERIF, SANS = "Cambria", "Calibri"
 ACCENT = RGBColor(0x2F, 0x48, 0x58)
