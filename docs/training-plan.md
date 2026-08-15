@@ -1,6 +1,6 @@
 # NashForge — training plan: evolutionary search and PPO, heads-up first
 
-**Status:** planned, not started. Written 15 August 2026.
+**Status:** Phases 0–2 complete. Written 15 August 2026, last updated the same day.
 
 The goal is a comparison: how close do evolutionary search and policy gradient get to a
 solver-derived strategy, given the same budget on the same engine? Heads-up first, six-max
@@ -146,9 +146,9 @@ Updated as work lands. "Blocked" means waiting on a decision, and the decision i
 | 0b | Duplicate play | **done** — `cfr/play.py`, ~14% noise reduction |
 | 0c | Benchmark harness | **done** — `evaluation/`, 9 tests |
 | 1 | Rebuild the observation, 17 → 19 | **done** — effective dimensions 6 → 9 |
-| 2 | Evolutionary search, heads-up | **unblocked** — next |
-| 3 | PPO with self-play, heads-up | unblocked; still needs snapshot pooling built |
-| 4 | The comparison | blocked on 2 and 3 |
+| 2 | Evolutionary search, heads-up | **done** — learned to exploit randomness, nothing transferred |
+| 3 | PPO with self-play, heads-up | **unblocked — next**; still needs snapshot pooling built |
+| 4 | The comparison | blocked on 3 |
 | 5 | Six-max | blocked on 4; also needs the `play_match` stack-drift fix below |
 
 ## Phases
@@ -209,9 +209,55 @@ networks with 17 inputs; and a hardcoded `GENOME_SIZE = 3430` in the tests. That
 now derived from the network config, since a written-down width is exactly what disagreed with
 reality here.
 
-### Phase 2 — evolutionary search, heads-up
+### Phase 2 — evolutionary search, heads-up — DONE, 15 August
 
-Seeds, wall-clock budget ladder, measured against the Phase 0 panel.
+Fifty generations, population 30, **24,000 hands per genome** — a budget set from the measured
+noise floor rather than convention. Re-scoring the same population under different hands moves
+a genome by 136 BB/100 at 2,000 hands, 66 at 8,000 and 31 at 24,000.
+
+**The endpoint result.** Final genome against an untrained one from the same initial
+distribution, both against the same panel at 40,000 hands (±14 BB/100):
+
+| opponent | untrained | after 50 generations | difference | |
+|---|---|---|---|---|
+| random | −13.4 ± 14 | **+192.7 ± 15** | **+206.1 ± 39** | improved |
+| always-call | −8.1 ± 14 | +0.5 ± 4 | +8.6 ± 28 | no change |
+| CFR | −403.9 ± 13 | −370.1 ± 14 | +33.8 ± 37 | no change |
+
+**Evolutionary search learned to exploit randomness, not to play poker.** It punishes an
+opponent that folds and raises at random by 206 BB/100, gains nothing against a station that
+never folds, and is still beaten by the solver by 370 BB/100 after fifty generations. That is
+a sharper finding than the audit's prediction that the method would simply plateau — it did
+learn, and what it learned did not transfer.
+
+Only the panel makes that visible. Self-play fitness sat near zero throughout, as the zero-sum
+property requires, and says nothing about whether anything was learned.
+
+### Phase 2's three false results, and what caught each
+
+Every one of them looked like a finding, and each was caught by a check that already existed.
+Recorded because the pattern is the argument for the framework, more than any single number in
+it.
+
+**The per-generation panel curve.** Taken over 3,000 hands, ±57 BB/100, and read during the run
+as rising from +111 to +214. Across eleven readings it scattered with a standard deviation of
+56 — indistinguishable from a constant. A measurement that coarse does not return "no result";
+it returns a plausible shape. The endpoint test at 40,000 hands found the real effect the
+curve could never have resolved.
+
+**"The evolved agent beats a game-theoretic solver."** The CFR row first read +60.8, alongside
+a 74.3% lookup miss rate. The miss-rate counter exists precisely so a benchmark that has
+quietly become a second random opponent shows up as a number. In the previous regime this
+would have been published.
+
+**"Half the abstraction is unreachable."** The explanation offered for that miss rate — that
+the solver covers 47% of its information sets at 4,000 iterations and 51% at 59,050, so a
+network opponent lands off its trajectory and more training cannot help — was itself wrong,
+and was committed. Nothing was missing: every lookup found its key. The solver stores one
+probability per *legal action at a node*, so arrays are mostly length 2 or 5, and the harness
+discarded anything that was not length 6. That was 77.5% of successful lookups. The tell was
+available and misread — a 100% hit rate against a random opponent should have ruled out
+"structurally unreachable" immediately.
 
 ### Phase 3 — PPO with genuine self-play, heads-up
 

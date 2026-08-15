@@ -273,7 +273,7 @@ traversal on Leduc Hold'em; the card abstraction's cost and benefit are measured
 assumed; and every published figure carries a confidence interval. During development this
 discipline caused several previously published results to be formally withdrawn, and that
 correction is reported here as a finding in its own right rather than omitted. The system is
-covered by 195 automated regression tests.
+covered by 197 automated regression tests.
 </p>
 
 <h2>Literature Survey</h2>
@@ -635,7 +635,7 @@ abstraction and the evaluation harness are written from scratch in <strong>Pytho
 using <strong>NumPy</strong> for vectorised arithmetic and <strong>Numba</strong> for
 just-in-time compilation of the hand evaluator, which sits on the hot path of every traversal.
 The reinforcement learning component uses <strong>PyTorch</strong> for the actor-critic network.
-Testing is by <strong>pytest</strong>, with 195 regression tests; version control and
+Testing is by <strong>pytest</strong>, with 197 regression tests; version control and
 reproducibility are handled through <strong>Git</strong>, with every experimental result stored
 as JSON alongside the script that produced it.
 </p>
@@ -643,7 +643,7 @@ as JSON alongside the script that produced it.
 <h2>Performance Metrics and Analysis</h2>
 
 <div class="tiles">
-  <div class="tile"><span class="n">195</span><span class="k">regression tests, from zero before the audit</span></div>
+  <div class="tile"><span class="n">197</span><span class="k">regression tests, from zero before the audit</span></div>
   <div class="tile"><span class="n">−1/18</span><span class="k">Kuhn game value reproduced analytically</span></div>
   <div class="tile"><span class="n">5.4×</span><span class="k">cost of equity over made-hand bucketing</span></div>
   <div class="tile"><span class="n">7.8σ</span><span class="k">separation of the headline result</span></div>
@@ -858,6 +858,76 @@ measured by regression.
 </table>
 </div>
 
+<h2>Phase Two — Evolutionary Search, Measured</h2>
+
+<p>With the measurement apparatus validated, the second family of agent was trained and evaluated: a population of neural policies optimised by selection and Gaussian mutation over fifty generations, heads-up, on the rebuilt nineteen-feature observation. The training budget was set from measurement rather than convention — re-scoring the same population under different hands moves a genome by 136 BB/100 at 2,000 hands and 31 at 24,000, so 24,000 hands per genome was used.</p>
+<p>The result is reported as an endpoint comparison rather than a learning curve, for reasons given below. The final genome and an untrained genome drawn from the same initial distribution were played against the identical panel at 40,000 hands, giving an uncertainty of about 14 BB/100.</p>
+
+<figure>
+  <span class="fig-title">Figure 4 · Evolutionary search, before and after fifty generations</span>
+  <span class="fig-sub">Endpoint comparison at 40,000 hands per matchup. The evolved agent improves decisively against a random opponent and not at all against either the calling station or the solver.</span>
+<div class="plot">
+    <svg viewBox="0 0 700 240" role="img"
+         aria-label="Against a random opponent the evolved agent goes from minus 13 to plus 193 BB per 100. Against always-call it stays at zero. Against the CFR agent it stays near minus 400.">
+      <g class="ax" text-anchor="middle">
+        <text x="187.6" y="228">−500</text><text x="250.4" y="228">−400</text>
+        <text x="313.2" y="228">−300</text><text x="376.0" y="228">−200</text>
+        <text x="438.8" y="228">−100</text><text x="501.6" y="228">0</text>
+        <text x="564.4" y="228">+100</text><text x="627.2" y="228">+200</text>
+      </g>
+      <g stroke="var(--rule)" stroke-width="1">
+        <line x1="187.6" y1="40" x2="187.6" y2="214"/><line x1="250.4" y1="40" x2="250.4" y2="214"/>
+        <line x1="313.2" y1="40" x2="313.2" y2="214"/><line x1="376.0" y1="40" x2="376.0" y2="214"/>
+        <line x1="438.8" y1="40" x2="438.8" y2="214"/><line x1="564.4" y1="40" x2="564.4" y2="214"/>
+        <line x1="627.2" y1="40" x2="627.2" y2="214"/>
+      </g>
+      <line x1="501.6" y1="36" x2="501.6" y2="216" stroke="var(--ink-faint)" stroke-width="1.5"/>
+
+      <text class="rowlab" x="140" y="74" text-anchor="end">vs random</text>
+      <rect x="493.2" y="52" width="8.4" height="17" rx="3" fill="var(--series-2)"><title>untrained −13.4 ± 14</title></rect>
+      <text class="val" x="486" y="65" text-anchor="end">−13</text>
+      <rect x="501.6" y="73" width="121.0" height="17" rx="3" fill="var(--series-1)"><title>after 50 generations +192.7 ± 15</title></rect>
+      <text class="val" x="630" y="86">+193</text>
+
+      <text class="rowlab" x="140" y="134" text-anchor="end">vs always-call</text>
+      <rect x="496.5" y="112" width="5.1" height="17" rx="3" fill="var(--series-2)"><title>untrained −8.1 ± 14</title></rect>
+      <text class="val" x="489" y="125" text-anchor="end">−8</text>
+      <rect x="501.6" y="133" width="1.5" height="17" rx="1" fill="var(--series-1)"><title>after 50 generations +0.5 ± 4</title></rect>
+      <text class="val" x="510" y="146">+0</text>
+
+      <text class="rowlab" x="140" y="194" text-anchor="end">vs CFR agent</text>
+      <rect x="247.9" y="172" width="253.7" height="17" rx="3" fill="var(--series-2)"><title>untrained −403.9 ± 13</title></rect>
+      <text class="val" x="240" y="185" text-anchor="end">−404</text>
+      <rect x="269.2" y="193" width="232.4" height="17" rx="3" fill="var(--series-1)"><title>after 50 generations −370.1 ± 14</title></rect>
+      <text class="val" x="262" y="206" text-anchor="end">−370</text>
+
+      <g class="ax"><text x="360" y="30">BB/100 to the evolved agent</text></g>
+    </svg>
+  </div>
+  <div class="legend">
+    <span><i class="swatch" style="background:var(--series-2)"></i>untrained</span>
+    <span><i class="swatch" style="background:var(--series-1)"></i>after 50 generations</span>
+  </div>
+  <div class="tablewrap">
+  <table>
+    <caption>Table 3 · Endpoint comparison, 40,000 hands per matchup</caption>
+    <thead><tr><th>Opponent</th><th>Untrained</th><th>After 50 generations</th><th>Difference</th><th>Verdict</th></tr></thead>
+    <tbody><tr><td>random</td><td>−13.4 ± 14</td><td>+192.7 ± 15</td><td>+206.1 ± 39</td><td>improved</td></tr>
+<tr><td>always-call</td><td>−8.1 ± 14</td><td>+0.5 ± 4</td><td>+8.6 ± 28</td><td>no change</td></tr>
+<tr><td>CFR agent</td><td>−403.9 ± 13</td><td>−370.1 ± 14</td><td>+33.8 ± 37</td><td>no change</td></tr></tbody>
+  </table>
+  </div>
+  <figcaption>Fifty generations of selection produce a decisive gain against a random
+  opponent and nothing at all against either the calling station or the solver. Error bars are
+  95% intervals at 40,000 hands per matchup.</figcaption>
+</figure>
+
+<p><strong>Evolutionary search learned to exploit randomness rather than to play poker.</strong> It punishes an opponent that folds and raises at random by 206 BB/100, a difference of more than five standard errors. It gains nothing against a station that never folds, which can only be beaten by betting for value. And against the solver-derived agent it remains beaten by 370 BB/100 after fifty generations, having improved by nothing measurable. What it learned did not transfer, which is a more specific finding than the prediction that the method would simply plateau.</p>
+<p>Only the independent panel makes this visible. Self-play fitness sat near zero throughout, as the zero-sum property of poker requires, and reveals nothing about whether anything was learned — which is precisely why the earlier pipeline could improve against itself for eighty-nine runs while getting worse at the game.</p>
+
+<h3>Three false results, and what caught each</h3>
+<p>Three results during this phase looked like findings and were not, and each was caught by a check already built into the framework. A per-generation panel curve measured over 3,000 hands appeared to rise from +111 to +214 BB/100; across eleven readings it scattered with a standard deviation of 56 against a measurement error of 57, and was indistinguishable from a constant. A benchmark row reported the evolved agent beating the solver by 60.8 BB/100, alongside a 74.3% lookup miss rate — the counter that exists so a benchmark which has quietly become a second random opponent shows up as a number. And the explanation first offered for that miss rate, that the solver covers only half its abstraction, was itself wrong: every lookup had found its key, and the harness was discarding valid entries because the solver stores one probability per legal action at a node rather than one per abstract action. A measurement that is too coarse or subtly wrong does not return no result; it returns a plausible one.</p>
+
 <h2>Final Result Obtained</h2>
 
 <p>
@@ -923,7 +993,7 @@ favourite while appearing indistinguishable — a limit no amount of training ca
 
 <div class="tablewrap">
 <table>
-  <caption>Table 3 · NashForge against conventional approaches</caption>
+  <caption>Table 4 · NashForge against conventional approaches</caption>
   <thead><tr><th>Capability</th><th>Heuristic Bot</th><th>Standard RL System</th><th>Proposed NashForge</th></tr></thead>
   <tbody>
     <tr><td>Strategy source</td><td>Hand-written rules</td><td>Learned policy</td><td class="hi">Three families compared</td></tr>
