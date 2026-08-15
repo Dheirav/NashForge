@@ -54,7 +54,7 @@ import numpy as np
 
 from abstraction.betting import ALL_IN, CHECK_CALL, FOLD
 from engine import Action, PokerGame, get_abstract_action_mask
-from training.fitness import abstract_action_to_engine_action
+from training.fitness import abstract_action_to_engine_action, finish_hand
 
 #: An agent is called with the game, its seat, the legality mask over the six
 #: abstract actions, and the solver-format betting history so far. It returns an
@@ -138,6 +138,8 @@ def cfr_agent(strategy: Dict[Hashable, np.ndarray], abstraction,
 
         probabilities = strategy.get(f"{bucket}|{history}")
         legal = np.flatnonzero(mask)
+        if misses is not None:
+            misses[1] += 1
 
         if probabilities is None or probabilities.size != NUM_ACTIONS:
             if misses is not None:
@@ -223,6 +225,13 @@ def _play_hand(agents: Sequence[Agent], seed: int, starting_stack: int,
 
         game.apply_action(player, abstract_action_to_engine_action(choice, game, player))
 
+    # is_hand_over() means the betting is finished, not that the pot has been
+    # paid: at showdown the chips are still in the middle. Reading stacks here
+    # without settling scores every hand as a loss of whatever was contributed,
+    # which looks entirely stable — every deal returned exactly -2 — and is
+    # entirely wrong. resolve_showdown also handles a lone survivor, so it must
+    # run on fold-outs too.
+    finish_hand(game)
     return game.players[0].stack - starting_stack
 
 
@@ -242,9 +251,8 @@ def benchmark(agent: Agent, opponent: Agent, name: str, hands: int = 2000,
     seats; card luck cancels because both hold the same cards.
     """
     outcomes = np.empty(hands, dtype=np.float64)
-    decisions = [0]
     if misses is None:
-        misses = [0]
+        misses = [0, 0]
 
     for index in range(hands):
         deal = seed * 1_000_003 + index
@@ -253,15 +261,14 @@ def benchmark(agent: Agent, opponent: Agent, name: str, hands: int = 2000,
         theirs = _play_hand([opponent, agent], deal, starting_stack,
                             small_blind, big_blind, raise_cap)
         outcomes[index] = (ours - theirs) / 2.0
-        decisions[0] += 1
 
     stderr = (float(outcomes.std(ddof=1) / math.sqrt(hands)) if hands > 1
               else float("nan"))
-    seen = max(1, decisions[0])
+    consulted = max(1, misses[1])
     return BenchmarkResult(opponent=name, hands=hands,
                            chips_per_hand=float(outcomes.mean()), stderr=stderr,
                            big_blind=big_blind,
-                           lookup_miss_rate=misses[0] / seen)
+                           lookup_miss_rate=misses[0] / consulted)
 
 
 def default_panel(rng: np.random.Generator,
