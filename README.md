@@ -1,6 +1,9 @@
-# PokerBot
+# NashForge
 
-**Counterfactual regret minimization on heads-up no-limit Hold'em, over a verified poker engine.**
+**A Multi-Agent Framework for Comparative Evaluation of Game-Theoretic, Evolutionary, and Reinforcement Learning Agents in Imperfect-Information Games**
+
+Counterfactual regret minimization on heads-up no-limit Hold'em, over a verified poker engine —
+with evolutionary search and PPO measured against it on the same instrument.
 
 [![Python 3.8+](https://img.shields.io/badge/python-3.8+-blue.svg)](https://www.python.org/downloads/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)

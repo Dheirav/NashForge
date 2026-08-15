@@ -1,4 +1,4 @@
-# Training plan — evolutionary search and PPO, heads-up first
+# NashForge — training plan: evolutionary search and PPO, heads-up first
 
 **Status:** planned, not started. Written 15 August 2026.
 
