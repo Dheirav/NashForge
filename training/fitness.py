@@ -511,6 +511,17 @@ def evaluate_matchup(genome_weights: np.ndarray,
     total_delta_bb = 0.0
     hands_played = 0
     
+    # Pair every deal with its mirror before play begins: index 2k and 2k+1
+    # share a hand seed and hold reversed seat orders. Half as many distinct
+    # deals for the same hand budget, each seen from both sides.
+    schedule = []
+    for pair_start in range(0, num_hands, 2):
+        order = list(range(num_players))
+        rng.shuffle(order)
+        schedule.append((hand_seeds[pair_start], order))
+        if pair_start + 1 < num_hands:
+            schedule.append((hand_seeds[pair_start], order[::-1]))
+
     # Process hands in batches for better performance
     batch_size = 8  # Process 8 hands simultaneously
     
@@ -525,9 +536,12 @@ def evaluate_matchup(genome_weights: np.ndarray,
         bb_batch = []
 
         for hand_idx in range(batch_start, batch_end):
-            # Shuffle seat positions
-            seat_order = list(range(num_players))
-            rng.shuffle(seat_order)
+            # Duplicate play: consecutive hands share a deal and reverse the
+            # seating, so the hero holds both sides of the same cards. Rotating
+            # seats alone cancels position and leaves card luck untouched, which
+            # is the larger of the two — a genome's score moved by 136 BB/100
+            # between two measurements of the same weights before this.
+            seed, seat_order = schedule[hand_idx]
 
             # Shuffle networks to match seat order: seat j plays networks[seat_order[j]].
             shuffled_networks = [networks[i] for i in seat_order]
@@ -540,7 +554,7 @@ def evaluate_matchup(genome_weights: np.ndarray,
             hero_seats_batch.append(seat_order.index(0))
 
             # Create game
-            game, bb = new_game(hand_seeds[hand_idx])
+            game, bb = new_game(seed)
             games_batch.append(game)
             bb_batch.append(bb)
 
@@ -652,7 +666,9 @@ def _worker_evaluate_genome(args: Tuple) -> EvalResult:
             n_players = fitness_config.num_players
 
         is_hu = (n_players == 2)
-        hands = fitness_config.hu_hands_per_matchup if is_hu else fitness_config.hands_per_matchup
+        hands = (fitness_config.hu_hands_per_matchup
+                 if is_hu and fitness_config.hu_hands_per_matchup is not None
+                 else fitness_config.hands_per_matchup)
 
         # Use pre-generated hand seeds of the desired length to avoid mutating the
         # shared config object (important for sequential / num_workers=1 mode).
@@ -855,7 +871,9 @@ class FitnessEvaluator:
             seed = self.rng.integers(0, 2**31)
             n_players = pc[matchup_idx] if matchup_idx < len(pc) else self.config.num_players
             is_hu = (n_players == 2)
-            hands_override = self.config.hu_hands_per_matchup if is_hu else self.config.hands_per_matchup
+            hands_override = (self.config.hu_hands_per_matchup
+                              if is_hu and self.config.hu_hands_per_matchup is not None
+                              else self.config.hands_per_matchup)
             orig = self.config.hands_per_matchup
             self.config.hands_per_matchup = hands_override
             delta, hands = evaluate_matchup(
