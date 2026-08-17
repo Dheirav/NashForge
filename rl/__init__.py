@@ -22,6 +22,7 @@ from .ppo.config  import PPOConfig
 from .ppo.agent   import PPOAgent
 from .ppo.trainer import PPOTrainer
 from .ppo.buffer  import RolloutBuffer
+from .ppo.snapshots import SnapshotPool
 
 from .eval.evaluator import evaluate_vs_pool, run_tournament
 
@@ -37,6 +38,7 @@ __all__ = [
     "PPOAgent",
     "PPOTrainer",
     "RolloutBuffer",
+    "SnapshotPool",
     # Evaluation
     "evaluate_vs_pool",
     "run_tournament",

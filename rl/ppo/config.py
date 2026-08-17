@@ -33,7 +33,8 @@ class PPOConfig:
 
     Rollout
     -------
-    n_steps:         Steps to collect per update (hands, not individual actions).
+    n_steps:         Agent *decisions* to collect per update, not hands. A
+                     heads-up hand is about 1.8 decisions.
     n_envs:          Number of parallel environments (threads).
 
     PPO update
@@ -58,11 +59,17 @@ class PPOConfig:
     checkpoint_dir:  Directory to save checkpoints.
     log_dir:         Directory for training logs (CSV).
 
-    Hall-of-fame
-    ------------
-    hof_dir:         Path to existing hall-of-fame directory (evolution agents).
-                     If set, opponents are sampled from HoF at each episode.
-    hof_sample_prob: Probability of using a HoF agent as the opponent.
+    Self-play opponents
+    -------------------
+    snapshot_every:      Update cycles between policy snapshots into the pool.
+    snapshot_pool_size:  How many past snapshots to retain (the most recent N).
+    current_policy_prob: Probability of facing the live policy rather than a
+                         snapshot. Below 1.0 the policy spends most hands
+                         against its own past, which is the point.
+
+    The hall-of-fame options that used to live here are gone. The directory is
+    empty, and every genome that would have filled it was bred on the fitness
+    function the audit withdrew — see rl/ppo/snapshots.py.
     """
 
     # ── Network ───────────────────────────────────────────────────────
@@ -77,9 +84,19 @@ class PPOConfig:
     small_blind:            int  = 5
     big_blind:              int  = 10
     use_aggression_shaper:  bool = False
+    # None derives it as big_blind / starting_stack, putting the reward in
+    # stacks rather than big blinds so returns are O(1) and the critic does not
+    # swamp the policy through the shared trunk. See PokerEnv.reward_scale for
+    # the measurement. Set a float to override.
+    reward_scale:           Optional[float] = None
 
     # ── Rollout ───────────────────────────────────────────────────────
-    n_steps: int = 512    # hands per rollout
+    # n_steps counts *decisions*, not hands. Heads-up against a random
+    # opponent that is about 1.8 decisions per hand, measured, so 512 steps is
+    # roughly 280 hands. The docstring above used to call these hands, which is
+    # the same class of mistake as commit 898e654 in the evolutionary loop:
+    # a budget parameter whose name means something other than what it counts.
+    n_steps: int = 512    # decisions per rollout
     n_envs:  int = 1      # parallel envs (kept as 1 for simplicity; extend later)
 
     # ── PPO update ────────────────────────────────────────────────────
@@ -102,9 +119,12 @@ class PPOConfig:
     checkpoint_dir:  str = "checkpoints/ppo"
     log_dir:         str = "logs/ppo"
 
-    # ── Hall-of-fame opponents ────────────────────────────────────────
-    hof_dir:          Optional[str]   = None
-    hof_sample_prob:  float           = 0.5
+    # ── Self-play opponents ───────────────────────────────────────────
+    # Decided 15 August: snapshot every ~10 updates, keep the last 5-10, face
+    # the pool most of the time. See docs/training-plan.md.
+    snapshot_every:       int   = 10
+    snapshot_pool_size:   int   = 8
+    current_policy_prob:  float = 0.2
 
     # ── Misc ─────────────────────────────────────────────────────────
     seed:    Optional[int] = None
@@ -129,17 +149,42 @@ class PPOConfig:
             "n_steps must be >= batch_size"
         assert 0 < self.clip_range < 1, \
             "clip_range should be in (0, 1)"
+        assert self.snapshot_every >= 1, \
+            "snapshot_every counts update cycles and must be at least 1"
+        assert self.snapshot_pool_size >= 1, \
+            "snapshot_pool_size must retain at least one snapshot"
+        assert 0.0 <= self.current_policy_prob <= 1.0, \
+            "current_policy_prob is a probability"
+
+    @property
+    def effective_reward_scale(self) -> float:
+        """`reward_scale`, or the table-derived default when it is None."""
+        if self.reward_scale is not None:
+            return float(self.reward_scale)
+        return self.big_blind / self.starting_stack
 
     @classmethod
     def heads_up_default(cls) -> "PPOConfig":
-        """Sensible defaults for heads-up training."""
+        """
+        Sensible defaults for heads-up training.
+
+        The table is 200 chips at blinds 1/2 because that is the table
+        `evaluation.benchmark` plays on and the one Phase 2's evolutionary run
+        used. It is 100 big blinds either way, so this changes the unit rather
+        than the game — but Phase 4 compares the two families directly, and a
+        difference that has to be explained away is worse than one that does
+        not exist.
+        """
         return cls(
             num_players=2,
+            starting_stack=200,
+            small_blind=1,
+            big_blind=2,
             n_steps=512,
             total_hands=500_000,
             hidden_size=128,
             ent_coef=0.01,
-            hof_sample_prob=0.5,
+            current_policy_prob=0.2,
         )
 
     @classmethod
@@ -147,9 +192,12 @@ class PPOConfig:
         """Sensible defaults for 6-max training."""
         return cls(
             num_players=6,
+            starting_stack=200,
+            small_blind=1,
+            big_blind=2,
             n_steps=1024,
             total_hands=2_000_000,
             hidden_size=256,
             ent_coef=0.005,
-            hof_sample_prob=0.3,
+            current_policy_prob=0.2,
         )

@@ -18,12 +18,13 @@ python run_ppo_training.py \\
     --num-layers 3 \\
     --lr 1e-4 \\
     --n-steps 1024 \\
-    --hof-dir hall_of_fame/batch5_hu \\
+    --snapshot-every 10 \\
+    --snapshot-pool-size 8 \\
     --checkpoint-dir checkpoints/ppo_hu_v1 \\
     --device cpu \\
     --seed 42
 
-# Evaluate an existing checkpoint vs evolution agents:
+# Floor-check an existing checkpoint against a random opponent:
 python run_ppo_training.py --eval-only --checkpoint checkpoints/ppo/ppo_final.pt
 
 # Dry-run (print config and exit):
@@ -35,8 +36,9 @@ import json
 import os
 import sys
 
-# Ensure repo root is on path
-sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+# Ensure repo root is on path. This pointed at `scripts/` itself, left over
+# from when the launcher sat at the top level, so importing `rl` failed.
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
 from rl import PPOConfig, PPOTrainer, PPOAgent, run_tournament
 from rl.agents import RandomOpponent
@@ -65,9 +67,12 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--num-layers",  type=int,  default=None, help="Number of trunk layers")
 
     # Environment
-    p.add_argument("--starting-stack", type=int, default=1_000)
-    p.add_argument("--small-blind",    type=int, default=5)
-    p.add_argument("--big-blind",      type=int, default=10)
+    # None so the mode default wins unless the flag is actually given. These
+    # carried 1000/5/10, which silently overrode heads_up_default()'s 200/1/2
+    # — the table `evaluation.benchmark` measures on — on every single run.
+    p.add_argument("--starting-stack", type=int, default=None)
+    p.add_argument("--small-blind",    type=int, default=None)
+    p.add_argument("--big-blind",      type=int, default=None)
     p.add_argument("--use-aggression-shaper", action="store_true",
                    help="Add dense aggression reward signal")
 
@@ -90,10 +95,15 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--eval-every",  type=int, default=20)
     p.add_argument("--save-every",  type=int, default=50)
 
+    # Self-play opponents
+    p.add_argument("--snapshot-every", type=int, default=None,
+                   help="Update cycles between policy snapshots into the pool")
+    p.add_argument("--snapshot-pool-size", type=int, default=None,
+                   help="How many past snapshots to keep")
+    p.add_argument("--current-policy-prob", type=float, default=None,
+                   help="Probability of facing the live policy, not a snapshot")
+
     # IO
-    p.add_argument("--hof-dir",         type=str, default=None,
-                   help="Path to hall-of-fame directory (.npy files)")
-    p.add_argument("--hof-sample-prob", type=float, default=0.5)
     p.add_argument("--checkpoint-dir",  type=str,  default=None)
     p.add_argument("--checkpoint",      type=str,  default=None,
                    help="Path to .pt file (for --eval-only or resume)")
@@ -139,8 +149,9 @@ def build_config(args: argparse.Namespace) -> PPOConfig:
         "total_hands":          args.total_hands,
         "eval_every":           args.eval_every,
         "save_every":           args.save_every,
-        "hof_dir":              args.hof_dir,
-        "hof_sample_prob":      args.hof_sample_prob,
+        "snapshot_every":       args.snapshot_every,
+        "snapshot_pool_size":   args.snapshot_pool_size,
+        "current_policy_prob":  args.current_policy_prob,
         "device":               args.device,
         "seed":                 args.seed,
         "verbose":              args.verbose,
@@ -195,13 +206,10 @@ def main() -> None:
         print(f"[eval] Loading checkpoint: {args.checkpoint}")
         agent = PPOAgent.from_checkpoint(args.checkpoint, device=args.device)
 
-        # Load HoF if provided
-        if args.hof_dir:
-            from rl.ppo.trainer import _load_hof_opponents
-            opponents = _load_hof_opponents(args.hof_dir)
-            print(f"[eval] Loaded {len(opponents)} HoF opponents")
-        else:
-            opponents = [RandomOpponent()]
+        # A floor check only. The measurement is scripts/endpoint_test.py,
+        # which plays the panel — random, always-call and the CFR agent — at a
+        # hand count that can resolve the difference.
+        opponents = [RandomOpponent()]
 
         from rl.eval.evaluator import evaluate_vs_pool
         result = evaluate_vs_pool(
@@ -220,8 +228,8 @@ def main() -> None:
     print(f"[train] Mode={args.mode}  total_hands={cfg.total_hands:,}")
     print(f"        checkpoint_dir={cfg.checkpoint_dir}")
     print(f"        log_dir={cfg.log_dir}")
-    if cfg.hof_dir:
-        print(f"        hof_dir={cfg.hof_dir}")
+    print(f"        self-play: snapshot every {cfg.snapshot_every} updates, "
+          f"keep {cfg.snapshot_pool_size}, live policy {cfg.current_policy_prob:.0%}")
 
     # Save config alongside checkpoint
     os.makedirs(cfg.checkpoint_dir, exist_ok=True)
