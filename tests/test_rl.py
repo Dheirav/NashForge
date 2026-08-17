@@ -27,6 +27,7 @@ import random
 
 import numpy as np
 import pytest
+import torch
 
 from engine import get_abstract_action_mask, get_feature_names
 from rl import PokerEnv, PPOAgent, PPOConfig, PPOTrainer
@@ -491,6 +492,46 @@ def test_the_critic_does_not_swamp_the_policy_through_the_shared_trunk(config):
     assert unscaled > 5.0, (
         f"unscaled returns spread only {unscaled:.1f}, so this test is no "
         f"longer measuring the thing it was written for")
+
+
+def test_an_interrupted_run_resumes_where_it_stopped(config, tmp_path):
+    """
+    A rung of the ladder is four hours on a box that has been terminated twice
+    under memory pressure, so resume is not a convenience.
+
+    Restoring the policy alone is the failure worth guarding: it looks like a
+    resume, the weights are right, and Adam restarts from zero moments against
+    an empty opponent pool. The run continues as a *different* training process
+    wearing the same weights, and nothing says so.
+    """
+    config.total_hands = 4_000
+    config.snapshot_every = 2
+    trainer = PPOTrainer(config)
+    trainer.train()
+
+    path = str(tmp_path / "state.pt")
+    trainer.save_state(path)
+
+    revived = PPOTrainer(config)
+    revived.load_state(path)
+
+    assert revived.total_hands == trainer.total_hands
+    assert revived.update_cycle == trainer.update_cycle
+    assert len(revived.snapshots) == len(trainer.snapshots), (
+        "the opponent pool did not survive the resume")
+    assert revived.snapshots.taken_at == trainer.snapshots.taken_at
+    assert revived.snapshots.total_taken == trainer.snapshots.total_taken
+
+    for restored, original in zip(revived.agent.net.parameters(),
+                                  trainer.agent.net.parameters()):
+        assert torch.equal(restored, original), "policy differs after resume"
+
+    # Adam's moments are the part a policy-only checkpoint silently loses.
+    revived_state = revived.optimizer.state_dict()["state"]
+    assert revived_state, "optimiser resumed with no state at all"
+    original_state = trainer.optimizer.state_dict()["state"]
+    for key, values in original_state.items():
+        assert torch.allclose(values["exp_avg"], revived_state[key]["exp_avg"])
 
 
 def test_a_seeded_run_is_actually_reproducible(config):

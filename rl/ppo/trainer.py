@@ -159,7 +159,11 @@ class PPOTrainer:
         Returns the trained PPOAgent.
         """
         cfg = self.cfg
-        if cfg.verbose:
+        # The banner and the closing line are verbose >= 2, because `train()`
+        # is also called a segment at a time to walk a budget ladder, and
+        # "Training complete" printed at every rung of a run that has ten of
+        # them is a small untruth repeated ten times. Progress lines stay at 1.
+        if cfg.verbose >= 2:
             print(f"[PPOTrainer] Starting PPO training")
             print(f"  total_hands={cfg.total_hands:,}  n_steps={cfg.n_steps}  n_epochs={cfg.n_epochs}")
             print(f"  network: {cfg.obs_size}→[{cfg.hidden_size}x{cfg.num_layers}]→{cfg.num_actions}")
@@ -213,7 +217,7 @@ class PPOTrainer:
 
         # Final save
         self._save_checkpoint(label="final")
-        if cfg.verbose:
+        if cfg.verbose >= 2:
             print(f"[PPOTrainer] Training complete. total_hands={self.total_hands:,}")
 
         return self.agent
@@ -446,10 +450,75 @@ class PPOTrainer:
             print(f"  [ckpt] saved → {path}")
 
     # ------------------------------------------------------------------
+    # Resuming an interrupted run
+    # ------------------------------------------------------------------
+    #
+    # `_save_checkpoint` writes the policy, which is what the run is *for*.
+    # This writes what the run *is*: optimiser moments, hand and update
+    # counters, and the opponent pool. Restoring the policy alone restarts
+    # Adam from zero moments and an empty pool, which is a different training
+    # process wearing the same weights.
+    #
+    # This box has been terminated twice under memory pressure and a rung of
+    # the ladder is four hours, so an interruption has to cost the time since
+    # the last checkpoint rather than the run.
+    #
+    # A resumed run is deterministic from its resume point but is **not**
+    # bit-identical to an uninterrupted one: the generators restart from the
+    # seed rather than from their state at the moment of the crash. Stated
+    # rather than quietly hoped, because `test_a_seeded_run_is_actually_
+    # reproducible` promises exact reproducibility and this is the one path
+    # where that promise does not hold.
+
+    def save_state(self, path: str) -> None:
+        """Write everything needed to continue this run."""
+        torch.save({
+            "policy":        self.agent.net.state_dict(),
+            "optimizer":     self.optimizer.state_dict(),
+            "total_hands":   self.total_hands,
+            "update_cycle":  self.update_cycle,
+            "current_lr":    self._current_lr,
+            "faced_current": self._faced_current,
+            "faced_snapshot": self._faced_snapshot,
+            "snapshots":     [agent.net.state_dict() for agent in self.snapshots],
+            "snapshot_taken_at": list(self.snapshots.taken_at),
+            "snapshot_total":    self.snapshots.total_taken,
+        }, path)
+
+    def load_state(self, path: str) -> None:
+        """Continue a run written by `save_state`."""
+        state = torch.load(path, map_location=self.device, weights_only=False)
+
+        self.agent.net.load_state_dict(state["policy"])
+        self.optimizer.load_state_dict(state["optimizer"])
+        self.total_hands     = state["total_hands"]
+        self.update_cycle    = state["update_cycle"]
+        self._current_lr     = state["current_lr"]
+        self._faced_current  = state.get("faced_current", 0)
+        self._faced_snapshot = state.get("faced_snapshot", 0)
+
+        for group in self.optimizer.param_groups:
+            group["lr"] = self._current_lr
+
+        self.snapshots = SnapshotPool(capacity=self.cfg.snapshot_pool_size,
+                                      rng=self._rng)
+        restored = PPOAgent(self.cfg, device=str(self.device))
+        for weights, cycle in zip(state["snapshots"], state["snapshot_taken_at"]):
+            restored.net.load_state_dict(weights)
+            self.snapshots.add(restored, update_cycle=cycle)
+        self.snapshots.total_taken = state["snapshot_total"]
+
+    # ------------------------------------------------------------------
     # Logging
     # ------------------------------------------------------------------
 
     def _init_log(self) -> None:
+        # Header only when there is nothing there. The constructor runs before
+        # a resume does, so truncating here would erase the log of the run
+        # being resumed — the history is small, is written continuously, and
+        # is the only per-update record the run produces.
+        if os.path.exists(self._log_path) and os.path.getsize(self._log_path):
+            return
         with open(self._log_path, "w", newline="") as f:
             csv.DictWriter(f, fieldnames=self._log_fields).writeheader()
 
