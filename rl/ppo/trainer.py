@@ -11,9 +11,12 @@ Implements the full Proximal Policy Optimisation training loop:
 
 Key design choices
 ------------------
-* One environment per trainer (simple; extend to vectorised envs later).
-* HoF opponent sampling: each episode randomly selects an opponent from the
-  Hall-of-Fame pool (if configured) at probability hof_sample_prob.
+* One environment for the whole run, with the opponent swapped per hand.
+  Rebuilding it re-seeded it, and a re-seeded env deals the same hand every
+  time — see PokerEnv.set_opponents().
+* Self-play through a snapshot pool: the policy is frozen into the pool every
+  `snapshot_every` updates and faces its own past most hands, the live policy
+  the rest. See rl/ppo/snapshots.py for why this replaced the hall of fame.
 * CSV logging: one row per update cycle with key statistics.
 * Evaluation is decoupled — the trainer calls rl.eval.evaluator.evaluate_vs_pool().
 """
@@ -33,38 +36,8 @@ import torch.optim as optim
 from rl.ppo.config import PPOConfig
 from rl.ppo.agent import PPOAgent
 from rl.ppo.buffer import RolloutBuffer
+from rl.ppo.snapshots import SnapshotPool
 from rl.poker_env import PokerEnv, AggressionShaper
-
-
-# ---------------------------------------------------------------------------
-# HoF loader helper
-# ---------------------------------------------------------------------------
-
-def _load_hof_opponents(hof_dir: str) -> List[Any]:
-    """
-    Load all evolution agents from hall-of-fame directory.
-
-    Returns a list of objects with .get_action(game, player_id) -> int.
-    Each .npy file in hof_dir is loaded as a training.self_play.AgentPlayer.
-    """
-    import glob
-    from training.policy_network import PolicyNetwork
-    from training.config import NetworkConfig
-    from training.self_play import AgentPlayer
-
-    agents = []
-    pattern = os.path.join(hof_dir, "*.npy")
-    for path in sorted(glob.glob(pattern)):
-        try:
-            weights  = np.load(path)
-            net_cfg  = NetworkConfig()
-            net      = PolicyNetwork(net_cfg)
-            net.set_weights(weights)
-            agents.append(AgentPlayer(net))
-        except Exception as e:
-            print(f"[PPOTrainer] Warning: could not load HoF agent {path}: {e}")
-
-    return agents
 
 
 # ---------------------------------------------------------------------------
@@ -78,9 +51,11 @@ class PPOTrainer:
     Parameters
     ----------
     config:          PPOConfig controlling all hyperparameters.
-    opponent_pool:   Pre-built list of opponents (optional).
-                     If None and config.hof_dir is set, loads HoF agents.
-                     If None and no hof_dir, uses RandomOpponent.
+    opponent_pool:   Fixed opponents to train against instead of self-play
+                     (optional). Given, the agent faces only these — useful
+                     for an ablation such as "train against random" and for
+                     tests. Omitted, the agent plays itself: its own frozen
+                     snapshots most hands and the live policy the rest.
     """
 
     def __init__(
@@ -90,19 +65,37 @@ class PPOTrainer:
     ):
         self.cfg    = config
         self.device = torch.device(config.device)
+        self._rng   = np.random.default_rng(config.seed)
+
+        # `config.seed` used to seed the environment and nothing else. Three
+        # other draws ran off unseeded global state: the network's orthogonal
+        # initialisation and every action sample (torch), and the minibatch
+        # shuffle (numpy's legacy global). A seeded run was not reproducible,
+        # and two runs at the same seed converged to policies that folded 32%
+        # and 64% of the time.
+        #
+        # The endpoint test needs more than reproducibility: it compares the
+        # trained policy against an untrained one *from the same
+        # initialisation*, which cannot be constructed at all unless the seed
+        # reaches the initialiser. Seeded here, before the agent is built.
+        if config.seed is not None:
+            torch.manual_seed(config.seed)
+            np.random.seed(config.seed)
 
         # ── Agent ────────────────────────────────────────────────────
         self.agent = PPOAgent(config)
 
-        # ── Opponent pool ─────────────────────────────────────────────
-        if opponent_pool is not None:
-            self._opp_pool = opponent_pool
-        elif config.hof_dir:
-            self._opp_pool = _load_hof_opponents(config.hof_dir)
-            if config.verbose:
-                print(f"[PPOTrainer] Loaded {len(self._opp_pool)} HoF opponents from {config.hof_dir}")
-        else:
-            self._opp_pool = []   # PokerEnv will use RandomOpponent by default
+        # ── Opponents ─────────────────────────────────────────────────
+        # Self-play unless the caller names opponents. The audit is specific
+        # that self-play means current *and past* versions of the policy, so
+        # an empty pool early in the run means facing the live policy, not
+        # falling back to a random opponent — that fallback is what made the
+        # previous "self-play" runs self-play in name only.
+        self._fixed_opponents = list(opponent_pool) if opponent_pool else []
+        self.snapshots = SnapshotPool(capacity=config.snapshot_pool_size,
+                                      rng=self._rng)
+        self._faced_current  = 0
+        self._faced_snapshot = 0
 
         # ── Environment factory ───────────────────────────────────────
         shaper = AggressionShaper() if config.use_aggression_shaper else None
@@ -113,7 +106,10 @@ class PPOTrainer:
             big_blind      = config.big_blind,
             reward_shaper  = shaper,
             seed           = config.seed,
+            reward_scale   = config.effective_reward_scale,
         )
+        # One environment for the whole run; see _next_hand().
+        self.env = PokerEnv(**self._env_kwargs)
 
         # ── Rollout buffer ────────────────────────────────────────────
         self.buffer = RolloutBuffer(
@@ -123,6 +119,7 @@ class PPOTrainer:
             gamma       = config.gamma,
             gae_lambda  = config.gae_lambda,
             device      = str(self.device),
+            rng         = np.random.default_rng(config.seed),
         )
 
         # ── Optimiser ─────────────────────────────────────────────────
@@ -131,7 +128,6 @@ class PPOTrainer:
         # ── State trackers ────────────────────────────────────────────
         self.total_hands     = 0
         self.update_cycle    = 0
-        self._rng            = np.random.default_rng(config.seed)
         self._current_lr     = config.lr
 
         # ── Logging ───────────────────────────────────────────────────
@@ -139,10 +135,15 @@ class PPOTrainer:
         os.makedirs(config.checkpoint_dir, exist_ok=True)
 
         self._log_path = os.path.join(config.log_dir, "training_log.csv")
+        # `pool_size` and `faced_current` are logged because a self-play pool
+        # that has quietly stopped filling, or one the agent never actually
+        # meets, looks exactly like one that is working. The project has been
+        # here before: the CFR benchmark's lookup-miss counter exists for the
+        # same reason and caught a benchmark that had become a random opponent.
         self._log_fields = [
             "update", "total_hands", "policy_loss", "value_loss",
             "entropy", "approx_kl", "clip_fraction",
-            "mean_reward", "lr", "elapsed_s",
+            "mean_reward", "pool_size", "faced_current", "lr", "elapsed_s",
         ]
         self._start_time = time.time()
         self._init_log()
@@ -162,12 +163,24 @@ class PPOTrainer:
             print(f"[PPOTrainer] Starting PPO training")
             print(f"  total_hands={cfg.total_hands:,}  n_steps={cfg.n_steps}  n_epochs={cfg.n_epochs}")
             print(f"  network: {cfg.obs_size}→[{cfg.hidden_size}x{cfg.num_layers}]→{cfg.num_actions}")
-            print(f"  device: {self.device}  opponent_pool_size: {len(self._opp_pool)}")
+            if self._fixed_opponents:
+                print(f"  device: {self.device}  "
+                      f"fixed opponents: {len(self._fixed_opponents)} (no self-play)")
+            else:
+                print(f"  device: {self.device}  self-play: snapshot every "
+                      f"{cfg.snapshot_every} updates, keep {cfg.snapshot_pool_size}, "
+                      f"face the live policy {cfg.current_policy_prob:.0%} of hands")
 
         while self.total_hands < cfg.total_hands:
             rewards = self._collect_rollout()
             stats   = self._ppo_update()
             self.update_cycle += 1
+
+            # Snapshot into the opponent pool. After the update rather than
+            # before, so the pool holds policies that existed rather than
+            # ones that were about to be replaced.
+            if not self._fixed_opponents and self.update_cycle % cfg.snapshot_every == 0:
+                self.snapshots.add(self.agent, update_cycle=self.update_cycle)
 
             # Apply LR decay
             if cfg.lr_decay < 1.0:
@@ -210,19 +223,42 @@ class PPOTrainer:
     # ------------------------------------------------------------------
 
     def _sample_opponent(self) -> Optional[Any]:
-        """Sample one opponent from the pool (or None → RandomOpponent)."""
-        if not self._opp_pool:
-            return None
-        if self._rng.random() < self.cfg.hof_sample_prob:
-            idx = int(self._rng.integers(0, len(self._opp_pool)))
-            return self._opp_pool[idx]
-        return None
+        """
+        Who the agent faces this hand.
 
-    def _build_env(self) -> PokerEnv:
+        Fixed opponents if the caller named any. Otherwise self-play: a frozen
+        snapshot with probability `1 - current_policy_prob`, and the live
+        policy otherwise. Before the first snapshot exists the pool is empty
+        and the live policy is the only past there is.
+
+        Returns the opponent, or None meaning "the env's own default", which
+        only happens if fixed opponents were requested and the list is empty.
+        """
+        if self._fixed_opponents:
+            index = int(self._rng.integers(0, len(self._fixed_opponents)))
+            return self._fixed_opponents[index]
+
+        if self._rng.random() >= self.cfg.current_policy_prob:
+            snapshot = self.snapshots.sample()
+            if snapshot is not None:
+                self._faced_snapshot += 1
+                return snapshot
+
+        self._faced_current += 1
+        return self.agent
+
+    def _next_hand(self):
+        """
+        Sample an opponent and deal the next hand into the *same* environment.
+
+        The env is built once and kept. Building one per hand re-seeded it
+        every time, so with `config.seed` set the whole run trained on two
+        distinct deals — the audit's own finding, in a second place. Swapping
+        the opponent leaves the env's RNG stream to advance as it should.
+        """
         opponent = self._sample_opponent()
-        pool     = [opponent] if opponent is not None else None
-        from rl.poker_env import PokerEnv
-        return PokerEnv(opponent_pool=pool, **self._env_kwargs)
+        self.env.set_opponents([opponent] if opponent is not None else None)
+        return self.env.reset()
 
     def _collect_rollout(self) -> List[float]:
         """
@@ -238,8 +274,8 @@ class PPOTrainer:
         episode_reward  = 0.0
         hands_in_rollout = 0
 
-        env = self._build_env()
-        obs, _ = env.reset()
+        env = self.env
+        obs, _ = self._next_hand()
 
         while not self.buffer.is_full:
             action_mask = self._get_mask_from_obs(env, obs)
@@ -265,11 +301,11 @@ class PPOTrainer:
                 episode_reward = 0.0
                 hands_in_rollout += 1
                 self.total_hands += 1
-                env = self._build_env()
-                obs, _ = env.reset()
 
                 if self.total_hands >= cfg.total_hands:
                     break
+
+                obs, _ = self._next_hand()
 
         # Bootstrap last value
         last_value = self.agent.get_value(obs) if not terminated else 0.0
@@ -366,11 +402,25 @@ class PPOTrainer:
     # ------------------------------------------------------------------
 
     def _run_eval(self) -> None:
-        """Evaluate current agent vs opponent pool and print results."""
+        """
+        A floor check during the run, and only that.
+
+        Against a random opponent, so it is at least an opponent from outside
+        the lineage. It used to run against the opponent pool, which under
+        self-play means the agent's own snapshots — a number that says how the
+        policy compares to its own past and nothing about whether it plays
+        poker. That is precisely the self-referential measurement the audit
+        found surviving 89 runs.
+
+        **The measurement is the panel**, in `evaluation.benchmark`, run by the
+        training script. 500 hands here is roughly +/-140 BB/100 and cannot
+        resolve anything the training is likely to produce; read it as a
+        tripwire for collapse, not as progress.
+        """
         from rl.eval.evaluator import evaluate_vs_pool
 
         self.agent.net.eval()
-        opponents = self._opp_pool if self._opp_pool else None
+        opponents = self._fixed_opponents or None
         result    = evaluate_vs_pool(
             agent          = self.agent,
             opponents      = opponents,
@@ -404,9 +454,12 @@ class PPOTrainer:
             csv.DictWriter(f, fieldnames=self._log_fields).writeheader()
 
     def _write_log(self, stats: dict, mean_reward: float) -> None:
+        faced = self._faced_current + self._faced_snapshot
         row = {
             "update":        self.update_cycle,
             "total_hands":   self.total_hands,
+            "pool_size":     len(self.snapshots),
+            "faced_current": f"{self._faced_current / faced:.3f}" if faced else "",
             "policy_loss":   f"{stats['policy_loss']:.6f}",
             "value_loss":    f"{stats['value_loss']:.6f}",
             "entropy":       f"{stats['entropy']:.6f}",

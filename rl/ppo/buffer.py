@@ -14,7 +14,7 @@ Design
 
 from __future__ import annotations
 
-from typing import Generator, Tuple
+from typing import Generator, Optional, Tuple
 import numpy as np
 import torch
 
@@ -41,7 +41,11 @@ class RolloutBuffer:
         gamma:      float = 0.999,
         gae_lambda: float = 0.95,
         device:     str   = "cpu",
+        rng:        Optional[np.random.Generator] = None,
     ):
+        # Own generator rather than numpy's global one: the minibatch shuffle
+        # was the third unseeded draw in a run advertised as seeded.
+        self._rng        = rng if rng is not None else np.random.default_rng()
         self.n_steps     = n_steps
         self.obs_size    = obs_size
         self.num_actions = num_actions
@@ -159,7 +163,7 @@ class RolloutBuffer:
         """
         n       = self._pos
         indices = np.arange(n)
-        np.random.shuffle(indices)
+        self._rng.shuffle(indices)
 
         dev = self.device
         for start in range(0, n, batch_size):
