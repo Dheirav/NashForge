@@ -174,6 +174,30 @@ class PPOConfig:
         than the game — but Phase 4 compares the two families directly, and a
         difference that has to be explained away is worse than one that does
         not exist.
+
+        `ent_coef` is 0.02, and it is a choice on a proxy rather than a
+        measured optimum. Calibrated 17 August at 200,000 hands over
+        {0.01, 0.02, 0.05}, scored against the CFR agent at three training
+        seeds each:
+
+            0.01   -68.6  +19.5   -3.3   mean -17.5   spread 45.7
+            0.02   +61.7  -28.3   -2.7   mean +10.2   spread 46.4
+            0.05   -34.7  -55.4  +13.2   mean -25.6   spread 35.2
+
+        The spread across seeds is as large as the gap between coefficients,
+        so the panel cannot separate them at this budget and any ranking read
+        off it is the seed. What can be separated is entropy: 0.01 fell to
+        0.503 by 100,000 hands before recovering to 0.948, and it is the only
+        candidate that came near collapse. A deterministic policy in an
+        imperfect-information game is maximally exploitable and stops
+        exploring, and 200,000 hands is 2.5% of the intended budget.
+
+        So 0.02 is chosen as the lower of the two that showed no collapse
+        risk, and 0.05 holds entropy at 80% of uniform, which is closer to
+        regularising the policy into randomness than to training it.
+
+        Recorded here rather than in a commit message because the next person
+        to read a Phase 3 number needs to know it was picked this way.
         """
         return cls(
             num_players=2,
@@ -183,7 +207,7 @@ class PPOConfig:
             n_steps=512,
             total_hands=500_000,
             hidden_size=128,
-            ent_coef=0.01,
+            ent_coef=0.02,
             current_policy_prob=0.2,
         )
 
