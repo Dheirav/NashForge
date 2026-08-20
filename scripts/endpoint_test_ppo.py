@@ -126,7 +126,9 @@ def main():
     parser = argparse.ArgumentParser(
         description=__doc__,
         formatter_class=argparse.RawDescriptionHelpFormatter)
-    parser.add_argument("--seed", type=int, nargs="+", required=True,
+    # Required for a measurement, but --merge takes its seeds from the files
+    # it is given, so it is enforced below rather than by argparse.
+    parser.add_argument("--seed", type=int, nargs="+",
                         help="Training seeds to measure. Report the spread.")
     parser.add_argument("--rungs", type=int, nargs="+", default=list(RUNGS),
                         help="Which rung checkpoints to measure.")
@@ -135,7 +137,17 @@ def main():
     parser.add_argument("--out", default=os.path.join(OUT_DIR, "phase3_endpoint.json"))
     parser.add_argument("--dry-run", action="store_true",
                         help="Do not write the JSON. For checking the wiring.")
+    parser.add_argument("--merge", nargs="+", metavar="JSON",
+                        help="Combine per-seed runs into one report. Use when "
+                             "the seeds were run as parallel processes.")
     args = parser.parse_args()
+
+    if args.merge:
+        return merge(args)
+
+    if not args.seed:
+        parser.error("--seed is required: a measurement that does not record "
+                     "which seed produced it cannot be reproduced or pooled")
 
     if args.hands < HANDS and not args.dry_run:
         parser.error(f"--hands below {HANDS:,} is monitoring, not a result; "
@@ -186,6 +198,49 @@ def main():
                 "panel": panel_names,
                 "records": records,
             }, handle, indent=1)
+        print(f"wrote {args.out}")
+
+
+def merge(args):
+    """
+    Recombine seeds that were measured as separate processes.
+
+    Running the seeds in parallel is three times faster and loses the spread
+    table, which is the part of the report worth reading. This puts it back.
+
+    The widths are checked rather than assumed. Two seeds measured at different
+    hand counts, or against different deals, are not columns of one table --
+    their difference would carry a change of instrument as well as of seed, and
+    nothing downstream would show it.
+    """
+    loaded = []
+    for path in args.merge:
+        with open(path) as handle:
+            loaded.append((path, json.load(handle)))
+
+    first_path, first = loaded[0]
+    for path, data in loaded[1:]:
+        for field in ("hands_per_matchup", "eval_seed", "panel", "rungs"):
+            if data[field] != first[field]:
+                raise SystemExit(
+                    f"cannot merge: {field} differs\n"
+                    f"  {first_path}: {first[field]}\n"
+                    f"  {path}: {data[field]}")
+
+    records = [record for _, data in loaded for record in data["records"]]
+    records.sort(key=lambda r: (r["seed"], r["hands_trained"]))
+    seeds = sorted({record["seed"] for record in records})
+    if len(seeds) != len(records) / len(first["rungs"]):
+        raise SystemExit("cannot merge: a seed is missing rungs the others have")
+
+    args.seed, args.rungs, args.hands = seeds, first["rungs"], first["hands_per_matchup"]
+    report(records, first["panel"], args)
+
+    if not args.dry_run:
+        os.makedirs(os.path.dirname(args.out), exist_ok=True)
+        with open(args.out, "w") as handle:
+            json.dump({**first, "seeds": seeds, "records": records},
+                      handle, indent=1)
         print(f"wrote {args.out}")
 
 
