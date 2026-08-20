@@ -78,3 +78,7 @@ analysis_report.txt
 # Keep documentation files but ignore outdated ones
 # OPTIMIZATION_*.md files are kept in repo
 # HYPERPARAMETER_RELATIONSHIPS.md is kept in repo
+
+# Claude Code: the train skill is shared, the local permission allowlist is not
+# (it pins process IDs from whichever session happened to grant them).
+.claude/settings.local.json
