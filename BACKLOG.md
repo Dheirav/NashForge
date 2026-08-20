@@ -20,6 +20,7 @@ find and cheap to forget.
 | 2 | Which bucketing to use | **Done** — the crossover, measured at 7.8σ |
 | 3 | Re-run the crossover experiment | **Closed** — superseded by item 2, will not be done |
 | 4 | Recover the paper | **Largely superseded** by `docs/abstraction-crossover.html` |
+| 5 | Do not lose to Slumbot | **Open** — the first externally-produced number this project would have |
 
 **Next phase planned, not started:** [`docs/training-plan.md`](docs/training-plan.md) — GA and
 PPO heads-up, measured against the CFR agent. It supersedes the E5 trigger below: the
@@ -32,6 +33,9 @@ they are recorded below with what was removed and why.
 
 The project's result is the crossover (item 2). It requires none of the LBR machinery, and it
 is written up in [`docs/abstraction-crossover.html`](docs/abstraction-crossover.html).
+
+Item 5 is the one open goal that is not an internal measurement: see
+[`docs/EXTERNAL_BENCHMARK.md`](docs/EXTERNAL_BENCHMARK.md).
 
 ---
 
@@ -321,6 +325,30 @@ anything the original recorded that nobody has since re-derived.
 assuming either is complete. Otherwise this is closed.
 
 ---
+
+## 5. Do not lose to Slumbot — open
+
+**Goal: a measured head-to-head result against Slumbot at 0 mbb/hand or better.** Full brief,
+milestones and the measurement protocol are in
+[`docs/EXTERNAL_BENCHMARK.md`](docs/EXTERNAL_BENCHMARK.md).
+
+Why it is here rather than in the deferred list: item 1 closed with **no usable bound**, which
+leaves no-limit with no exploitability figure at all. Everything this project can currently say
+about strength it computed about itself. Slumbot is a fixed CFR strategy at heads-up no-limit,
+reachable over a free public API, and results against it are reported in mbb/hand in published
+work — so it answers "how good is this really" without depending on this repo's own machinery
+being correct.
+
+The near milestone is not the goal. **M1 — 10,000 hands with a confidence interval, any
+result** — is the one that changes the project, because it is the first number here that an
+outsider's agent produced. M2 (within 200 mbb/hand), M3 (within 50) and M4 (break-even) follow
+from abstraction granularity, iteration count and translation quality.
+
+Most of the work is **action translation**: Slumbot bets any legal amount, this project plays a
+six-action abstraction, and a bug in the bridge between them looks exactly like a weak strategy.
+Build it as its own module with its own tests. Item 1's cap-2 row — +2.783 one afternoon,
+−2.900 that evening, same untouched strategy, only the exploiter's valuation changed — is the
+precedent for what an invisible modelling choice does to a number here.
 
 ## Decisions, now made
 
