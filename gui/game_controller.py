@@ -1,123 +1,259 @@
-from engine.game import PokerGame
-from engine.features import get_state_vector, get_abstract_action_mask
-from training.policy_network import PolicyNetwork
-import numpy as np
+"""
+A viewer that plays the hand the benchmark scores.
+
+The previous controller reimplemented the betting loop: its own raise sizing,
+its own action-name matching, no solver history string, no raise cap, and no
+`finish_hand()`. So the game on screen was not the game `benchmark()` measures,
+and the pot was never awarded — `is_hand_over()` means the betting finished,
+not that the chips moved, which is the exact trap `_play_hand` documents. It
+also loaded a genome from `hall_of_fame/`, which is empty and whose former
+contents the audit withdrew.
+
+This drives `evaluation.benchmark`'s own primitives instead — the same mask,
+the same constraint onto the solver's tree, the same action conversion, the
+same settle. The human occupies one seat; anything with the panel's agent
+signature occupies the other.
+
+Stacks reset to the benchmark's depth every hand
+------------------------------------------------
+Not an oversight, and not the same thing as forgetting the score. The solver
+was fitted for one stack depth, and letting stacks drift across hands walks it
+out of the tree it knows while the display goes on calling it the CFR agent.
+`benchmark()` deals every hand from the same depth for that reason, so this
+does too, and keeps the running total separately.
+"""
+from __future__ import annotations
+
 import os
+import pickle
+
+import numpy as np
+
+from engine import PokerGame, get_abstract_action_mask
+# _constrain is private, and imported anyway: the alternative is a second copy
+# of the tree-narrowing rules that silently stops matching the one the agent
+# was measured under.
+from evaluation.benchmark import (NUM_ACTIONS, RAISE_ACTIONS, _constrain,
+                                  always_call_agent, cfr_agent, random_agent)
+from training.fitness import abstract_action_to_engine_action, finish_hand
+
+#: Matches `benchmark()`'s defaults. Changing these changes the game the agent
+#: was fitted for, not merely its comfort.
+STARTING_STACK = 200
+SMALL_BLIND = 1
+BIG_BLIND = 2
+RAISE_CAP = 1
+
+STRATEGY_PATH = os.path.join(os.path.dirname(__file__), "..", "results", "cfr",
+                             "nolimit_strategy.pkl")
+
+ACTION_LABELS = ["Fold", "Check/Call", "Raise ½ pot", "Raise pot",
+                 "Raise 2× pot", "All-in"]
+
+
+class AgentUnavailable(RuntimeError):
+    """Raised with a reason a viewer can act on, rather than a stack trace."""
+
+
+def load_cfr_opponent(rng, probe):
+    """
+    The one agent in this repository validated against something external.
+
+    Kuhn's -1/18 and exact Leduc exploitability are what make it worth showing;
+    the evolutionary genomes were bred on the withdrawn metric and the PPO
+    policies are not measured yet.
+    """
+    path = os.path.abspath(STRATEGY_PATH)
+    if not os.path.exists(path):
+        # Nothing in the tree regenerates this: it is a committed artifact,
+        # so a missing one is a checkout problem rather than a training one.
+        raise AgentUnavailable(
+            f"no solved strategy at {path}.\n"
+            "It ships in the repository -- restore it with "
+            "`git checkout results/cfr/nolimit_strategy.pkl` -- "
+            "or play with --opponent random.")
+    with open(path, "rb") as handle:
+        saved = pickle.load(handle)
+    return cfr_agent(saved["strategy"], saved["abstraction"], rng,
+                     raise_cap=RAISE_CAP, probe=probe)
+
 
 class GameController:
-    def __init__(self):
-        self.STARTING_STACK = 1000
-        self.SMALL_BLIND = 5
-        self.BIG_BLIND = 10
-        self.ARCH = [17, 64, 32, 6]
-        self.AGENT_GENOME_PATH = 'hall_of_fame/ppo_hu/p12_m7_h375_s0.06_g50_b4_champion.npy'
-        self.agent_net = self._load_agent()
-        self.reset_game()
-        self.selected_action = None
-        self.awaiting_human = False
-        self.last_action_mask = None
-        self.last_to_call = 0
-        self.last_current_player = 0
+    """
+    One seat is a person, the other is an agent, and the loop between them is
+    the benchmark's.
+    """
 
-    def _load_agent(self):
-        agent_genome = np.load(self.AGENT_GENOME_PATH)
-        from training.config import NetworkConfig
-        net = PolicyNetwork(NetworkConfig(input_size=self.ARCH[0], hidden_sizes=self.ARCH[1:-1], output_size=self.ARCH[-1]))
-        net.set_weights_from_genome(agent_genome)
-        return net
+    def __init__(self, opponent="cfr", human_seat=0, seed=None):
+        self.rng = np.random.default_rng(seed)
+        self.human_seat = human_seat
+        self.agent_seat = 1 - human_seat
 
-    def reset_game(self):
-        self.game = PokerGame(player_stacks=[self.STARTING_STACK, self.STARTING_STACK],
-                              small_blind=self.SMALL_BLIND, big_blind=self.BIG_BLIND, ante=0, seed=None)
-        self.human_pos = 0
-        self.agent_pos = 1
-        self.hand = 1
+        #: Filled by the agent with the distribution it actually sampled, so
+        #: the panel shows the policy rather than a re-derivation of it.
+        self.policy_probe = [None]
+        self.opponent_name = opponent
+        self.agent = self._build_opponent(opponent)
+
+        self.hands_played = 0
+        self.total_chips = 0          # to the human, across the session
+        self.last_result = None       # chips won on the hand just finished
+        self.hand_over = False
         self.awaiting_human = False
-        self.selected_action = None
-        self.last_action_mask = None
-        self.last_to_call = 0
-        self.last_current_player = 0
+        self.mask = None
+        self.to_call = 0
+        self.agent_policy = None      # distribution shown in the side panel
+        self.agent_last_action = None
+        self.message = None
+
+        self._start_hand()
+
+    # -- setup ----------------------------------------------------------
+
+    def _build_opponent(self, name):
+        if name == "cfr":
+            return load_cfr_opponent(self.rng, self.policy_probe)
+        if name == "random":
+            return random_agent(self.rng)
+        if name == "always-call":
+            return always_call_agent()
+        raise AgentUnavailable(f"unknown opponent {name!r}; "
+                               "expected cfr, random or always-call")
+
+    def _start_hand(self):
+        """A fresh deal at the benchmark's depth. See the module docstring."""
+        self.game = PokerGame([STARTING_STACK, STARTING_STACK],
+                              small_blind=SMALL_BLIND, big_blind=BIG_BLIND,
+                              seed=int(self.rng.integers(0, 2 ** 31 - 1)),
+                              enable_history=False)
+        self.history = ""
+        self.street = self.game.state.betting_round
+        self.raises_this_street = 0
+        self.hand_over = False
+        self.awaiting_human = False
+        self.agent_policy = None
+        self.agent_last_action = None
+        self.message = None
+        self.guard = 0
+
+    def next_hand(self):
+        """Deal again. Only meaningful once the current hand has been paid."""
+        if self.hand_over:
+            self._start_hand()
+
+    # -- the loop -------------------------------------------------------
 
     def update(self):
-        game = self.game
-        if all(p.stack > 0 for p in game.players):
-            if game.is_hand_over():
-                self.hand += 1
-                game.reset_hand()
-            pos = game.state.current_player
-            self.last_current_player = pos
-            if pos is None or game.state.players[pos].has_folded or game.state.players[pos].is_all_in:
+        """
+        Advance until the game needs the person, or the hand ends.
+
+        Mirrors `_play_hand`. The one difference is that it returns to the
+        caller instead of calling the human seat, because a person is not a
+        function that answers immediately.
+        """
+        if self.hand_over or self.awaiting_human:
+            return
+
+        while not self.game.is_hand_over():
+            self.guard += 1
+            if self.guard > 200:
+                self.message = "hand did not terminate"
+                self._settle()
                 return
-            features = np.array(get_state_vector(game, pos), dtype=np.float32)
-            mask = get_abstract_action_mask(game, pos)
-            self.last_action_mask = mask
-            to_call = game.current_bet - game.players[pos].bet
-            self.last_to_call = to_call
-            has_legal_action = np.any(mask)
-            if pos == self.human_pos:
-                if has_legal_action:
-                    self.awaiting_human = True
-                else:
-                    # No legal actions for human, auto-advance (fold by default)
-                    self.awaiting_human = False
-                    self.apply_action(0)  # 0 = fold (safe fallback)
-            else:
-                if has_legal_action:
-                    action_idx = self.agent_net.select_action(features, mask, np.random.default_rng())
-                    self.apply_action(action_idx)
-                else:
-                    # No legal actions for agent, auto-advance (fold by default)
-                    self.apply_action(0)
 
-    def handle_event(self, event):
-        import pygame
-        if self.awaiting_human and event.type == pygame.MOUSEBUTTONDOWN:
-            if hasattr(event, 'pos'):
-                from gui.ui_components import get_action_buttons
-                buttons = get_action_buttons(self)
-                for idx, btn in enumerate(buttons):
-                    if btn['rect'].collidepoint(event.pos) and btn['enabled']:
-                        self.apply_action(idx)
-                        break
-
-    def apply_action(self, action_idx):
-        game = self.game
-        pos = game.state.current_player
-        mask = self.last_action_mask
-        ACTION_NAMES = ['fold', 'check/call', 'raise 0.5x', 'raise 1x', 'raise 2x', 'all-in']
-        legal_actions = game.get_legal_actions(pos)
-        def is_action_match(act, action_type):
-            if action_type == 'check/call':
-                return act['type'] in ('check', 'call')
-            elif action_type in ('raise 0.5x', 'raise 1x', 'raise 2x'):
-                return act['type'] == 'raise'
-            elif action_type == 'all-in':
-                return act['type'] == 'all-in'
-            else:
-                return act['type'] == action_type
-        action_type = ACTION_NAMES[action_idx]
-        chosen = None
-        for act in legal_actions:
-            if is_action_match(act, action_type):
-                from engine.actions import Action
-                pot = game.state.pot.total
-                if action_type == 'raise 0.5x':
-                    amount = max(game.state.big_blind, int(pot * 0.5))
-                    chosen = Action('raise', amount)
-                elif action_type == 'raise 1x':
-                    amount = max(game.state.big_blind, pot)
-                    chosen = Action('raise', amount)
-                elif action_type == 'raise 2x':
-                    amount = max(game.state.big_blind, pot * 2)
-                    chosen = Action('raise', amount)
-                elif action_type == 'all-in':
-                    amount = act.get('amount', game.players[pos].stack)
-                    chosen = Action('all-in', amount)
-                else:
-                    chosen = Action(act['type'])
+            player = self.game.state.current_player
+            if player is None:
                 break
-        if chosen is None:
-            from engine.actions import Action
-            chosen = Action('fold')
-        game.apply_action(pos, chosen)
+
+            if self.game.state.betting_round != self.street:
+                self.street = self.game.state.betting_round
+                self.history += "/"
+                self.raises_this_street = 0
+
+            actor = self.game.players[player]
+            self.to_call = self.game.current_bet - actor.bet
+            self.mask = _constrain(get_abstract_action_mask(self.game, player),
+                                   self.to_call, self.raises_this_street,
+                                   RAISE_CAP)
+
+            if player == self.human_seat:
+                self.awaiting_human = True
+                return
+
+            self.policy_probe[:] = [None]
+            choice = self.agent(self.game, player, self.mask, self.history)
+            self.agent_policy = self.policy_probe[0]
+            self.agent_last_action = choice
+            self._commit(player, choice)
+
+        self._settle()
+
+    def choose(self, action_index):
+        """The person's move. Ignored unless it is their turn and it is legal."""
+        if not self.awaiting_human or self.mask is None:
+            return False
+        if not self.mask[action_index]:
+            return False
         self.awaiting_human = False
+        self._commit(self.human_seat, action_index)
+        self.update()
+        return True
+
+    def _commit(self, player, choice):
+        """
+        Apply one abstract action, keeping the solver's key in step with it.
+
+        The history string is what the CFR agent looks itself up by, so it has
+        to be appended in the same place `_play_hand` appends it — before the
+        engine moves, and for both seats, not just the agent's.
+        """
+        mask = self.mask
+        assert mask is not None, "_commit outside a decision point"
+        if not mask[choice]:
+            choice = int(np.flatnonzero(mask)[0])
+        self.history += str(choice)
+        if choice in RAISE_ACTIONS:
+            self.raises_this_street += 1
+        self.game.apply_action(
+            player, abstract_action_to_engine_action(choice, self.game, player))
+
+    def _settle(self):
+        """
+        Award the pot and score the hand.
+
+        `finish_hand` before reading stacks, for the reason `_play_hand` gives:
+        at showdown the chips are still in the middle, and reading around it
+        scores every hand as a loss of what was contributed.
+        """
+        finish_hand(self.game)
+        self.last_result = self.game.players[self.human_seat].stack - STARTING_STACK
+        self.total_chips += self.last_result
+        self.hands_played += 1
+        self.hand_over = True
+        self.awaiting_human = False
+        self.mask = None
+
+    # -- what the renderer asks for --------------------------------------
+
+    @property
+    def bb_per_100(self):
+        """The session in the units every result in this project is quoted in."""
+        if self.hands_played == 0:
+            return None
+        return 100.0 * self.total_chips / (self.hands_played * BIG_BLIND)
+
+    def legal_actions(self):
+        """Six flags, in `ACTION_LABELS` order, or all-false when not to act."""
+        if self.mask is None or not self.awaiting_human:
+            return [False] * NUM_ACTIONS
+        return [bool(self.mask[i]) for i in range(NUM_ACTIONS)]
+
+    def action_label(self, index):
+        """`Check` and `Call` are the same abstract action; say which it is."""
+        if index == 1:
+            return "Check" if self.to_call == 0 else f"Call {self.to_call}"
+        return ACTION_LABELS[index]
+
+    def showdown_visible(self):
+        """The agent's cards, once the hand is paid and not before."""
+        return self.hand_over

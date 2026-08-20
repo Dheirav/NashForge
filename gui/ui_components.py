@@ -1,34 +1,41 @@
+"""
+The six abstract actions, as buttons.
+
+The labels are the abstraction's, not poker's general vocabulary: this agent
+chooses among six actions and nothing else, and a button offering anything
+further would be describing a game it cannot play.
+
+Positions come from `layout`, which the renderer also draws from, so the
+rectangle a click is tested against is the rectangle that was drawn. They were
+two different sets of coordinates before, one hardcoded here and one computed
+there, which is the sort of thing that works until the window is resized.
+"""
 import pygame
 
-BUTTON_LAYOUT = [
-    {'label': 'Fold', 'color': (200, 60, 60)},
-    {'label': 'Check/Call', 'color': (60, 120, 220)},
-    {'label': 'Raise 0.5x', 'color': (220, 180, 60)},
-    {'label': 'Raise 1x', 'color': (220, 180, 60)},
-    {'label': 'Raise 2x', 'color': (220, 180, 60)},
-    {'label': 'All-in', 'color': (120, 60, 180)}
+from gui.game_controller import ACTION_LABELS
+
+BUTTON_COLORS = [
+    (200, 60, 60),      # fold
+    (60, 120, 220),     # check/call
+    (220, 180, 60),     # raise 1/2
+    (220, 180, 60),     # raise pot
+    (220, 180, 60),     # raise 2x
+    (120, 60, 180),     # all-in
 ]
+DISABLED = (70, 74, 72)
 
-BUTTON_WIDTH = 120
-BUTTON_HEIGHT = 50
-BUTTON_SPACING = 20
 
-# Returns a list of button dicts with rect, label, color, enabled
-# controller: GameController
-
-def get_action_buttons(controller):
-    mask = controller.last_action_mask
-    to_call = controller.last_to_call
+def get_action_buttons(controller, layout):
+    """One dict per abstract action: where it is, what it says, whether it is legal."""
+    legal = controller.legal_actions()
     buttons = []
-    x0 = 180
-    y0 = 630
-    for i, btn in enumerate(BUTTON_LAYOUT):
-        rect = pygame.Rect(x0 + i * (BUTTON_WIDTH + BUTTON_SPACING), y0, BUTTON_WIDTH, BUTTON_HEIGHT)
-        enabled = bool(mask[i]) if mask is not None else False
-        label = btn['label']
-        color = btn['color']
-        # Dynamic label for check/call
-        if i == 1:
-            label = 'Check' if to_call == 0 else 'Call'
-        buttons.append({'rect': rect, 'label': label, 'color': color, 'enabled': enabled})
+    for index in range(len(ACTION_LABELS)):
+        x, y, w, h = layout["buttons"][index]
+        buttons.append({
+            "rect": pygame.Rect(x, y, w, h),
+            "label": controller.action_label(index),
+            "color": BUTTON_COLORS[index] if legal[index] else DISABLED,
+            "enabled": legal[index],
+            "index": index,
+        })
     return buttons
