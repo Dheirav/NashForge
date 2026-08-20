@@ -4,7 +4,7 @@ One page, kept current. [`BACKLOG.md`](BACKLOG.md) holds the reasoning and every
 [`docs/training-plan.md`](docs/training-plan.md) holds the full phase plan and its results. This
 file is only the next thing to do.
 
-**Last updated:** 16 August 2026 · `main` at `0399361` · 197 tests passing
+**Last updated:** 16 August 2026 · `main` at `7979c3a` · 197 tests passing
 
 ---
 

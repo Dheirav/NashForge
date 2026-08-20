@@ -423,7 +423,7 @@ The original report follows, since the same hazard applies to the next derived f
 
 ### `results/cfr/nolimit_strategy.pkl` cannot be loaded by current code
 
-The pickle carries a `CardAbstraction` written before commit `6054b81` added `_centroid_list`,
+The pickle carries a `CardAbstraction` written before commit `3f8d785` added `_centroid_list`,
 the plain-list mirror of the centroids that `bucket()` now reads for its binary search.
 Unpickling therefore yields an abstraction whose `_centroid_list` is `None`, and every
 postflop lookup raises `TypeError: 'NoneType' object is not subscriptable`.
