@@ -94,7 +94,7 @@ class PPOConfig:
     # n_steps counts *decisions*, not hands. Heads-up against a random
     # opponent that is about 1.8 decisions per hand, measured, so 512 steps is
     # roughly 280 hands. The docstring above used to call these hands, which is
-    # the same class of mistake as commit 898e654 in the evolutionary loop:
+    # the same class of mistake as commit 9d9d88e in the evolutionary loop:
     # a budget parameter whose name means something other than what it counts.
     n_steps: int = 512    # decisions per rollout
     n_envs:  int = 1      # parallel envs (kept as 1 for simplicity; extend later)
