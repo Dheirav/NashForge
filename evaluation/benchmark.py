@@ -140,7 +140,7 @@ def _solver_actions(history: str, to_call: int, raise_cap: int):
 
 def cfr_agent(strategy: Dict[Hashable, np.ndarray], abstraction,
               rng: np.random.Generator, misses: Optional[List[int]] = None,
-              raise_cap: int = 1) -> Agent:
+              raise_cap: int = 1, probe: Optional[List] = None) -> Agent:
     """
     A solved strategy, playing in the engine.
 
@@ -156,6 +156,11 @@ def cfr_agent(strategy: Dict[Hashable, np.ndarray], abstraction,
 
     ``misses`` is a two-slot counter, [missed, consulted], so a benchmark that
     has quietly become a second random opponent shows up as a number.
+
+    ``probe`` is the same idea for the viewer: it receives the distribution
+    actually sampled from, or ``None`` where no entry existed and the choice
+    was a guess. The GUI shows the policy, and re-deriving it alongside the
+    agent is how the shown numbers and the played ones drift apart.
     """
     def act(game, player_id, mask, history):
         hole = game.players[player_id].hole_cards
@@ -170,6 +175,8 @@ def cfr_agent(strategy: Dict[Hashable, np.ndarray], abstraction,
         def guess():
             if misses is not None:
                 misses[0] += 1
+            if probe is not None:
+                probe[:] = [None]        # no entry: the choice is not a policy
             return int(rng.choice(legal))
 
         if probabilities is None:
@@ -192,7 +199,10 @@ def cfr_agent(strategy: Dict[Hashable, np.ndarray], abstraction,
         total = weights.sum()
         if total <= 0.0:
             return guess()
-        return int(rng.choice(NUM_ACTIONS, p=weights / total))
+        distribution = weights / total
+        if probe is not None:
+            probe[:] = [distribution]
+        return int(rng.choice(NUM_ACTIONS, p=distribution))
     return act
 
 
