@@ -165,7 +165,7 @@ para("The framework's distinguishing characteristic is that its measurement appa
      "rather than assumed; and every published figure carries a confidence interval. During "
      "development this discipline caused several previously published results to be formally "
      "withdrawn, and that correction is reported here as a finding in its own right rather than "
-     "omitted. The system is covered by 197 automated regression tests.")
+     "omitted. The system is covered by 233 automated regression tests.")
 
 # ----------------------------------------------------- literature survey ----
 h1("Literature Survey")
@@ -563,6 +563,37 @@ para("""Only the independent panel makes this visible. Self-play fitness sat nea
 h2("Three False Results, and What Caught Each")
 para("""Three results during this phase looked like findings and were not, and each was caught by a check already built into the framework. A per-generation panel curve measured over 3,000 hands appeared to rise from +111 to +214 BB/100; across eleven readings it scattered with a standard deviation of 56 against a measurement error of 57, and was indistinguishable from a constant. A benchmark row reported the evolved agent beating the solver by 60.8 BB/100, alongside a 74.3% lookup miss rate — the counter that exists so a benchmark which has quietly become a second random opponent shows up as a number. And the explanation first offered for that miss rate, that the solver covers only half its abstraction, was itself wrong: every lookup had found its key, and the harness was discarding valid entries because the solver stores one probability per legal action at a node rather than one per abstract action. A measurement that is too coarse or subtly wrong does not return no result; it returns a plausible one.""")
 
+h2("Phase Three — PPO with Self-Play, Measured")
+para("""The third family is a policy-gradient agent trained by self-play. Training against a Hall of Fame pool was not possible — the pool was empty, and its former contents had been bred on the metric the audit withdrew — so the policy was snapshotted into its own opponent pool periodically and sampled from it, which is what self-play means in the audit's sense. Three seeds were trained to eight million hands each, about 4.7 hours apiece, with checkpoints retained at 500,000, two million and eight million hands so that a budget axis exists rather than a single endpoint. The rungs are points on one run rather than three runs: the two-million policy is the 500,000 policy trained further.""")
+para("""Each rung was measured exactly as Phase Two was — against an untrained policy from the same initialisation, both against the same panel, both at 40,000 hands. The seeding was arranged so that this baseline can be reconstructed at all: an untrained network from seed n is bit-for-bit the network that seed n's training began from.""")
+table("Table 4. PPO endpoint, gain over an untrained policy from the same initialisation",
+      ['Trained to', 'vs random', 'vs always-call', 'vs CFR agent'],
+      [['500,000 hands', '+215.9 (spread 217)', '+261.9 (spread 398)', '+324.3 (spread 79)'],
+       ['2,000,000 hands', '+233.3 (spread 73)', '+276.9 (spread 370)', '+394.2 (spread 33)'],
+       ['8,000,000 hands', '+147.1 (spread 135)', '+451.3 (spread 637)', '+373.1 (spread 48)']])
+para("""All twenty-seven rows — three seeds by three rungs by three opponents — separated from zero in the improving direction, at a solver lookup miss rate of 0.0% throughout. **What PPO learned transferred, and that is the contrast with Phase Two.** Against the solver the untrained networks scored −399.1, −385.9 and −366.3 BB/100; after eight million hands the same three scored −34.8, +35.4 and −32.7, a mean of −10.7. Evolutionary search, given the same panel and the same bar, moved from −403.9 to −370.1 and was scored no change. Both halves of the audit's prediction now carry numbers: the evolutionary method plateaus and policy gradient does not.""")
+para("""The figure quoted for a multi-seed result is the spread across seeds rather than any single seed's interval. A 40,000-hand measurement carries about ±14 BB/100; these seeds disagree with each other by 33 to 637 depending on the opponent, so quoting the measurement error would understate the uncertainty by an order of magnitude against the baselines.""")
+
+h2("Phase Four — The Comparison")
+para("""The three families laddered along different axes — the solver along training seconds, evolutionary search along generations, PPO along hands — and a comparison has to declare one. Wall-clock is the only axis all three share, and none of them needed re-running to supply it: every family had recorded seconds throughout, so the shared axis was arithmetic over files that already existed.""")
+figure(f"{FIGS}/fig5_comparison.png", "Figure 5. The three families on one budget axis.",
+       "Score against the CFR agent as a function of training wall-clock. PPO reaches parity with the solver within about an hour and then flattens; evolutionary search remains 370 BB/100 below it having spent more than three times the compute. Error bars are the spread across three training seeds.")
+table("Table 5. Every family against the same panel, 40,000 hands, BB/100",
+      ['Family', 'Wall-clock', 'vs random', 'vs always-call', 'vs CFR agent'],
+      [['CFR (the solver)', '—', '+377.2', '+722.9', '—'],
+       ['evolution, 50 generations', '3.16 h', '+192.7', '+0.5', '−370.1'],
+       ['PPO, 500k hands', '0.26 h', '+204.1', '+278.6', '−59.5'],
+       ['PPO, 2M hands', '1.02 h', '+221.5', '+293.5', '+10.4'],
+       ['PPO, 8M hands', '4.81 h', '+135.4', '+467.9', '−10.7']])
+para("""**PPO reaches break-even against the solver in about one hour of training, and evolutionary search does not reach it in three.** Because both families sit on one wall-clock axis this is a like-for-like statement about budget rather than a comparison of endpoints. The solver has no row against itself: a strategy played against a copy of itself scores zero by symmetry, and that is a structural identity rather than a measurement.""")
+para("""**The table does not rank, and that is its most interesting property.** PPO at two million hands draws level with the solver head to head, yet the solver takes far more off both baselines — +377.2 against random to PPO's +221.5, and +722.9 against the calling station to PPO's +293.5. Two agents that are level against each other extract very different amounts from the same weak opponents, so strength here is not a scalar and any single-number ranking of the three families would be a fiction. It also runs against the intuition that a near-equilibrium strategy should be the less exploitative one.""")
+para("""Two candidate explanations were tested and both failed. Measuring the solver through both families' code paths gave bit-identical results, so the two rows are on one instrument. Lifting the one-raise-per-street cap — the rule that stops a policy punishing a calling station by raising repeatedly — widened the gap rather than closing it, from −430.1 to −437.4. What remains is that the intransitivity is real: these strategies beat each other in a loop. The mechanism is not established, and is reported as an open question rather than explained away.""")
+
+h2("A Fourth Measurement Defect, and How It Was Found")
+para("""Phases Three and Four were measured, then re-measured, because a panel score turned out to depend on the order the matchups were taken in. Three layers were involved: the panel handed the random opponent and the solver a single random generator; the policy samples its actions from a global generator that nothing reseeded between matchups; and callers build the panel once and reuse it, so each opponent's state carried across all twelve columns of the endpoint test. Together, the same matchup read −28.9, −29.5 and −3.9 BB/100 on nothing but what had been measured before it. Every one of those is a valid sample and none was reproducible in isolation.""")
+para("""How it surfaced is worth more than the defect. No result looked wrong. It came out of checking whether the intransitivity above was an artefact — that check passed, but a difference noticed while writing it exposed the first layer, and **the fix for that layer failed its own order-independence test**, which is what revealed the other two. A fix accepted without that test would have closed the smallest of the three and reported the problem solved.""")
+para("""Re-measuring changed almost nothing, and that is the result worth reporting: every Phase Three figure moved less than its own seed spread — at most 13.0 BB/100 against a spread of 217, and no more than 3.6 in the solver column. The spreads themselves tightened, from 134/40/62 to 79/33/48, which is what removing an uncontrolled source of variation should do. The conclusions were sound and are now reproducible; a matchup returns the same figure measured alone, inside the full panel, or with the panel reversed.""")
+
 # ------------------------------------------------------- final result -------
 h1("Final Result Obtained")
 para("The final results are produced progressively through the pipeline rather than assigned. A "
@@ -619,7 +650,7 @@ for name, text in OBSERVATIONS:
 
 # --------------------------------------------------- comparative table ------
 h1("Comparative Analysis")
-table("Table 4. NashForge against conventional approaches",
+table("Table 6. NashForge against conventional approaches",
       ["Capability", "Heuristic Bot", "Standard RL System", "Proposed NashForge"],
       [["Strategy source", "Hand-written rules", "Learned policy", "Three families compared"],
        ["Theoretical guarantee", "None", "None", "Equilibrium convergence"],

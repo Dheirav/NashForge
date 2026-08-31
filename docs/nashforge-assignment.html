@@ -273,7 +273,7 @@ traversal on Leduc Hold'em; the card abstraction's cost and benefit are measured
 assumed; and every published figure carries a confidence interval. During development this
 discipline caused several previously published results to be formally withdrawn, and that
 correction is reported here as a finding in its own right rather than omitted. The system is
-covered by 197 automated regression tests.
+covered by 233 automated regression tests.
 </p>
 
 <h2>Literature Survey</h2>
@@ -928,6 +928,110 @@ measured by regression.
 <h3>Three false results, and what caught each</h3>
 <p>Three results during this phase looked like findings and were not, and each was caught by a check already built into the framework. A per-generation panel curve measured over 3,000 hands appeared to rise from +111 to +214 BB/100; across eleven readings it scattered with a standard deviation of 56 against a measurement error of 57, and was indistinguishable from a constant. A benchmark row reported the evolved agent beating the solver by 60.8 BB/100, alongside a 74.3% lookup miss rate — the counter that exists so a benchmark which has quietly become a second random opponent shows up as a number. And the explanation first offered for that miss rate, that the solver covers only half its abstraction, was itself wrong: every lookup had found its key, and the harness was discarding valid entries because the solver stores one probability per legal action at a node rather than one per abstract action. A measurement that is too coarse or subtly wrong does not return no result; it returns a plausible one.</p>
 
+<h2>Phase Three — PPO with Self-Play, Measured</h2>
+
+<p>The third family is a policy-gradient agent trained by self-play. Training against a Hall of Fame pool was not possible — the pool was empty, and its former contents had been bred on the metric the audit withdrew — so the policy was snapshotted into its own opponent pool periodically and sampled from it, which is what self-play means in the audit's sense. Three seeds were trained to eight million hands each, about 4.7 hours apiece, with checkpoints retained at 500,000, two million and eight million hands so that a budget axis exists rather than a single endpoint. The rungs are points on one run rather than three runs: the two-million policy is the 500,000 policy trained further.</p>
+<p>Each rung was measured exactly as Phase Two was — against an untrained policy from the same initialisation, both against the same panel, both at 40,000 hands. The seeding was arranged so that this baseline can be reconstructed at all: an untrained network from seed <em>n</em> is bit-for-bit the network that seed <em>n</em>'s training began from.</p>
+
+<div class="tablewrap">
+<table>
+  <caption>Table 4 · PPO endpoint, gain over an untrained policy from the same initialisation</caption>
+  <thead><tr><th>Trained to</th><th>vs random</th><th>vs always-call</th><th>vs CFR agent</th></tr></thead>
+  <tbody>
+    <tr><td>500,000 hands</td><td>+215.9 <span class="dlabel">(spread 217)</span></td><td>+261.9 <span class="dlabel">(spread 398)</span></td><td>+324.3 <span class="dlabel">(spread 79)</span></td></tr>
+    <tr><td>2,000,000 hands</td><td>+233.3 <span class="dlabel">(spread 73)</span></td><td>+276.9 <span class="dlabel">(spread 370)</span></td><td>+394.2 <span class="dlabel">(spread 33)</span></td></tr>
+    <tr><td>8,000,000 hands</td><td>+147.1 <span class="dlabel">(spread 135)</span></td><td>+451.3 <span class="dlabel">(spread 637)</span></td><td>+373.1 <span class="dlabel">(spread 48)</span></td></tr>
+  </tbody>
+</table>
+</div>
+
+<p>All twenty-seven rows — three seeds by three rungs by three opponents — separated from zero in the improving direction, at a solver lookup miss rate of 0.0% throughout. <strong>What PPO learned transferred, and that is the contrast with Phase Two.</strong> Against the solver the untrained networks scored −399.1, −385.9 and −366.3 BB/100; after eight million hands the same three scored −34.8, +35.4 and −32.7, a mean of −10.7. Evolutionary search, given the same panel and the same bar, moved from −403.9 to −370.1 and was scored no change. Both halves of the audit's prediction now carry numbers: the evolutionary method plateaus and policy gradient does not.</p>
+<p>The figure quoted for a multi-seed result is the spread across seeds rather than any single seed's interval. A 40,000-hand measurement carries about ±14 BB/100; these seeds disagree with each other by 33 to 637 depending on the opponent, so quoting the measurement error would understate the uncertainty by an order of magnitude against the baselines.</p>
+
+<h2>Phase Four — The Comparison</h2>
+
+<p>The three families laddered along different axes — the solver along training seconds, evolutionary search along generations, PPO along hands — and a comparison has to declare one. Wall-clock is the only axis all three share, and none of them needed re-running to supply it: every family had recorded seconds throughout, so the shared axis was arithmetic over files that already existed.</p>
+
+<figure>
+  <span class="fig-title">Figure 5 · The three families on one budget axis</span>
+  <span class="fig-sub">Score against the CFR agent as a function of training wall-clock, log scale.</span>
+<div class="plot">
+    <svg viewBox="0 0 700 250" role="img"
+         aria-label="PPO rises from minus 60 BB per 100 at a quarter hour to plus 10 at one hour and minus 11 at 4.8 hours, level with the solver. Evolutionary search sits at minus 370 after 3.16 hours.">
+      <g class="ax">
+        <text x="80" y="34" text-anchor="end">+100</text>
+        <text x="80" y="68" text-anchor="end">0</text>
+        <text x="80" y="102" text-anchor="end">−100</text>
+        <text x="80" y="136" text-anchor="end">−200</text>
+        <text x="80" y="170" text-anchor="end">−300</text>
+        <text x="80" y="204" text-anchor="end">−400</text>
+        <text x="110" y="238" text-anchor="middle">0.25</text>
+        <text x="219" y="238" text-anchor="middle">0.5</text>
+        <text x="328" y="238" text-anchor="middle">1</text>
+        <text x="437" y="238" text-anchor="middle">2</text>
+        <text x="546" y="238" text-anchor="middle">4</text>
+        <text x="350" y="16" text-anchor="middle">BB/100 against the CFR agent &#183; training hours</text>
+      </g>
+      <g stroke="var(--rule)" stroke-width="1">
+        <line x1="88" y1="30" x2="660" y2="30"/><line x1="88" y1="98" x2="660" y2="98"/>
+        <line x1="88" y1="132" x2="660" y2="132"/><line x1="88" y1="166" x2="660" y2="166"/>
+        <line x1="88" y1="200" x2="660" y2="200"/>
+      </g>
+      <line x1="88" y1="64" x2="660" y2="64" stroke="var(--rule-strong)" stroke-width="1.6"/>
+      <text class="dlabel" x="200" y="59" text-anchor="middle">parity with the solver</text>
+
+      <polyline fill="none" stroke="var(--pole-pos)" stroke-width="2.4"
+                points="116,84 331,60 575,68"/>
+      <g stroke="var(--ink-muted)" stroke-width="1.4">
+        <line x1="116" y1="71" x2="116" y2="97"/><line x1="331" y1="55" x2="331" y2="66"/>
+        <line x1="575" y1="60" x2="575" y2="76"/>
+      </g>
+      <g fill="var(--pole-pos)">
+        <circle cx="116" cy="84" r="5"/><circle cx="331" cy="60" r="5"/><circle cx="575" cy="68" r="5"/>
+      </g>
+      <g class="val" text-anchor="middle">
+        <text x="116" y="112">0.5M</text><text x="331" y="47">2M</text><text x="575" y="47">8M</text>
+      </g>
+
+      <rect x="503" y="183" width="12" height="12" fill="var(--pole-neg)"/>
+      <text class="val" x="509" y="212" text-anchor="middle">−370</text>
+
+      <g class="legend">
+        <circle cx="112" cy="176" r="5" fill="var(--pole-pos)"/>
+        <text x="126" y="180">PPO, self-play</text>
+        <rect x="107" y="192" width="11" height="11" fill="var(--pole-neg)"/>
+        <text x="126" y="201">evolutionary search, 50 generations</text>
+      </g>
+    </svg>
+  </div>
+  <figcaption>PPO reaches parity with the solver within about an hour of training and then
+  flattens; evolutionary search remains 370 BB/100 below it having spent more than three times
+  the wall-clock. Error bars are the spread across three training seeds.</figcaption>
+</figure>
+
+<div class="tablewrap">
+<table>
+  <caption>Table 5 · Every family against the same panel, 40,000 hands, BB/100</caption>
+  <thead><tr><th>Family</th><th>Wall-clock</th><th>vs random</th><th>vs always-call</th><th>vs CFR agent</th></tr></thead>
+  <tbody>
+    <tr><td>CFR (the solver)</td><td>—</td><td>+377.2</td><td>+722.9</td><td>—</td></tr>
+    <tr><td>evolution, 50 generations</td><td>3.16 h</td><td>+192.7</td><td>+0.5</td><td>−370.1</td></tr>
+    <tr><td>PPO, 500k hands</td><td>0.26 h</td><td>+204.1</td><td>+278.6</td><td>−59.5</td></tr>
+    <tr><td>PPO, 2M hands</td><td>1.02 h</td><td>+221.5</td><td>+293.5</td><td><strong>+10.4</strong></td></tr>
+    <tr><td>PPO, 8M hands</td><td>4.81 h</td><td>+135.4</td><td>+467.9</td><td>−10.7</td></tr>
+  </tbody>
+</table>
+</div>
+
+<p><strong>PPO reaches break-even against the solver in about one hour of training, and evolutionary search does not reach it in three.</strong> Because both families sit on one wall-clock axis this is a like-for-like statement about budget rather than a comparison of endpoints. The solver has no row against itself: a strategy played against a copy of itself scores zero by symmetry, and that is a structural identity rather than a measurement.</p>
+<p><strong>The table does not rank, and that is its most interesting property.</strong> PPO at two million hands draws level with the solver head to head, yet the solver takes far more off both baselines — +377.2 against random to PPO's +221.5, and +722.9 against the calling station to PPO's +293.5. Two agents that are level against each other extract very different amounts from the same weak opponents, so strength here is not a scalar and any single-number ranking of the three families would be a fiction. It also runs against the intuition that a near-equilibrium strategy should be the less exploitative one.</p>
+<p>Two candidate explanations were tested and both failed. Measuring the solver through both families' code paths gave bit-identical results, so the two rows are on one instrument. Lifting the one-raise-per-street cap — the rule that stops a policy punishing a calling station by raising repeatedly — widened the gap rather than closing it, from −430.1 to −437.4. What remains is that the intransitivity is real: these strategies beat each other in a loop. The mechanism is not established, and is reported as an open question rather than explained away.</p>
+
+<h3>A fourth measurement defect, and how it was found</h3>
+<p>Phases Three and Four were measured, then re-measured, because a panel score turned out to depend on the order the matchups were taken in. Three layers were involved: the panel handed the random opponent and the solver a single random generator; the policy samples its actions from a global generator that nothing reseeded between matchups; and callers build the panel once and reuse it, so each opponent's state carried across all twelve columns of the endpoint test. Together, the same matchup read −28.9, −29.5 and −3.9 BB/100 on nothing but what had been measured before it. Every one of those is a valid sample and none was reproducible in isolation.</p>
+<p>How it surfaced is worth more than the defect. No result looked wrong. It came out of checking whether the intransitivity above was an artefact — that check passed, but a difference noticed while writing it exposed the first layer, and <strong>the fix for that layer failed its own order-independence test</strong>, which is what revealed the other two. A fix accepted without that test would have closed the smallest of the three and reported the problem solved.</p>
+<p>Re-measuring changed almost nothing, and that is the result worth reporting: every Phase Three figure moved less than its own seed spread — at most 13.0 BB/100 against a spread of 217, and no more than 3.6 in the solver column. The spreads themselves tightened, from 134/40/62 to 79/33/48, which is what removing an uncontrolled source of variation should do. The conclusions were sound and are now reproducible; a matchup returns the same figure measured alone, inside the full panel, or with the panel reversed.</p>
+
 <h2>Final Result Obtained</h2>
 
 <p>
@@ -993,7 +1097,7 @@ favourite while appearing indistinguishable — a limit no amount of training ca
 
 <div class="tablewrap">
 <table>
-  <caption>Table 4 · NashForge against conventional approaches</caption>
+  <caption>Table 6 · NashForge against conventional approaches</caption>
   <thead><tr><th>Capability</th><th>Heuristic Bot</th><th>Standard RL System</th><th>Proposed NashForge</th></tr></thead>
   <tbody>
     <tr><td>Strategy source</td><td>Hand-written rules</td><td>Learned policy</td><td class="hi">Three families compared</td></tr>
