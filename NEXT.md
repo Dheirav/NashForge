@@ -4,7 +4,7 @@ One page, kept current. [`BACKLOG.md`](BACKLOG.md) holds the reasoning and every
 [`docs/training-plan.md`](docs/training-plan.md) holds the full phase plan and its results. This
 file is only the next thing to do.
 
-**Last updated:** 20 August 2026 · `main` at `95432c9` · 233 tests passing
+**Last updated:** 20 August 2026 · `main` at `813f457` · 233 tests passing
 
 ---
 
@@ -14,54 +14,48 @@ file is only the next thing to do.
 |---|---|---|
 | CFR | measured | Validated against Kuhn's −1/18 and exact Leduc exploitability. Produced the abstraction crossover, +0.916 ± 0.118 chips/hand at the 2560s budget |
 | Evolutionary search | measured | Learned to exploit randomness; nothing transferred against the solver |
-| **PPO** | **trained, unmeasured** | Three seeds finished 18 August. Nine checkpoints, no result |
+| PPO | measured | Closes the gap to the CFR agent: −380.9 → −11.6 BB/100 after 8M hands. Flat after 2M |
 
-Phase 3's *training* is done and its *measurement* is not, and those are not the same thing.
-Three seeds ran to 8M hands each on 17–18 August, about 4.7 hours apiece, leaving rungs at
-500k, 2M and 8M in `~/pokerbot-scratch/phase3/seed{0,1,2}/`. Every one of them ended by
-printing the instruction that is still outstanding: run the endpoint test against the rungs,
-and report the spread across seeds rather than the error bar of any single one.
+All three families are now measured on the same panel with the same instrument, which is the
+condition Phase 4 has been waiting on since the plan was written.
+
+Phase 3's result, in one line: PPO learned and **what it learned transferred**. Against the
+solver the untrained networks scored −384.6, −381.7 and −376.3 BB/100; after 8M hands the same
+three scored −36.2, +34.3 and −33.0. Evolutionary search, same panel and same bar, moved
+−403.9 → −370.1 and was scored *no change*. All 27 rows improved; CFR lookup miss rate 0.0%.
+Full tables in [`docs/training-plan.md`](docs/training-plan.md) and
+`results/ppo/phase3_endpoint.json`.
 
 ---
 
-## The next step: an endpoint test for PPO
+## The next step: Phase 4 — the comparison
 
-`scripts/endpoint_test.py` cannot do it. It is evolution-specific by construction — it globs
-`phase2/runs/run_*`, loads `best_genome.npy`, and builds agents through `EvolutionTrainer`. It
-takes no arguments and cannot open a `.pt`. Measuring PPO at the same standard means building
-the comparison, not reusing it.
+All three families on one panel with one instrument, across the budget ladder. This is what the
+project's title promises and what the report is missing. It is mostly assembly: the
+measurements exist, in `results/cfr/`, `results/evolution/` and `results/ppo/`.
 
-Most of the parts already exist in `scripts/train_ppo.py` and should be reused rather than
-rewritten: `build_panel()`, `panel_scores()`, and the PPO→panel adapter that puts a policy
-behind the panel's `(game, seat, mask, history)` signature.
+Four things to carry into it rather than rediscover:
 
-What the new script has to do:
+**The PPO ladder is flat after 2M hands.** +387.6 BB/100 against the CFR agent at 2M, +369.2 at
+8M, on seed spreads of 40 and 62. Three quarters of each run's wall-clock bought nothing
+measurable. Do not spend Phase 4's budget on the assumption that more hands help.
 
-1. Load each rung checkpoint, **and an untrained policy from the same initialisation**. The
-   difference between the two columns is the result; either column alone is a fact about the
-   opponent as much as about the agent.
-2. Play **40,000 hands** against the same panel — random, always-call, and the CFR agent. That
-   is ±14 BB/100.
-3. Report the **spread across the three seeds**, not one seed's bar. At 200,000 hands these
-   same three seeds scored −68.6, +19.5 and −3.3 against the CFR agent: 46 BB/100 apart on seed
-   alone, which is over three times the 40,000-hand error bar. Quoting one seed understates the
-   uncertainty threefold.
-4. Require `--seed`, as `scripts/train_ppo.py` does, so a measurement cannot be taken
-   unreproducibly by accident.
-5. Write `results/ppo/` as JSON, matching the shape of the other two families.
+**Only the CFR column is quotable.** Seed spreads against the solver are 40–134 BB/100; against
+random and always-call they run 92–609. Against always-call at 8M the three seeds scored
++435.1, +185.2 and +794.3 — direction certain, magnitude unresolved. Compare families on the
+opponent from outside their lineage, and treat the baselines as floor checks.
 
-**Do not read the training curve instead.** The panel score recorded during the run is over
-10,000 hands, about ±50 BB/100 — monitoring, not measurement. Phase 2's per-generation curve
-was read as rising from +111 to +214 BB/100 while being indistinguishable from a constant.
-This is the single most repeated failure in this project's history.
+**The two families are not on one budget axis yet.** Evolution's ladder is generations at a
+fixed hand count; PPO's is hands. They are the same wall-clock only by coincidence, and the
+comparison has to say which axis it is using before it plots anything.
+
+**Break-even is against *this* CFR agent** — six buckets, one raise per street. Not a strong
+solver, and not an exploitability figure. Item 1 closed with no usable bound, so no-limit still
+has none. The comparison should say so where it would otherwise be read as a strength claim.
 
 ---
 
 ## After that
-
-**Phase 4 — the comparison.** All three families on one panel with one instrument, across the
-budget ladder the Phase 3 rungs were built to provide. This is what the project's title
-promises and what the report is missing. It is waiting on the step above and nothing else.
 
 **Item 5 — do not lose to Slumbot.** The one open goal that is not an internal measurement.
 Every strength figure here was computed by this project about itself, and item 1 closed with no
