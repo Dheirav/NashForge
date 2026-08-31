@@ -14,7 +14,7 @@ file is only the next thing to do.
 |---|---|---|
 | CFR | measured | Validated against Kuhn's −1/18 and exact Leduc exploitability. Produced the abstraction crossover, +0.916 ± 0.118 chips/hand at the 2560s budget |
 | Evolutionary search | measured | Learned to exploit randomness; nothing transferred against the solver |
-| PPO | measured | Closes the gap to the CFR agent: −380.9 → −11.6 BB/100 after 8M hands. Flat after 2M |
+| PPO | measured | Closes the gap to the CFR agent: −383.8 → −10.7 BB/100 after 8M hands. Flat after 2M |
 
 All three are measured, and **Phase 4 — the comparison the project's title promises — is done**
 (`results/comparison/phase4.json`). One panel, 40,000 hands, one wall-clock axis, in BB/100:
@@ -23,8 +23,8 @@ All three are measured, and **Phase 4 — the comparison the project's title pro
 |---|---|---|---|---|
 | CFR (the solver) | — | +377.2 | +722.9 | — |
 | evolution, 50 generations | 3.16 h | +192.7 | +0.5 | −370.1 |
-| PPO, 2M hands | 1.02 h | +216.3 | +297.9 | **+6.8** |
-| PPO, 8M hands | 4.81 h | +125.2 | +475.4 | −11.6 |
+| PPO, 2M hands | 1.02 h | +221.5 | +293.5 | **+10.4** |
+| PPO, 8M hands | 4.81 h | +135.4 | +467.9 | −10.7 |
 
 **PPO reaches break-even against the solver in about an hour. Evolutionary search, given three
 times that compute, is still 370 BB/100 behind.**
@@ -34,9 +34,9 @@ times that compute, is still 370 BB/100 behind.**
 ## The next step: explain the non-transitivity
 
 The comparison produced a result it does not explain, and it is the most interesting thing in
-the table. PPO at 2M hands draws level with the CFR agent head to head (+6.8), yet the solver
-takes far more off both baselines — +377.2 against random to PPO's +216.3, and +722.9 against
-always-call to PPO's +297.9.
+the table. PPO at 2M hands draws level with the CFR agent head to head (+10.4), yet the solver
+takes far more off both baselines — +377.2 against random to PPO's +221.5, and +722.9 against
+always-call to PPO's +293.5.
 
 Two agents that are level against each other extract very different amounts from the same weak
 opponents. So **strength here is not a scalar**, and any single-number ranking of the three
@@ -44,19 +44,20 @@ families would be a fiction. It also cuts against the intuition that a near-equi
 strategy should be the *less* exploitative one, which is why it is worth a look rather than a
 footnote.
 
-Nothing about the mechanism is established. Worth ruling out first, cheaply, before reaching
-for an explanation:
+Both cheap explanations were checked on 20 August and **both are dead**:
 
-- **An instrument artefact.** Both rows came through the same `benchmark()` at the same width
-  and seed, and the CFR miss rates were 0.01% and 0.05%, so the benchmark was still the
-  benchmark. But the two families' rows were produced by different scripts, and that is the
-  kind of difference that has bitten this project before.
-- **The raise cap.** The panel constrains play to the solver's tree, one raise per street. A
-  policy that would exploit a station by raising repeatedly cannot, and the cap may be binding
-  differently for the two families.
-- **Genuine intransitivity.** The honest possibility, and the one the audit's "strong but
-  exploitable" prediction points at. If it survives the first two checks it is a finding, and
-  a better one than the ranking it denies.
+- ~~An instrument artefact.~~ `scripts/diagnostics/check_instrument.py`: the two measurement
+  paths agree bit-for-bit at 40,000 hands, reproducing +377.2 and +722.9 exactly.
+- ~~The raise cap.~~ `scripts/diagnostics/check_raise_cap.py`: lifting it to two raises per
+  street *widened* the gap against always-call, −430.1 to −437.4. The cap was not suppressing
+  PPO. Note the solver goes off-tree above cap 1 — 19.3% lookup misses, concentrated in the
+  random matchup — so its cap-2 column is not a measurement of the solver.
+
+**What remains is that the non-transitivity is real**: these strategies beat each other in a
+loop, and no single ranking of the three families exists. That is the finding, and it is a
+better one than the leaderboard it denies. The mechanism is still not established — two
+candidates are ruled out, not all of them — so the next step is to look for the third rather
+than to assume the question is closed.
 
 ---
 
