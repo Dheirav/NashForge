@@ -166,11 +166,88 @@ def evolution(out, figsize, base, size, label, annot, dpi):
     plt.close(fig)
 
 
+def comparison(out, figsize, base, size, label, annot, dpi):
+    """
+    Phase 4 on its budget axis: what each family is worth per hour of training.
+
+    Read from `results/` rather than transcribed. The numbers moved once already
+    when the instrument was fixed, and a figure with its own copy of them is a
+    figure that goes stale without saying so.
+
+    The y axis is the score against the CFR agent, because that is the opponent
+    from outside both families' lineage and the only column whose seed spread is
+    tight enough to plot. Zero is parity with the solver, so the line is the
+    thing to look at rather than a gridline.
+    """
+    import json
+    styled(base, size)
+    root = os.path.join(ROOT, "results")
+    with open(os.path.join(root, "comparison", "phase4.json")) as handle:
+        phase4 = json.load(handle)
+    with open(os.path.join(root, "ppo", "phase3_endpoint.json")) as handle:
+        ppo = json.load(handle)
+
+    seconds = phase4["wall_clock_seconds"]
+    rungs = sorted(int(k) for k in seconds["ppo"])
+    hours, scores, spread = [], [], []
+    for rung in rungs:
+        hours.append(seconds["ppo"][str(rung)] / 3600
+                     if str(rung) in seconds["ppo"] else seconds["ppo"][rung] / 3600)
+        vals = [row["trained"] for rec in ppo["records"]
+                if rec["hands_trained"] == rung
+                for row in rec["rows"] if row["opponent"] == "cfr"]
+        scores.append(float(np.mean(vals)))
+        spread.append((max(vals) - min(vals)) / 2)
+
+    evo_hours = seconds["evolution"] / 3600
+    evo = phase4["evolution"]["cfr"]
+
+    fig, ax = plt.subplots(figsize=(figsize[0], figsize[1] * 0.95))
+    ax.axhline(0, color=FAINT, linewidth=1.3, zorder=2)
+    ax.annotate("parity with the solver", (0.55, 0), xytext=(0, -14),
+                textcoords="offset points", fontsize=annot, color=SOFT,
+                ha="center", va="top")
+
+    ax.errorbar(hours, scores, yerr=spread, fmt="o-", color=S1, ecolor=SOFT,
+                elinewidth=1, capsize=3, markersize=5, linewidth=1.8,
+                label="PPO, self-play", zorder=4)
+    for h, v, r in zip(hours, scores, rungs):
+        ax.annotate(f"{r/1e6:g}M", (h, v), xytext=(0, 9),
+                    textcoords="offset points", ha="center", fontsize=annot,
+                    color=INK)
+
+    ax.errorbar([evo_hours], [evo["trained"]], yerr=[evo["trained_ci95"]],
+                fmt="s", color=S2, ecolor=SOFT, elinewidth=1, capsize=3,
+                markersize=6, label="evolutionary search, 50 generations",
+                zorder=4)
+    ax.annotate(f"{evo['trained']:+.0f}", (evo_hours, evo["trained"]),
+                xytext=(0, -14), textcoords="offset points", ha="center",
+                fontsize=annot, fontweight="bold", color=INK)
+
+    ax.set_xscale("log")
+    # Explicit ticks: a log axis over half a decade otherwise labels 10^0 and
+    # nothing else, which hides the very quantity the figure is about.
+    ticks = [0.25, 0.5, 1, 2, 4]
+    ax.set_xticks(ticks)
+    ax.set_xticklabels([f"{t:g}" for t in ticks])
+    ax.tick_params(axis="x", which="minor", length=0)
+    ax.set_xlabel("training wall-clock (hours, log scale)")
+    ax.set_ylabel("BB/100 against the CFR agent")
+    ax.set_xlim(0.18, 7.5)
+    ax.set_ylim(-460, 120)
+    ax.grid(color=RULE, linewidth=0.8, zorder=0)
+    ax.legend(frameon=False, fontsize=label, loc="lower left")
+    fig.tight_layout()
+    fig.savefig(os.path.join(out, "fig5_comparison.png"), dpi=dpi,
+                bbox_inches="tight")
+    plt.close(fig)
+
+
 def main():
     for style in (WIDE_STYLE, COLUMN_STYLE):
-        for draw in (leduc, crossover, features, evolution):
+        for draw in (leduc, crossover, features, evolution, comparison):
             draw(*style)
-    print(f"wrote 4 figures at two sizes under {os.path.relpath(WIDE, ROOT)}/")
+    print(f"wrote 5 figures at two sizes under {os.path.relpath(WIDE, ROOT)}/")
 
 
 if __name__ == "__main__":
