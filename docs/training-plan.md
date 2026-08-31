@@ -147,8 +147,8 @@ Updated as work lands. "Blocked" means waiting on a decision, and the decision i
 | 0c | Benchmark harness | **done** — `evaluation/`, 9 tests |
 | 1 | Rebuild the observation, 17 → 19 | **done** — effective dimensions 6 → 9 |
 | 2 | Evolutionary search, heads-up | **done** — learned to exploit randomness, nothing transferred |
-| 3 | PPO with self-play, heads-up | **unblocked — next**; still needs snapshot pooling built |
-| 4 | The comparison | blocked on 3 |
+| 3 | PPO with self-play, heads-up | **done** — closes the gap to the CFR agent; flat after 2M hands |
+| 4 | The comparison | **unblocked — next**; all three families now measured on one panel |
 | 5 | Six-max | blocked on 4; also needs the `play_match` stack-drift fix below |
 
 ## Phases
@@ -259,13 +259,52 @@ discarded anything that was not length 6. That was 77.5% of successful lookups. 
 available and misread — a 100% hit rate against a random opponent should have ruled out
 "structurally unreachable" immediately.
 
-### Phase 3 — PPO with genuine self-play, heads-up
+### Phase 3 — PPO with genuine self-play, heads-up — DONE, 20 August
 
-One thing needs building first. PPO currently trains against `RandomOpponent`, or against a
-Hall of Fame pool that is **empty** — and would be tainted if it were not, since every genome
-in it was bred on the broken metric. The audit is specific that it should train against
-current and past versions of itself, so periodic policy snapshots into the opponent pool is
-the work.
+Snapshot pooling was the prerequisite and was built first: PPO trained against `RandomOpponent`
+or against a Hall of Fame pool that was empty, and would have been tainted if it were not, since
+every genome in it was bred on the withdrawn metric. Self-play here means the policy against its
+own periodic snapshots.
+
+Three seeds, 8M hands each, about 4.7 hours apiece, with rungs kept at 500k, 2M and 8M so
+Phase 4 gets a budget axis rather than a single endpoint. The rungs are points on one run, not
+three runs — the 2M policy is the 500k policy trained further, which is what makes them
+comparable.
+
+**The endpoint result.** Each rung against an untrained policy from the same initialisation,
+both against the same panel, both at 40,000 hands, all three seeds
+(`scripts/endpoint_test_ppo.py`, `results/ppo/phase3_endpoint.json`). Gains are the mean across
+seeds; the spread is the range across them.
+
+| trained to | vs random | vs always-call | vs CFR |
+|---|---|---|---|
+| 500,000 | +189.7 (spread 233.0) | +287.2 (spread 391.4) | **+323.6** (spread 134.2) |
+| 2,000,000 | +214.9 (spread 92.1) | +294.1 (spread 388.0) | **+387.6** (spread 40.1) |
+| 8,000,000 | +123.8 (spread 140.8) | +471.5 (spread 609.1) | **+369.2** (spread 62.3) |
+
+All 27 rows — three seeds, three rungs, three opponents — separated from zero in the improving
+direction. The CFR lookup miss rate was 0.0% across all nine matchups.
+
+**What it learned transferred, and that is the contrast with Phase 2.** Against the solver the
+untrained networks scored −384.6, −381.7 and −376.3 BB/100; after 8M hands the same three scored
+−36.2, +34.3 and −33.0, a mean of −11.6. PPO closes essentially the whole gap to the CFR agent.
+Evolutionary search, given the same panel and the same bar, moved −403.9 → −370.1 and was scored
+*no change*. Both halves of the audit's prediction now have numbers: the evolutionary method
+plateaus, and policy gradient produces a strong player.
+
+**The ladder is flat after 2M.** +387.6 at 2M against +369.2 at 8M, on spreads of 40 and 62 — the
+last six million hands of each run, three quarters of the wall-clock, bought nothing that can be
+measured. Phase 4 should spend its budget accordingly rather than assuming more is more.
+
+**Only the CFR column is quotable.** Its seed spreads are 40–134 BB/100; the two baselines run
+92–609. Against always-call at 8M the seeds scored +435.1, +185.2 and +794.3 — the direction is
+certain and the magnitude is not resolved at all. The opponent from outside the lineage is the
+stable yardstick and the hand-written baselines are not, which is worth carrying into Phase 5,
+where the CFR agent cannot serve.
+
+**What this is not.** It is break-even against *this* CFR agent — six buckets, one raise per
+street — not against a strong solver, and not an exploitability figure. Item 1 closed with no
+usable bound, so no-limit still has none.
 
 ### Phase 4 — the comparison
 
