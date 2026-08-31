@@ -94,6 +94,61 @@ def test_history_carries_one_symbol_per_action_and_a_slash_per_street():
     assert all(ch.isdigit() or ch == "/" for ch in node.history)
 
 
+# --- who is acting, which the pilot found wrong on half its hands -----------
+
+def test_the_button_acts_first_preflop_and_the_button_depends_on_the_seat():
+    """
+    At client_pos 1 the client posts the small blind and opens; at 0 the bot does.
+
+    Measured against the live server: folding immediately loses 100 at
+    client_pos 0 and 50 at client_pos 1, so the client is the big blind in the
+    first case and the button in the second. Every test here used client_pos 0
+    until a 300-hand pilot showed the other half of the hands attributing every
+    action to the wrong player -- with no protocol error raised, because the
+    actions stayed legal. Only the numbers were wrong.
+    """
+    # the client is the button and raises to 550 from the small blind
+    mine = replay(state("b550", client_pos=1), RNG())
+    assert mine.committed[0] == 550
+
+    # the same string at the other seat is the bot's raise
+    theirs = replay(state("b550", client_pos=0), RNG())
+    assert theirs.committed[1] == 550
+
+
+def test_the_big_blind_leads_after_the_flop():
+    """
+    Heads-up the order reverses exactly once: button first preflop, big blind
+    first on every street after it. Alternating straight through the streets
+    hands the flop lead to the wrong player.
+    """
+    # client_pos 1: client is the button, so the bot leads the flop
+    node = replay(state("cc/b300", client_pos=1), RNG())
+    assert node.committed[1] == 300
+
+    # client_pos 0: client is the big blind, so the client leads the flop
+    node = replay(state("cc/b300", client_pos=0), RNG())
+    assert node.committed[0] == 300
+
+
+@pytest.mark.parametrize("client_pos", [0, 1])
+def test_the_priced_decision_is_always_the_client_s(client_pos):
+    """
+    `committed` and `prior` are built client-first, so the actor being priced is
+    index 0 whatever the seat. Indexing by `client_pos` read the bot's chips.
+    """
+    assert replay(state("b200c/", client_pos=client_pos), RNG()).to_act == 0
+
+
+@pytest.mark.parametrize("client_pos", [0, 1])
+def test_the_blinds_match_what_the_server_charges(client_pos):
+    """An immediate fold costs 100 at seat 0 and 50 at seat 1; the pot holds both."""
+    node = replay(state("", client_pos=client_pos), RNG())
+    expected = BIG_BLIND if client_pos == 0 else SMALL_BLIND
+    assert node.committed[0] == expected
+    assert node.pot == SMALL_BLIND + BIG_BLIND
+
+
 # --- what a bet is understood as -------------------------------------------
 
 def test_a_shove_is_the_all_in_action_not_a_large_raise():

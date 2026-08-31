@@ -73,6 +73,11 @@ class Node:
     history: str = ""                 # the solver's key: abstract actions, "/" per street
     pot: int = 0                      # chips in the middle, both players
     committed: List[int] = field(default_factory=lambda: [0, 0])   # this street
+    #: Chips each player put in on *completed* streets. Slumbot's bet levels are
+    #: per street and reset at each one, so a player's ceiling on this street is
+    #: the stack less what earlier streets already took -- capping at the full
+    #: stack instead asks for more chips than exist and the server rejects it.
+    prior: List[int] = field(default_factory=lambda: [0, 0])
     street: int = 0
     raises_this_street: int = 0
     to_act: int = 0
@@ -106,13 +111,23 @@ def replay(state: HandState, rng: np.random.Generator) -> Node:
     """
     client, bot = _blinds(state.client_pos)
     node = Node(pot=client + bot, committed=[client, bot])
-    actor = 1                      # the bot opens preflop, being the small blind
+
+    # Index 0 is always the client, so who moves first is a question about the
+    # button. Heads-up the button posts the small blind and acts first preflop,
+    # and the big blind acts first on every street after it -- the order reverses
+    # exactly once. Measured rather than assumed: folding immediately loses 100
+    # at client_pos 0 and 50 at client_pos 1, so the client is the big blind in
+    # the first case and the button in the second.
+    button = 1 if state.client_pos == 0 else 0
+    actor = button
 
     for chunk in state.action.split("/"):
         if node.street > 0:
+            node.prior = [node.prior[i] + node.committed[i] for i in (0, 1)]
             node.committed = [0, 0]
             node.raises_this_street = 0
             node.history += "/"
+            actor = 1 - button           # the big blind leads after the flop
         for match in TOKEN.finditer(chunk):
             amount, simple = match.group(1), match.group(2)
             if simple == "f":
@@ -135,7 +150,10 @@ def replay(state: HandState, rng: np.random.Generator) -> Node:
         node.street += 1
 
     node.street -= 1               # the loop counts the last street it entered
-    node.to_act = 0 if state.client_pos == 0 else 1
+    # Always 0: `committed` and `prior` are built client-first, and the decision
+    # being priced is always the client's. Indexing by `client_pos` here read the
+    # bot's chips for half the hands.
+    node.to_act = 0
     return node
 
 
@@ -159,28 +177,41 @@ def _as_abstract(fraction: float, level: int, node: Node,
     return 2 + translate(RAISE_FRACTIONS, max(fraction, RAISE_FRACTIONS[0]), rng)
 
 
+def max_level(node: Node, stack: int = STARTING_STACK) -> int:
+    """
+    The largest level this player can bet *to* on the current street.
+
+    Levels are per street and reset at each one, so the ceiling is the stack less
+    whatever earlier streets already took. Using the full stack asks for chips the
+    player no longer has, and the server answers "Bet size too big" -- which costs
+    the hand to a protocol error rather than to poker.
+    """
+    return stack - node.prior[node.to_act]
+
+
 def to_slumbot(action: int, node: Node, stack: int = STARTING_STACK) -> str:
     """
     An abstract action, as something the server will accept.
 
     Amounts go out as levels bet *to*, matching the notation coming in. A raise
     is sized off the pot *after* the call that precedes it, which is how the
-    abstraction defines its fractions -- sizing off the pot before, a mistake
-    that costs about a third of every raise, is the kind of arithmetic slip that
-    would read as a strategy playing too small.
+    abstraction defines its fractions -- sizing off the pot before under-bets
+    every raise, and reads as a strategy playing timidly.
     """
     if action == FOLD:
         return "f"
     if action == CHECK_CALL:
         return "c" if node.to_call else "k"
+
+    ceiling = max_level(node, stack)
     if action == ALL_IN:
-        return f"b{stack}"
+        return f"b{ceiling}"
 
     call = node.to_call
     pot_after_call = node.pot + call
     fraction = RAISE_FRACTIONS[action - 2]
     level = node.committed[node.to_act] + call + int(round(pot_after_call * fraction))
-    return f"b{min(level, stack)}"
+    return f"b{min(level, ceiling)}"
 
 
 def legal_mask(node: Node, raise_cap: int = 1) -> np.ndarray:
