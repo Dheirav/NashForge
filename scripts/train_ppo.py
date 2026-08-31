@@ -47,6 +47,7 @@ against 317, the matrices being too small to pay for thread coordination.
 """
 import argparse
 import json
+import zlib
 import os
 import sys
 import time
@@ -95,14 +96,28 @@ def build_panel():
     without it measures against two baselines any competent agent beats, which
     is a floor check rather than a benchmark.
     """
-    rng = np.random.default_rng(4)
-    panel = [("random", random_agent(rng)), ("always-call", always_call_agent())]
+    # Factories, not agents, and one generator each.
+    #
+    # These opponents carry state: `random_agent` and `cfr_agent` each close over
+    # a Generator, so an agent reused across matchups draws from a stream the
+    # previous matchup advanced. Built once and shared -- which is what a caller
+    # naturally does -- that makes a column's result depend on every column
+    # measured before it, and the panel used to share a single generator between
+    # the random opponent and the solver on top of that. Advancing it by one draw
+    # moved a 2,000-hand score by 24 BB/100.
+    #
+    # So each matchup constructs its own opponent from its own seed. The strategy
+    # is read once and closed over, because it is the pickle load that is
+    # expensive, not the agent.
+    panel = [("random", lambda: random_agent(np.random.default_rng(4))),
+             ("always-call", lambda: always_call_agent())]
     try:
         import pickle
         with open(CFR_STRATEGY, "rb") as handle:
             saved = pickle.load(handle)
-        panel.append(("cfr", cfr_agent(saved["strategy"], saved["abstraction"],
-                                       rng, None)))
+        panel.append(("cfr", lambda: cfr_agent(saved["strategy"],
+                                               saved["abstraction"],
+                                               np.random.default_rng(5), None)))
     except Exception as error:                              # noqa: BLE001
         print(f"  CFR agent unavailable ({error}); panel is the two baselines",
               flush=True)
@@ -110,10 +125,25 @@ def build_panel():
 
 
 def panel_scores(agent, panel, hands, seed):
-    """The policy against each panel opponent, with the uncertainty attached."""
+    """
+    The policy against each panel opponent, with the uncertainty attached.
+
+    Torch is reseeded per matchup, and that is not cosmetic. The policy samples
+    its actions from torch's global generator, which nothing else here reseeds,
+    so a score depended on how many hands had already been played in this
+    process: measured, the same matchup read -28.9, -29.5 and -3.9 purely on
+    what ran before it. Every one of those is a valid sample and none of them is
+    reproducible on its own, which is the property that matters when a number is
+    going into a report. Seeded from the evaluation seed and the opponent's name
+    rather than its position, so reordering the panel cannot move a result.
+    """
     played = ppo_as_benchmark_agent(agent)
     out = {}
-    for name, opponent in panel:
+    for name, make_opponent in panel:
+        # A fresh opponent and a fresh torch stream for every matchup, so a
+        # number does not depend on what was measured before it.
+        torch.manual_seed(seed + zlib.crc32(name.encode()))
+        opponent = make_opponent()
         # A fresh counter per matchup, so the miss rate describes this
         # measurement rather than every measurement so far. It is reported
         # because a benchmark that has quietly become a second random opponent

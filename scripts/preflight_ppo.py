@@ -27,6 +27,7 @@ thread coordination costs more than it saves — and nothing runs in parallel.
 import argparse
 import os
 import sys
+import zlib
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
@@ -308,23 +309,32 @@ def panel_scores(agent, hands, seed=17):
     """
     from evaluation import always_call_agent, benchmark, cfr_agent, random_agent
 
-    rng = np.random.default_rng(4)
-    panel = [("random", random_agent(rng)), ("always-call", always_call_agent())]
+    # A generator per opponent and a torch reseed per matchup, for the reason
+    # `train_ppo.panel_scores` gives at length: the policy samples from torch's
+    # global generator, so without this a score depends on how many hands ran
+    # before it, and the panel used to share one generator between the random
+    # opponent and the solver on top of that. The stakes are lower here than in
+    # a published measurement, but a preflight whose numbers move with execution
+    # order is a preflight that cannot be compared with the last one.
     misses = None
+    panel = [("random", lambda: random_agent(np.random.default_rng(4))),
+             ("always-call", lambda: always_call_agent())]
     try:
         import pickle
         with open("results/cfr/nolimit_strategy.pkl", "rb") as handle:
             saved = pickle.load(handle)
         misses = [0, 0]
-        panel.append(("cfr", cfr_agent(saved["strategy"], saved["abstraction"],
-                                       rng, misses)))
+        panel.append(("cfr", lambda: cfr_agent(saved["strategy"],
+                                               saved["abstraction"],
+                                               np.random.default_rng(5), misses)))
     except Exception as error:                              # noqa: BLE001
         print(f"    (CFR agent unavailable: {error})")
 
     played = ppo_as_benchmark_agent(agent)
     out = {}
-    for name, opponent in panel:
-        result = benchmark(played, opponent, name, hands=hands, seed=seed,
+    for name, make_opponent in panel:
+        torch.manual_seed(seed + zlib.crc32(name.encode()))
+        result = benchmark(played, make_opponent(), name, hands=hands, seed=seed,
                            misses=misses if name == "cfr" else None)
         out[name] = result
     return out, misses

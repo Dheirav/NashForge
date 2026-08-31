@@ -278,26 +278,26 @@ seeds; the spread is the range across them.
 
 | trained to | vs random | vs always-call | vs CFR |
 |---|---|---|---|
-| 500,000 | +189.7 (spread 233.0) | +287.2 (spread 391.4) | **+323.6** (spread 134.2) |
-| 2,000,000 | +214.9 (spread 92.1) | +294.1 (spread 388.0) | **+387.6** (spread 40.1) |
-| 8,000,000 | +123.8 (spread 140.8) | +471.5 (spread 609.1) | **+369.2** (spread 62.3) |
+| 500,000 | +215.9 (spread 216.9) | +261.9 (spread 397.8) | **+324.3** (spread 79.2) |
+| 2,000,000 | +233.3 (spread 73.3) | +276.9 (spread 369.7) | **+394.2** (spread 32.5) |
+| 8,000,000 | +147.1 (spread 135.3) | +451.3 (spread 636.7) | **+373.1** (spread 48.4) |
 
 All 27 rows — three seeds, three rungs, three opponents — separated from zero in the improving
 direction. The CFR lookup miss rate was 0.0% across all nine matchups.
 
 **What it learned transferred, and that is the contrast with Phase 2.** Against the solver the
-untrained networks scored −384.6, −381.7 and −376.3 BB/100; after 8M hands the same three scored
-−36.2, +34.3 and −33.0, a mean of −11.6. PPO closes essentially the whole gap to the CFR agent.
+untrained networks scored −399.1, −385.9 and −366.3 BB/100; after 8M hands the same three scored
+−34.8, +35.4 and −32.7, a mean of −10.7. PPO closes essentially the whole gap to the CFR agent.
 Evolutionary search, given the same panel and the same bar, moved −403.9 → −370.1 and was scored
 *no change*. Both halves of the audit's prediction now have numbers: the evolutionary method
 plateaus, and policy gradient produces a strong player.
 
-**The ladder is flat after 2M.** +387.6 at 2M against +369.2 at 8M, on spreads of 40 and 62 — the
+**The ladder is flat after 2M.** +394.2 at 2M against +373.1 at 8M, on spreads of 33 and 48 — the
 last six million hands of each run, three quarters of the wall-clock, bought nothing that can be
 measured. Phase 4 should spend its budget accordingly rather than assuming more is more.
 
-**Only the CFR column is quotable.** Its seed spreads are 40–134 BB/100; the two baselines run
-92–609. Against always-call at 8M the seeds scored +435.1, +185.2 and +794.3 — the direction is
+**Only the CFR column is quotable.** Its seed spreads are 33–79 BB/100; the two baselines run
+73–637. Against always-call at 8M the seeds scored +426.1, +145.5 and +782.2 — the direction is
 certain and the magnitude is not resolved at all. The opponent from outside the lineage is the
 stable yardstick and the hand-written baselines are not, which is worth carrying into Phase 5,
 where the CFR agent cannot serve.
@@ -321,9 +321,9 @@ arithmetic over files that already existed.
 |---|---|---|---|---|
 | CFR (the solver) | — | **+377.2** | **+722.9** | — |
 | evolution, 50 generations | 3.16 h | +192.7 | +0.5 | −370.1 |
-| PPO, 500k hands | 0.26 h | +191.1 | +291.1 | −57.3 |
-| PPO, 2M hands | 1.02 h | +216.3 | +297.9 | **+6.8** |
-| PPO, 8M hands | 4.81 h | +125.2 | +475.4 | −11.6 |
+| PPO, 500k hands | 0.26 h | +204.1 | +278.6 | −59.5 |
+| PPO, 2M hands | 1.02 h | +221.5 | +293.5 | **+10.4** |
+| PPO, 8M hands | 4.81 h | +135.4 | +467.9 | −10.7 |
 
 BB/100, big blind 2. The solver has no row against itself: a strategy against a copy of itself
 is zero by symmetry, and printing that zero would put a structural identity in a column of
@@ -336,7 +336,7 @@ axis, so this is a like-for-like budget statement rather than a comparison of en
 
 **The table is non-transitive, and that is the most interesting thing in it.** PPO at 2M draws
 level with the CFR agent head to head, yet the solver takes far more off both baselines —
-+377.2 against random to PPO's +216.3, and +722.9 against always-call to PPO's +297.9. Two
++377.2 against random to PPO's +221.5, and +722.9 against always-call to PPO's +293.5. Two
 agents level against each other extract very different amounts from the same weak opponents,
 so strength here is not a scalar and any single-number ranking of the three families would be
 a fiction. It also runs against the intuition that the near-equilibrium strategy should be the
@@ -351,6 +351,47 @@ in `phase2_endpoint.log` was taken beside a 74.3% lookup miss rate, and only the
 `phase2_cfr_row.log`, at 0.0%, is usable. The comparison script normalises units once at the
 boundary and refuses to run if the withdrawn row ever loses the miss-rate marker that
 identifies it.
+
+### The instrument defect found on 20 August, and how
+
+Phases 3 and 4 were measured, then re-measured, because the panel's results depended on the
+order they were taken in. Recording it here with the other three, since it is the fourth time
+this project has had to distrust a number and the first one that no result would have revealed.
+
+**What was wrong.** Three layers, all the same class:
+
+1. `build_panel()` handed the random opponent and the solver **one** generator, so the solver's
+   stream depended on how much the random matchup had drawn.
+2. The policy samples its actions from **torch's global generator**, and nothing reseeded it
+   between matchups. `torch.manual_seed` appeared once in the whole measurement path, inside
+   `PPOTrainer.__init__`.
+3. Callers build the panel **once** and reuse it, so each opponent's state carried across all
+   twelve columns of the endpoint test.
+
+Together: the same matchup read −28.9, −29.5 and −3.9 BB/100 depending only on what had been
+measured before it. Every one of those is a valid sample. None was reproducible alone.
+
+**How it was found, which is the part worth keeping.** Not by a result looking wrong — the
+published numbers were fine. It came out of checking whether the Phase 4 non-transitivity was
+an artefact: the instrument check passed, but a difference spotted while writing it led to
+layer 1, and **the fix for layer 1 failed its own order-independence test**, which is what
+exposed layers 2 and 3. A fix that had been committed without that test would have closed the
+smallest of the three and reported the problem solved.
+
+**The fix.** The panel hands out factories, and `panel_scores` builds a fresh opponent and
+reseeds torch — from the evaluation seed and the opponent's *name*, so reordering cannot move a
+number — for every matchup. `scripts/preflight_ppo.py` carried the same defect and got the same
+fix. A matchup now returns the same figure measured alone, inside the full panel, with the panel
+reversed, or on a reused panel object; all four differed before.
+
+**What re-measuring changed: almost nothing, and that is the result.** Every Phase 3 figure moved
+less than its own seed spread — at most 13.0 BB/100 against a spread of 216.9, and in the CFR
+column no more than 3.6. The seed spreads themselves *tightened* (134/40/62 → 79/33/48), which is
+what removing an uncontrolled source of variation should do. The conclusions stand and are now
+reproducible.
+
+`scripts/diagnostics/check_instrument.py` is kept as the check that would catch this class
+returning.
 
 ### Phase 5 — six-max
 
