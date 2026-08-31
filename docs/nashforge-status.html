@@ -1,0 +1,727 @@
+<title>What NashForge Has Measured</title>
+<style>
+  /* Tokens carried over from docs/abstraction-crossover.html so the two
+     documents read as one project rather than two. */
+  :root {
+    color-scheme: light;
+
+    --ground:        #f4f5f6;
+    --surface:       #fbfbfa;
+    --surface-sunk:  #eeeff0;
+    --ink:           #14181b;
+    --ink-soft:      #3d454b;
+    --ink-muted:     #5a6268;
+    --ink-faint:     #868f95;
+    --rule:          #dce0e2;
+    --rule-strong:   #c3c9cd;
+    --accent:        #2f4858;
+    --accent-soft:   #e3e9ec;
+
+    --pole-pos:      #2a78d6;
+    --pole-neg:      #e34948;
+    --pole-none:     #a7adb1;
+
+    --stamp-measured-bg:  #e4ece6;
+    --stamp-measured-ink: #1f5137;
+    --stamp-withdrawn-bg: #f6e3e3;
+    --stamp-withdrawn-ink:#8a2c2c;
+    --stamp-open-bg:      #e8e9eb;
+    --stamp-open-ink:     #4a5259;
+
+    --serif: "Iowan Old Style", "Charter", "Palatino Linotype", Palatino,
+             "Book Antiqua", Georgia, serif;
+    --sans: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    --mono: ui-monospace, "SF Mono", "Cascadia Code", "JetBrains Mono", Menlo,
+            Consolas, monospace;
+
+    --measure: 68ch;
+  }
+
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      color-scheme: dark;
+      --ground:        #101315;
+      --surface:       #1a1a19;
+      --surface-sunk:  #16191b;
+      --ink:           #e9eaea;
+      --ink-soft:      #c3c6c8;
+      --ink-muted:     #9aa1a6;
+      --ink-faint:     #767d82;
+      --rule:          #2a2f32;
+      --rule-strong:   #3c4347;
+      --accent:        #8fa8b8;
+      --accent-soft:   #1e262b;
+
+      --pole-pos:      #3987e5;
+      --pole-neg:      #e66767;
+      --pole-none:     #6e7477;
+
+      --stamp-measured-bg:  #16281e;
+      --stamp-measured-ink: #7fc9a1;
+      --stamp-withdrawn-bg: #2c1a1a;
+      --stamp-withdrawn-ink:#e39494;
+      --stamp-open-bg:      #202528;
+      --stamp-open-ink:     #a3abb1;
+    }
+  }
+
+  :root[data-theme="dark"] {
+    color-scheme: dark;
+    --ground:        #101315;
+    --surface:       #1a1a19;
+    --surface-sunk:  #16191b;
+    --ink:           #e9eaea;
+    --ink-soft:      #c3c6c8;
+    --ink-muted:     #9aa1a6;
+    --ink-faint:     #767d82;
+    --rule:          #2a2f32;
+    --rule-strong:   #3c4347;
+    --accent:        #8fa8b8;
+    --accent-soft:   #1e262b;
+
+    --pole-pos:      #3987e5;
+    --pole-neg:      #e66767;
+    --pole-none:     #6e7477;
+
+    --stamp-measured-bg:  #16281e;
+    --stamp-measured-ink: #7fc9a1;
+    --stamp-withdrawn-bg: #2c1a1a;
+    --stamp-withdrawn-ink:#e39494;
+    --stamp-open-bg:      #202528;
+    --stamp-open-ink:     #a3abb1;
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    margin: 0;
+    background: var(--ground);
+    color: var(--ink);
+    font-family: var(--sans);
+    font-size: 16px;
+    line-height: 1.6;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  .wrap {
+    max-width: 1080px;
+    margin: 0 auto;
+    padding: clamp(28px, 5vw, 64px) clamp(18px, 4vw, 40px) 96px;
+    display: flex;
+    flex-direction: column;
+    gap: clamp(30px, 4vw, 46px);
+  }
+
+  /* ---- masthead ---------------------------------------------------- */
+  .masthead {
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+    padding-bottom: 26px;
+    border-bottom: 2px solid var(--rule-strong);
+  }
+  .eyebrow {
+    font-family: var(--sans);
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.16em;
+    text-transform: uppercase;
+    color: var(--ink-faint);
+    margin: 0;
+  }
+  h1 {
+    font-family: var(--serif);
+    font-size: clamp(2rem, 5.2vw, 3.1rem);
+    line-height: 1.08;
+    font-weight: 600;
+    letter-spacing: -0.015em;
+    margin: 0;
+    text-wrap: balance;
+  }
+  .standfirst {
+    font-family: var(--serif);
+    font-size: clamp(1.02rem, 2vw, 1.2rem);
+    line-height: 1.55;
+    color: var(--ink-soft);
+    max-width: var(--measure);
+    margin: 0;
+  }
+  .byline {
+    font-size: 12.5px;
+    color: var(--ink-faint);
+    font-variant-numeric: tabular-nums;
+    margin: 0;
+  }
+
+  /* ---- section scaffolding ----------------------------------------- */
+  section { display: flex; flex-direction: column; gap: 16px; }
+  h2 {
+    font-family: var(--serif);
+    font-size: clamp(1.3rem, 2.6vw, 1.62rem);
+    line-height: 1.2;
+    font-weight: 600;
+    margin: 0;
+    text-wrap: balance;
+  }
+  p { margin: 0; max-width: var(--measure); color: var(--ink-soft); }
+  .note { font-size: 14px; color: var(--ink-muted); }
+
+  /* ---- status grid -------------------------------------------------- */
+  .families {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+    gap: 14px;
+  }
+  .family {
+    background: var(--surface);
+    border: 1px solid var(--rule);
+    border-radius: 4px;
+    padding: 18px 18px 20px;
+    display: flex;
+    flex-direction: column;
+    gap: 9px;
+  }
+  .family h3 {
+    font-family: var(--sans);
+    font-size: 13px;
+    font-weight: 700;
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+    margin: 0;
+    color: var(--ink);
+  }
+  .family p { font-size: 14px; max-width: none; }
+
+  .stamp {
+    align-self: flex-start;
+    font-family: var(--sans);
+    font-size: 10.5px;
+    font-weight: 700;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    padding: 3px 9px;
+    border-radius: 3px;
+  }
+  .s-measured  { background: var(--stamp-measured-bg);  color: var(--stamp-measured-ink); }
+  .s-withdrawn { background: var(--stamp-withdrawn-bg); color: var(--stamp-withdrawn-ink); }
+  .s-open      { background: var(--stamp-open-bg);      color: var(--stamp-open-ink); }
+
+  /* ---- headline result ---------------------------------------------- */
+  .result {
+    background: var(--surface);
+    border: 1px solid var(--rule);
+    border-left: 3px solid var(--pole-pos);
+    border-radius: 4px;
+    padding: clamp(20px, 3vw, 30px);
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+  }
+  .figure {
+    font-family: var(--mono);
+    font-size: clamp(1.5rem, 4.4vw, 2.3rem);
+    font-weight: 600;
+    letter-spacing: -0.02em;
+    color: var(--ink);
+    font-variant-numeric: tabular-nums;
+    margin: 0;
+  }
+  .figure .sigma { color: var(--pole-pos); }
+  .caption { font-size: 14px; color: var(--ink-muted); max-width: var(--measure); }
+
+  /* ---- tables -------------------------------------------------------- */
+  .tablewrap {
+    overflow-x: auto;
+    background: var(--surface);
+    border: 1px solid var(--rule);
+    border-radius: 4px;
+  }
+  table {
+    border-collapse: collapse;
+    width: 100%;
+    min-width: 520px;
+    font-size: 14px;
+  }
+  caption {
+    caption-side: top;
+    text-align: left;
+    padding: 14px 16px 10px;
+    font-size: 12.5px;
+    color: var(--ink-muted);
+    border-bottom: 1px solid var(--rule);
+  }
+  th, td {
+    padding: 9px 16px;
+    text-align: right;
+    border-bottom: 1px solid var(--rule);
+    font-variant-numeric: tabular-nums;
+  }
+  th {
+    font-family: var(--sans);
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.07em;
+    text-transform: uppercase;
+    color: var(--ink-faint);
+    white-space: nowrap;
+  }
+  th:first-child, td:first-child { text-align: left; }
+  tbody tr:last-child td { border-bottom: none; }
+  .num { font-family: var(--mono); }
+  .win-eq { color: var(--pole-pos); font-weight: 600; }
+  .win-mh { color: var(--pole-neg); font-weight: 600; }
+  .win-no { color: var(--pole-none); }
+  .flat   { color: var(--ink-faint); }
+  .up     { color: var(--pole-pos); font-weight: 600; }
+
+  /* ---- checks list --------------------------------------------------- */
+  .checks { display: flex; flex-direction: column; gap: 10px; }
+  .check {
+    display: grid;
+    grid-template-columns: 108px 1fr;
+    gap: 16px;
+    align-items: start;
+    background: var(--surface);
+    border: 1px solid var(--rule);
+    border-radius: 4px;
+    padding: 14px 16px;
+  }
+  .check .who {
+    font-family: var(--sans);
+    font-size: 12px;
+    font-weight: 700;
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+    color: var(--ink);
+    padding-top: 2px;
+  }
+  .check p { font-size: 14px; max-width: none; }
+
+  /* ---- callout ------------------------------------------------------- */
+  .callout {
+    background: var(--surface-sunk);
+    border: 1px solid var(--rule);
+    border-radius: 4px;
+    padding: 16px 18px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+  .callout p { font-size: 14px; max-width: none; }
+
+  code {
+    font-family: var(--mono);
+    font-size: 0.9em;
+    background: var(--accent-soft);
+    color: var(--ink-soft);
+    padding: 1px 5px;
+    border-radius: 3px;
+  }
+
+  footer {
+    border-top: 1px solid var(--rule);
+    padding-top: 18px;
+    font-size: 13px;
+    color: var(--ink-faint);
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+  }
+  footer p { color: var(--ink-faint); font-size: 13px; }
+
+  @media (max-width: 520px) {
+    .check { grid-template-columns: 1fr; gap: 6px; }
+  }
+</style>
+
+<div class="wrap">
+
+  <header class="masthead">
+    <p class="eyebrow">NashForge &middot; heads-up no-limit hold&rsquo;em</p>
+    <h1>What NashForge has measured</h1>
+    <p class="standfirst">
+      Three agent families &mdash; counterfactual regret minimisation, evolutionary
+      search and PPO &mdash; compared on one instrument. All three are now measured
+      against the same panel at the same bar. This page keeps what has been
+      measured separate from what has only been run, because the project has twice
+      mistaken the second for the first.
+    </p>
+    <p class="byline">Status at 20 August 2026, evening &middot; every figure below read from <code>results/</code></p>
+  </header>
+
+  <section>
+    <h2>Where the three families stand</h2>
+    <div class="families">
+
+      <article class="family">
+        <span class="stamp s-measured">measured</span>
+        <h3>CFR</h3>
+        <p>
+          Validated against Kuhn&rsquo;s analytic game value and exact Leduc
+          exploitability, then used to produce the project&rsquo;s one headline
+          result &mdash; the abstraction crossover.
+        </p>
+      </article>
+
+      <article class="family">
+        <span class="stamp s-measured">measured</span>
+        <h3>Evolutionary search</h3>
+        <p>
+          Fifty generations, endpoint-tested at 40,000 hands. It learned to
+          exploit a random opponent and nothing that transferred against the
+          solver.
+        </p>
+      </article>
+
+      <article class="family">
+        <span class="stamp s-measured">measured</span>
+        <h3>PPO</h3>
+        <p>
+          Self-play with snapshot pooling, endpoint-tested at 40,000 hands. It
+          closes essentially the whole gap to the CFR agent &mdash; and unlike
+          evolutionary search, what it learned transferred.
+        </p>
+      </article>
+
+    </div>
+  </section>
+
+  <section>
+    <h2>The result: the abstraction crossover</h2>
+
+    <div class="result">
+      <p class="figure">+0.916 &plusmn; 0.118 <span class="sigma">= 7.8&sigma;</span></p>
+      <p class="caption">
+        Chips per hand to equity bucketing over made-hand bucketing, head to head
+        at the 2560-second training budget. Three seeds, 20,000 hands per point.
+      </p>
+    </div>
+
+    <p>
+      The two abstractions describe a hand differently, and which one is better
+      depends on how much compute it is given. Made-hand bucketing is roughly
+      five times cheaper per iteration, so at equal wall-clock it takes far more
+      of them &mdash; and early, that wins. Equity bucketing overtakes it only
+      once both have had enough iterations for the finer description to pay for
+      itself.
+    </p>
+
+    <div class="tablewrap">
+      <table>
+        <caption>
+          Head to head at four training budgets. Positive favours equity
+          bucketing; iteration counts are the mean across three seeds.
+        </caption>
+        <thead>
+          <tr>
+            <th scope="col">Budget</th>
+            <th scope="col">Equity iters</th>
+            <th scope="col">Made-hand iters</th>
+            <th scope="col">Chips / hand</th>
+            <th scope="col">Separation</th>
+            <th scope="col">Ahead</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>40 s</td>
+            <td class="num">1,075</td>
+            <td class="num">5,600</td>
+            <td class="num">&minus;3.136 &plusmn; 0.729</td>
+            <td class="num">4.3&sigma;</td>
+            <td class="win-mh">made-hand</td>
+          </tr>
+          <tr>
+            <td>160 s</td>
+            <td class="num">3,808</td>
+            <td class="num">19,758</td>
+            <td class="num">&minus;1.531 &plusmn; 0.164</td>
+            <td class="num">9.3&sigma;</td>
+            <td class="win-mh">made-hand</td>
+          </tr>
+          <tr>
+            <td>640 s</td>
+            <td class="num">14,850</td>
+            <td class="num">73,158</td>
+            <td class="num">+0.273 &plusmn; 0.203</td>
+            <td class="num">1.3&sigma;</td>
+            <td class="win-no">not separated</td>
+          </tr>
+          <tr>
+            <td>2560 s</td>
+            <td class="num">60,117</td>
+            <td class="num">288,050</td>
+            <td class="num">+0.916 &plusmn; 0.118</td>
+            <td class="num">7.8&sigma;</td>
+            <td class="win-eq">equity</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <p class="note">
+      The crossing itself sits at 640 seconds, where the two are not separated.
+      That row is the finding as much as the last one is: it is where the answer
+      to &ldquo;which bucketing&rdquo; stops being one abstraction and becomes
+      the budget.
+    </p>
+  </section>
+
+  <section>
+    <h2>Why the solver can be believed</h2>
+    <p>
+      A CFR implementation that has converged to the wrong thing looks exactly
+      like one that has converged. Three checks pin it down, and the third is
+      reported here as a failure because that is what it was.
+    </p>
+
+    <div class="checks">
+      <div class="check">
+        <span class="who">Kuhn</span>
+        <p>
+          Has an analytically known game value of &minus;1/18 to the first
+          player. The solver reproduces it.
+        </p>
+      </div>
+      <div class="check">
+        <span class="who">Leduc</span>
+        <p>
+          Small enough to traverse exactly, so exploitability is computed rather
+          than estimated, and is required to fall toward zero. It does.
+        </p>
+      </div>
+      <div class="check">
+        <span class="who">No-limit</span>
+        <p>
+          Cannot be traversed, so exploitability was to be bounded below by Local
+          Best Response. After four defects fixed and three valuation models, LBR
+          still could not beat a converged strategy. <strong>The investigation
+          was closed with no usable bound</strong> &mdash; no-limit has no
+          exploitability figure at all.
+        </p>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <h2>Evolutionary search: what it learned, and what did not transfer</h2>
+    <p>
+      The final genome against an untrained one from the same initial
+      distribution, both against the same panel, both at 40,000 hands. The
+      difference between the columns is the result; each column on its own is a
+      fact about the opponent as much as about the agent.
+    </p>
+
+    <div class="tablewrap">
+      <table>
+        <caption>Endpoint test, 40,000 hands per matchup, &plusmn;14 BB/100.</caption>
+        <thead>
+          <tr>
+            <th scope="col">Opponent</th>
+            <th scope="col">Untrained</th>
+            <th scope="col">After 50 generations</th>
+            <th scope="col">Difference</th>
+            <th scope="col"></th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>random</td>
+            <td class="num">&minus;13.4 &plusmn; 14</td>
+            <td class="num">+192.7 &plusmn; 15</td>
+            <td class="num up">+206.1 &plusmn; 39</td>
+            <td class="up">improved</td>
+          </tr>
+          <tr>
+            <td>always-call</td>
+            <td class="num">&minus;8.1 &plusmn; 14</td>
+            <td class="num">+0.5 &plusmn; 4</td>
+            <td class="num">+8.6 &plusmn; 28</td>
+            <td class="flat">no change</td>
+          </tr>
+          <tr>
+            <td>CFR</td>
+            <td class="num">&minus;403.9 &plusmn; 13</td>
+            <td class="num">&minus;370.1 &plusmn; 14</td>
+            <td class="num">+33.8 &plusmn; 37</td>
+            <td class="flat">no change</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <p>
+      It punishes an opponent that folds and raises at random by 206 BB/100,
+      gains nothing against a station that never folds, and is still beaten by
+      the solver by 370 BB/100 after fifty generations. That is sharper than the
+      audit&rsquo;s prediction that the method would simply plateau: it did
+      learn, and what it learned did not transfer.
+    </p>
+
+    <div class="callout">
+      <span class="stamp s-withdrawn">superseded</span>
+      <p>
+        An earlier version of the CFR row read <span class="num">+107.8 &plusmn;
+        39, improved</span>. It was computed with a benchmark agent that missed
+        <span class="num">74.3%</span> of its strategy lookups and was therefore
+        playing close to at random under the solver&rsquo;s name. The row above
+        is the re-measurement after that was fixed, at a 0.0% miss rate. The
+        miss-rate counter exists precisely so that failure shows up as a number.
+      </p>
+    </div>
+  </section>
+
+  <section>
+    <h2>PPO: what self-play learned, and that it transferred</h2>
+    <p>
+      Self-play with snapshot pooling ran three seeds to 8 million hands each on
+      17&ndash;18 August, with rungs kept at 500k, 2M and 8M so the comparison
+      gets a budget axis rather than a single endpoint. Each rung was then played
+      against an untrained policy from the same initialisation, both against the
+      same panel, both at 40,000 hands.
+    </p>
+
+    <div class="result">
+      <p class="figure">&minus;380.9 &rarr; <span class="sigma">&minus;11.6</span></p>
+      <p class="caption">
+        BB/100 against the CFR agent, untrained versus after 8M hands, mean of
+        three seeds. All 27 rows &mdash; three seeds, three rungs, three
+        opponents &mdash; improved.
+      </p>
+    </div>
+
+    <div class="tablewrap">
+      <table>
+        <caption>
+          Gain over the untrained policy from the same initialisation, in BB/100.
+          Mean across three seeds; spread is the range across them.
+        </caption>
+        <thead>
+          <tr>
+            <th scope="col">Trained to</th>
+            <th scope="col">vs random</th>
+            <th scope="col">vs always-call</th>
+            <th scope="col">vs CFR</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>500,000</td>
+            <td class="num">+189.7 <span class="win-no">(233.0)</span></td>
+            <td class="num">+287.2 <span class="win-no">(391.4)</span></td>
+            <td class="num up">+323.6 <span class="win-no">(134.2)</span></td>
+          </tr>
+          <tr>
+            <td>2,000,000</td>
+            <td class="num">+214.9 <span class="win-no">(92.1)</span></td>
+            <td class="num">+294.1 <span class="win-no">(388.0)</span></td>
+            <td class="num up">+387.6 <span class="win-no">(40.1)</span></td>
+          </tr>
+          <tr>
+            <td>8,000,000</td>
+            <td class="num">+123.8 <span class="win-no">(140.8)</span></td>
+            <td class="num">+471.5 <span class="win-no">(609.1)</span></td>
+            <td class="num up">+369.2 <span class="win-no">(62.3)</span></td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <p>
+      <strong>This is the contrast the project was built to draw.</strong> Given
+      the same panel and the same bar, evolutionary search moved
+      &minus;403.9 &rarr; &minus;370.1 against the solver and was scored
+      <em>no change</em>. Both halves of the audit&rsquo;s prediction now have
+      numbers: the evolutionary method plateaus, and policy gradient does not.
+    </p>
+
+    <div class="callout">
+      <p>
+        <strong>The ladder is flat after 2M hands.</strong> +387.6 against the
+        solver at 2M, +369.2 at 8M, on seed spreads of 40 and 62. Three quarters
+        of each run&rsquo;s wall-clock bought nothing that can be measured. That
+        is a finding about how to spend a budget, not a disappointment.
+      </p>
+      <p>
+        <strong>Only the CFR column is quotable.</strong> Its seed spreads are
+        40&ndash;134 BB/100; the two baselines run 92&ndash;609. Against
+        always-call at 8M the three seeds scored +435.1, +185.2 and +794.3 &mdash;
+        the direction is certain and the magnitude is not resolved at all. The
+        opponent from outside the lineage is the stable yardstick; the
+        hand-written ones are not.
+      </p>
+    </div>
+
+    <p class="note">
+      Validity: the CFR lookup miss rate was <span class="num">0.0%</span> across
+      all nine matchups, and the untrained baselines agreed across seeds at
+      &minus;384.6, &minus;381.7 and &minus;376.3. The spread across seeds, not
+      any single seed&rsquo;s &plusmn;14, is the error bar this result is quoted
+      with.
+    </p>
+
+    <div class="callout">
+      <span class="stamp s-open">scope</span>
+      <p>
+        Break-even here is against <em>this</em> CFR agent &mdash; six buckets,
+        one raise per street. It is not a claim about strong solvers, and it is
+        not an exploitability figure. Item 1 closed with no usable bound, so
+        no-limit still has none.
+      </p>
+    </div>
+  </section>
+
+  <section>
+    <h2>What is withdrawn, and what is still open</h2>
+
+    <div class="checks">
+      <div class="check">
+        <span class="stamp s-withdrawn">withdrawn</span>
+        <p>
+          <strong>Every result predating 12 August 2026.</strong> The old fitness
+          function scored the wrong player, and the deck re-dealt the same two
+          hands every hand. An untrained random network scored +451 BB/100 under
+          it. Those reports are deleted from the tree and survive only in git
+          history.
+        </p>
+      </div>
+      <div class="check">
+        <span class="stamp s-open">open</span>
+        <p>
+          <strong>An externally produced number.</strong> Every strength figure
+          here was computed by this project about itself. Slumbot is a fixed CFR
+          strategy at heads-up no-limit behind a public API, reported in
+          mbb/hand in published work. The first milestone is 10,000 hands with a
+          confidence interval &mdash; any result &mdash; because it would be the
+          first number here that someone else&rsquo;s agent produced.
+        </p>
+      </div>
+      <div class="check">
+        <span class="stamp s-open">next</span>
+        <p>
+          <strong>The comparison.</strong> All three families on one panel with
+          one instrument, across the budget ladder. This is what the project&rsquo;s
+          title promises, and as of this evening nothing blocks it: the
+          measurements exist and the work is mostly assembly. One thing to settle
+          first &mdash; evolution&rsquo;s ladder is generations at a fixed hand
+          count and PPO&rsquo;s is hands, so the comparison has to say which axis
+          it is using before it plots anything.
+        </p>
+      </div>
+    </div>
+  </section>
+
+  <footer>
+    <p>
+      Figures read from <code>results/cfr/head_to_head.json</code>,
+      <code>results/evolution/phase2_endpoint.log</code> and
+      <code>results/evolution/phase2_cfr_row.log</code>.
+    </p>
+    <p>
+      The engine and its chip accounting survived the August audit intact. A
+      viewer at <code>python -m gui.main</code> plays a person against the same
+      benchmark panel, through the same loop the measurements use.
+    </p>
+  </footer>
+
+</div>
