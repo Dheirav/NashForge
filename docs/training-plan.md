@@ -148,7 +148,7 @@ Updated as work lands. "Blocked" means waiting on a decision, and the decision i
 | 1 | Rebuild the observation, 17 → 19 | **done** — effective dimensions 6 → 9 |
 | 2 | Evolutionary search, heads-up | **done** — learned to exploit randomness, nothing transferred |
 | 3 | PPO with self-play, heads-up | **done** — closes the gap to the CFR agent; flat after 2M hands |
-| 4 | The comparison | **unblocked — next**; all three families now measured on one panel |
+| 4 | The comparison | **done** — one panel, one budget axis; PPO reaches break-even in ~1 h, evolution never does |
 | 5 | Six-max | blocked on 4; also needs the `play_match` stack-drift fix below |
 
 ## Phases
@@ -306,11 +306,51 @@ where the CFR agent cannot serve.
 street — not against a strong solver, and not an exploitability figure. Item 1 closed with no
 usable bound, so no-limit still has none.
 
-### Phase 4 — the comparison
+### Phase 4 — the comparison — DONE, 20 August
 
-Both methods on the same budget ladder, both against the same panel, seeds and intervals
-throughout. This is the deliverable, and it extends the existing report rather than starting
-a new one.
+All three families against the same panel, at the same 40,000 hands, on one budget axis
+(`scripts/phase4_comparison.py`, `results/comparison/phase4.json`).
+
+**The budget axis needed no new training.** The families laddered along different axes — CFR
+along seconds, evolution along generations, PPO along hands — but all three had recorded
+wall-clock all along: the CFR budgets are seconds by construction, `phase2_history.json` keeps
+`seconds` per generation, and each PPO history keeps `seconds` per interval. The axis was
+arithmetic over files that already existed.
+
+| family | wall-clock | vs random | vs always-call | vs CFR |
+|---|---|---|---|---|
+| CFR (the solver) | — | **+377.2** | **+722.9** | — |
+| evolution, 50 generations | 3.16 h | +192.7 | +0.5 | −370.1 |
+| PPO, 500k hands | 0.26 h | +191.1 | +291.1 | −57.3 |
+| PPO, 2M hands | 1.02 h | +216.3 | +297.9 | **+6.8** |
+| PPO, 8M hands | 4.81 h | +125.2 | +475.4 | −11.6 |
+
+BB/100, big blind 2. The solver has no row against itself: a strategy against a copy of itself
+is zero by symmetry, and printing that zero would put a structural identity in a column of
+measurements.
+
+**PPO reaches break-even against the solver in about one hour of training. Evolutionary search,
+given more than three times that compute, is still 370 BB/100 behind** — and its gain over its
+own untrained network was +33.8 ± 37, which is no change. Both families sit on one wall-clock
+axis, so this is a like-for-like budget statement rather than a comparison of endpoints.
+
+**The table is non-transitive, and that is the most interesting thing in it.** PPO at 2M draws
+level with the CFR agent head to head, yet the solver takes far more off both baselines —
++377.2 against random to PPO's +216.3, and +722.9 against always-call to PPO's +297.9. Two
+agents level against each other extract very different amounts from the same weak opponents,
+so strength here is not a scalar and any single-number ranking of the three families would be
+a fiction. It also runs against the intuition that the near-equilibrium strategy should be the
+less exploitative one. The mechanism is not established; it is recorded as an open question
+rather than explained away.
+
+**Two hazards were found while building it, both of which produce a plausible-looking wrong
+chart.** `results/cfr/strength_signals.json` is in chips/hand while the endpoint tests are in
+BB/100 — a factor of fifty at big blind 2, which plotted unconverted shows the solver as fifty
+times weaker than PPO rather than stronger. And evolution's CFR row exists twice: the +60.8
+in `phase2_endpoint.log` was taken beside a 74.3% lookup miss rate, and only the −370.1 in
+`phase2_cfr_row.log`, at 0.0%, is usable. The comparison script normalises units once at the
+boundary and refuses to run if the withdrawn row ever loses the miss-rate marker that
+identifies it.
 
 ### Phase 5 — six-max
 
