@@ -1025,7 +1025,39 @@ measured by regression.
 
 <p><strong>PPO reaches break-even against the solver in about one hour of training, and evolutionary search does not reach it in three.</strong> Because both families sit on one wall-clock axis this is a like-for-like statement about budget rather than a comparison of endpoints. The solver has no row against itself: a strategy played against a copy of itself scores zero by symmetry, and that is a structural identity rather than a measurement.</p>
 <p><strong>The table does not rank, and that is its most interesting property.</strong> PPO at two million hands draws level with the solver head to head, yet the solver takes far more off both baselines — +377.2 against random to PPO's +221.5, and +722.9 against the calling station to PPO's +293.5. Two agents that are level against each other extract very different amounts from the same weak opponents, so strength here is not a scalar and any single-number ranking of the three families would be a fiction. It also runs against the intuition that a near-equilibrium strategy should be the less exploitative one.</p>
-<p>Two candidate explanations were tested and both failed. Measuring the solver through both families' code paths gave bit-identical results, so the two rows are on one instrument. Lifting the one-raise-per-street cap — the rule that stops a policy punishing a calling station by raising repeatedly — widened the gap rather than closing it, from −430.1 to −437.4. What remains is that the intransitivity is real: these strategies beat each other in a loop. The mechanism is not established, and is reported as an open question rather than explained away.</p>
+<p>Three explanations were tested. Measuring the solver through both families' code paths gave bit-identical results, so the two rows are on one instrument. Lifting the one-raise-per-street cap — the rule that stops a policy punishing a calling station by raising repeatedly — widened the gap rather than closing it, from −430.1 to −437.4. Both are ruled out.</p>
+
+<h3>Why the comparison does not rank</h3>
+<p>The third explanation is the answer, and it was settled by measuring the one edge of the tournament graph that had never been taken. Both learned families had been scored against the solver and the two baselines, and never against each other.</p>
+
+<div class="tablewrap">
+<table>
+  <caption>Table 6 · The tournament graph, BB/100 to the first named</caption>
+  <thead><tr><th>Edge</th><th>Result</th><th>Note</th></tr></thead>
+  <tbody>
+    <tr><td>CFR vs PPO (2M)</td><td>+10.4</td><td>level</td></tr>
+    <tr><td>CFR vs evolution</td><td>+370.1</td><td>the solver dominates</td></tr>
+    <tr><td>PPO vs evolution</td><td><strong>+23.9</strong></td><td>per seed −12.7, +68.2, +16.3; spread 80.8</td></tr>
+  </tbody>
+</table>
+</div>
+
+<p>If strength were a scalar, PPO being level with the solver and the solver beating the evolved genome by 370 BB/100 would require PPO to beat it by roughly 360. It beats it by 23.9, which against a seed spread of 80.8 is not separated from zero — one of the three seeds lost outright. <strong>PPO is level with the solver and also level with the genome the solver crushes</strong>, and no single ordering permits both. The edge formed no part of the observation that raised the question, which is what makes it evidence rather than a restatement of it.</p>
+
+<p>The mechanism is visible in what each agent actually does. Counting every decision taken against a station that never folds, over roughly 250,000 decisions each, the solver moves all-in on 15.0% of them and PPO on 0.1%; PPO concentrates instead on the smallest available raise. The two raise at broadly similar rates — 74.3% against 62.4% — so the difference is in sizing rather than frequency, and both faced the identical cap, so it is a property of the policy rather than of the rules.</p>
+
+<div class="tablewrap">
+<table>
+  <caption>Table 7 · Action frequencies against a calling station</caption>
+  <thead><tr><th>Agent</th><th>fold</th><th>check/call</th><th>raise ½</th><th>raise pot</th><th>raise 2×</th><th>all-in</th></tr></thead>
+  <tbody>
+    <tr><td>CFR solver</td><td>1.5%</td><td>24.2%</td><td>20.9%</td><td>21.0%</td><td>17.3%</td><td><strong>15.0%</strong></td></tr>
+    <tr><td>PPO, 2M hands</td><td>3.5%</td><td>34.1%</td><td>35.3%</td><td>13.2%</td><td>13.8%</td><td><strong>0.1%</strong></td></tr>
+  </tbody>
+</table>
+</div>
+
+<p><strong>Self-play optimises against a peer, and produces a policy that cannot punish a weak opponent.</strong> Against an opponent who never folds the value is in large bets, and PPO trained against periodic snapshots of itself — opponents that do fold — so it never met a situation worth moving all-in into and did not learn to. Against the solver this costs it nothing, and the two are level; against anything weak it leaves most of the available value uncollected. This is the audit's prediction that policy gradient would yield a strong but exploitable agent, made specific and measured, and it is the reason no single-number ranking of the three families appears anywhere in this report.</p>
 
 <h3>A fourth measurement defect, and how it was found</h3>
 <p>Phases Three and Four were measured, then re-measured, because a panel score turned out to depend on the order the matchups were taken in. Three layers were involved: the panel handed the random opponent and the solver a single random generator; the policy samples its actions from a global generator that nothing reseeded between matchups; and callers build the panel once and reuse it, so each opponent's state carried across all twelve columns of the endpoint test. Together, the same matchup read −28.9, −29.5 and −3.9 BB/100 on nothing but what had been measured before it. Every one of those is a valid sample and none was reproducible in isolation.</p>
@@ -1097,7 +1129,7 @@ favourite while appearing indistinguishable — a limit no amount of training ca
 
 <div class="tablewrap">
 <table>
-  <caption>Table 6 · NashForge against conventional approaches</caption>
+  <caption>Table 8 · NashForge against conventional approaches</caption>
   <thead><tr><th>Capability</th><th>Heuristic Bot</th><th>Standard RL System</th><th>Proposed NashForge</th></tr></thead>
   <tbody>
     <tr><td>Strategy source</td><td>Hand-written rules</td><td>Learned policy</td><td class="hi">Three families compared</td></tr>

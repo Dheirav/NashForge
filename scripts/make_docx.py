@@ -587,7 +587,22 @@ table("Table 5. Every family against the same panel, 40,000 hands, BB/100",
        ['PPO, 8M hands', '4.81 h', '+135.4', '+467.9', '−10.7']])
 para("""**PPO reaches break-even against the solver in about one hour of training, and evolutionary search does not reach it in three.** Because both families sit on one wall-clock axis this is a like-for-like statement about budget rather than a comparison of endpoints. The solver has no row against itself: a strategy played against a copy of itself scores zero by symmetry, and that is a structural identity rather than a measurement.""")
 para("""**The table does not rank, and that is its most interesting property.** PPO at two million hands draws level with the solver head to head, yet the solver takes far more off both baselines — +377.2 against random to PPO's +221.5, and +722.9 against the calling station to PPO's +293.5. Two agents that are level against each other extract very different amounts from the same weak opponents, so strength here is not a scalar and any single-number ranking of the three families would be a fiction. It also runs against the intuition that a near-equilibrium strategy should be the less exploitative one.""")
-para("""Two candidate explanations were tested and both failed. Measuring the solver through both families' code paths gave bit-identical results, so the two rows are on one instrument. Lifting the one-raise-per-street cap — the rule that stops a policy punishing a calling station by raising repeatedly — widened the gap rather than closing it, from −430.1 to −437.4. What remains is that the intransitivity is real: these strategies beat each other in a loop. The mechanism is not established, and is reported as an open question rather than explained away.""")
+para("""Three explanations were tested. Measuring the solver through both families' code paths gave bit-identical results, so the two rows are on one instrument. Lifting the one-raise-per-street cap — the rule that stops a policy punishing a calling station by raising repeatedly — widened the gap rather than closing it, from −430.1 to −437.4. Both are ruled out.""")
+
+h2("Why the Comparison Does Not Rank")
+para("""The third explanation is the answer, and it was settled by measuring the one edge of the tournament graph that had never been taken. Both learned families had been scored against the solver and the two baselines, and never against each other.""")
+table("Table 6. The tournament graph, BB/100 to the first named",
+      ['Edge', 'Result', 'Note'],
+      [['CFR vs PPO (2M)', '+10.4', 'level'],
+       ['CFR vs evolution', '+370.1', 'the solver dominates'],
+       ['PPO vs evolution', '+23.9', 'per seed −12.7, +68.2, +16.3; spread 80.8']])
+para("""If strength were a scalar, PPO being level with the solver and the solver beating the evolved genome by 370 BB/100 would require PPO to beat it by roughly 360. It beats it by 23.9, which against a seed spread of 80.8 is not separated from zero — one of the three seeds lost outright. **PPO is level with the solver and also level with the genome the solver crushes**, and no single ordering permits both. The edge formed no part of the observation that raised the question, which is what makes it evidence rather than a restatement of it.""")
+para("""The mechanism is visible in what each agent actually does. Counting every decision taken against a station that never folds, over roughly 250,000 decisions each, the solver moves all-in on 15.0% of them and PPO on 0.1%; PPO concentrates instead on the smallest available raise, at 35.3% against the solver's 20.9%. The two raise at broadly similar rates — 74.3% against 62.4% — so the difference is in sizing rather than in frequency, and both faced the identical cap, so it is a property of the policy rather than of the rules.""")
+table("Table 7. Action frequencies against a calling station",
+      ['Agent', 'fold', 'check/call', 'raise ½', 'raise pot', 'raise 2×', 'all-in'],
+      [['CFR solver', '1.5%', '24.2%', '20.9%', '21.0%', '17.3%', '15.0%'],
+       ['PPO, 2M hands', '3.5%', '34.1%', '35.3%', '13.2%', '13.8%', '0.1%']])
+para("""**Self-play optimises against a peer, and produces a policy that cannot punish a weak opponent.** Against an opponent who never folds the value is in large bets, and PPO trained against periodic snapshots of itself — opponents that do fold — so it never met a situation worth moving all-in into and did not learn to. Against the solver this costs it nothing, and the two are level; against anything weak it leaves most of the available value uncollected. This is the audit's prediction that policy gradient would yield a strong but exploitable agent, made specific and measured, and it is the reason no single-number ranking of the three families appears anywhere in this report.""")
 
 h2("A Fourth Measurement Defect, and How It Was Found")
 para("""Phases Three and Four were measured, then re-measured, because a panel score turned out to depend on the order the matchups were taken in. Three layers were involved: the panel handed the random opponent and the solver a single random generator; the policy samples its actions from a global generator that nothing reseeded between matchups; and callers build the panel once and reuse it, so each opponent's state carried across all twelve columns of the endpoint test. Together, the same matchup read −28.9, −29.5 and −3.9 BB/100 on nothing but what had been measured before it. Every one of those is a valid sample and none was reproducible in isolation.""")
@@ -650,7 +665,7 @@ for name, text in OBSERVATIONS:
 
 # --------------------------------------------------- comparative table ------
 h1("Comparative Analysis")
-table("Table 6. NashForge against conventional approaches",
+table("Table 8. NashForge against conventional approaches",
       ["Capability", "Heuristic Bot", "Standard RL System", "Proposed NashForge"],
       [["Strategy source", "Hand-written rules", "Learned policy", "Three families compared"],
        ["Theoretical guarantee", "None", "None", "Equilibrium convergence"],

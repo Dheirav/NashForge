@@ -67,21 +67,48 @@ improved.
 
 ---
 
-## Result 4 — the table does not rank
+## Result 4 — the table does not rank, and why
 
 PPO at 2M draws level with the solver head to head (+10.4), yet the solver takes nearly twice as
 much off both baselines. Two agents level against each other extract very different amounts from
 the same weak opponents, so **strength here is not a scalar** and no single ranking of the three
 families exists.
 
-Two explanations were tested and both failed:
+Three explanations were tested. Two failed:
 
 - **An instrument artefact** — measuring the solver through both families' code paths gives
   bit-identical results. Ruled out.
 - **The one-raise-per-street cap** — lifting it *widened* the gap, −430.1 to −437.4. Ruled out.
 
-What remains is that the intransitivity is real. The mechanism is not established, and is
-reported as an open question rather than explained away.
+The third is the answer, and it was settled by measuring the edge of the tournament graph that
+nobody had: **PPO against the evolved genome.**
+
+| edge | BB/100 to the first named |
+|---|---|
+| CFR vs PPO | +10.4 — level |
+| CFR vs evolution | +370.1 |
+| **PPO vs evolution** | **+23.9** — spread 80.8, one seed lost |
+
+Transitivity predicted about **+360** for that edge. **PPO is level with the solver and also
+level with the genome the solver beats by 370** — no single ordering permits both.
+
+### The mechanism
+
+Counting what each agent does against a station that never folds, ~250,000 decisions each:
+
+| | fold | check/call | raise ½ | raise pot | raise 2× | all-in |
+|---|---|---|---|---|---|---|
+| CFR solver | 1.5% | 24.2% | 20.9% | 21.0% | 17.3% | **15.0%** |
+| PPO, 2M hands | 3.5% | 34.1% | 35.3% | 13.2% | 13.8% | **0.1%** |
+
+They raise at similar *rates* (74.3% vs 62.4%), so frequency is not it. **PPO has effectively
+eliminated the all-in from its strategy.** Against an opponent who never folds the value is in
+large bets — and PPO trained by self-play against snapshots of itself, which do fold, so it
+never met an opponent worth jamming into. Against the solver that costs nothing and they are
+level; against anything weak it leaves the value uncollected.
+
+This is the audit's "strong but exploitable" prediction made specific: **self-play optimises for
+a peer and produces a policy that cannot punish a weak opponent.**
 
 ---
 

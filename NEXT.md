@@ -31,45 +31,55 @@ times that compute, is still 370 BB/100 behind.**
 
 ---
 
-## The next step: explain the non-transitivity
+## Closed today: the Phase 4 intransitivity
 
-The comparison produced a result it does not explain, and it is the most interesting thing in
-the table. PPO at 2M hands draws level with the CFR agent head to head (+10.4), yet the solver
-takes far more off both baselines — +377.2 against random to PPO's +221.5, and +722.9 against
-always-call to PPO's +293.5.
+It is **explained** — see
+[`docs/training-plan.md`](docs/training-plan.md). All three candidate explanations were tested:
+the instrument agrees bit-for-bit, lifting the raise cap widened the gap rather than closing it,
+and the third turned out to be the answer.
 
-Two agents that are level against each other extract very different amounts from the same weak
-opponents. So **strength here is not a scalar**, and any single-number ranking of the three
-families would be a fiction. It also cuts against the intuition that a near-equilibrium
-strategy should be the *less* exploitative one, which is why it is worth a look rather than a
-footnote.
+The tournament graph's missing edge settles it. PPO against the evolved genome scores **+23.9
+BB/100** (per seed −12.7, +68.2, +16.3, spread 80.8) where transitivity predicted about +360.
+PPO is level with the solver *and* level with the genome the solver beats by 370, which no
+single ordering allows.
 
-Both cheap explanations were checked on 20 August and **both are dead**:
+The mechanism is in the action counts. Against a station that never folds the solver goes all-in
+on **15.0%** of its decisions and PPO on **0.1%**; the two raise at similar rates, so the
+difference is sizing rather than frequency. Self-play optimises against a peer, and its
+snapshots fold — so the policy never learned to jam into an opponent who does not. Against the
+solver that costs nothing; against anything weak it leaves the value uncollected.
 
-- ~~An instrument artefact.~~ `scripts/diagnostics/check_instrument.py`: the two measurement
-  paths agree bit-for-bit at 40,000 hands, reproducing +377.2 and +722.9 exactly.
-- ~~The raise cap.~~ `scripts/diagnostics/check_raise_cap.py`: lifting it to two raises per
-  street *widened* the gap against always-call, −430.1 to −437.4. The cap was not suppressing
-  PPO. Note the solver goes off-tree above cap 1 — 19.3% lookup misses, concentrated in the
-  random matchup — so its cap-2 column is not a measurement of the solver.
+**Do not quote a single-number ranking of the three families.** The data does not support one.
 
-**What remains is that the non-transitivity is real**: these strategies beat each other in a
-loop, and no single ranking of the three families exists. That is the finding, and it is a
-better one than the leaderboard it denies. The mechanism is still not established — two
-candidates are ruled out, not all of them — so the next step is to look for the third rather
-than to assume the question is closed.
+---
+
+## Now: item 5 — do not lose to Slumbot
+
+M0 is done: `slumbot/api.py` plays a hand end to end against the live API, with 21 offline tests
+on the betting-string parsing. The next steps, from
+[`docs/EXTERNAL_BENCHMARK.md`](docs/EXTERNAL_BENCHMARK.md):
+
+**The stack depth is the first problem, and it is not small.** Slumbot plays 20,000 chips at
+50/100 — **200 big blinds**, confirmed against the live server. This project's engine and solver
+use 200 chips at 1/2, which is **100**. A strategy fitted for 100bb is off-tree at 200bb from
+its first decision. Either something is built for the depth Slumbot plays, or the depth is
+reported as a caveat on every number that follows. Decide which before writing the translation
+layer, because it changes what the layer is for.
+
+**Then the translation layer**, as its own module with its own tests. Slumbot bets any legal
+amount; this project plays six abstract actions. Inbound, a bet landing between two abstraction
+sizes has to be mapped onto one, and nearest-size mapping is itself exploitable — randomised
+translation between the two neighbours is the standard fix. Outbound, an abstract action has to
+become a chip amount. `bet_levels()` gives the raw levels; turning those into an amount owed
+needs position and the posted blinds, which the API module deliberately does not do.
+
+**Then M1**: 10,000 hands with a confidence interval, any result. Worth investigating first that
+the API returns `baseline_winnings` per hand — its own variance-reduced estimate, which may do
+some of the work the brief assigns to duplicate seating and AIVAT.
 
 ---
 
 ## After that
-
-**Item 5 — do not lose to Slumbot.** The one open goal that is not an internal measurement.
-Every strength figure here was computed by this project about itself, and item 1 closed with no
-usable bound, so no-limit has no exploitability figure at all. The brief, its milestones and
-its measurement protocol are in [`docs/EXTERNAL_BENCHMARK.md`](docs/EXTERNAL_BENCHMARK.md); M1
-is 10,000 hands with a confidence interval, any result, because it would be the first number
-here that someone else's agent produced. Most of the work is action translation, and no code
-for it exists yet.
 
 **Phase 5 — six-max.** After heads-up is complete. Note the CFR agent cannot serve as a
 benchmark there, so the panel loses its only opponent from outside the lineage. Also needs the

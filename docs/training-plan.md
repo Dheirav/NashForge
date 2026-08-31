@@ -352,6 +352,54 @@ in `phase2_endpoint.log` was taken beside a 74.3% lookup miss rate, and only the
 boundary and refuses to run if the withdrawn row ever loses the miss-rate marker that
 identifies it.
 
+### The intransitivity, measured and explained — 20 August
+
+Phase 4's table did not rank, and three explanations were listed. Two were checked and failed:
+the two families' rows are on one instrument, bit-for-bit
+(`scripts/diagnostics/check_instrument.py`), and lifting the one-raise-per-street cap *widened*
+the gap rather than closing it (`scripts/diagnostics/check_raise_cap.py`). The third was that
+the intransitivity is genuine, and it now has a measurement
+(`scripts/diagnostics/check_intransitivity.py`).
+
+**The edge nobody had measured.** Phase 4's tournament graph had a hole in it: both learned
+families were scored against the solver and the two baselines, never against each other.
+
+| edge | BB/100 to the first named |
+|---|---|
+| CFR vs PPO | +10.4 — level |
+| CFR vs evolution | +370.1 |
+| **PPO vs evolution** | **+23.9** — per seed −12.7, +68.2, +16.3, spread 80.8 |
+
+If strength were a scalar, PPO being level with the solver and the solver beating the evolved
+genome by 370 would require PPO to beat it by about 360. It beats it by 23.9, which against a
+spread of 80.8 is not separated from zero — one seed lost. **PPO is level with the solver and
+also level with the genome the solver crushes**, and both cannot be true of a single ordering.
+The edge was no part of the observation that raised the question, which is what makes it
+evidence rather than a restatement of it.
+
+**And the mechanism.** Counting what each agent actually does against a station that never
+folds, over about 250,000 decisions each:
+
+| | fold | check/call | raise ½ | raise pot | raise 2× | all-in |
+|---|---|---|---|---|---|---|
+| CFR solver | 1.5% | 24.2% | 20.9% | 21.0% | 17.3% | **15.0%** |
+| PPO, 2M hands | 3.5% | 34.1% | 35.3% | 13.2% | 13.8% | **0.1%** |
+
+The two raise at similar *rates* — 74.3% against 62.4% — so frequency is not the explanation.
+**PPO has effectively eliminated the all-in from its strategy** and concentrates on the smallest
+raise. Both agents face the identical cap, so this is a property of the policy rather than of
+the rules.
+
+That accounts for the whole table. Against an opponent who never folds, the value is in large
+bets. PPO trained by self-play against snapshots of itself, and those snapshots fold; it never
+faced an opponent worth jamming into, so it never learned to. Against the solver that costs it
+nothing and the two are level. Against anything weak it leaves most of the value uncollected.
+
+This is the audit's prediction that policy gradient would produce "a strong but exploitable bot",
+made specific and measured: **self-play optimises for a peer, and produces a policy that cannot
+punish a weak opponent.** It is also why no single-number ranking of these three families should
+be quoted, in this report or anywhere downstream of it.
+
 ### The instrument defect found on 20 August, and how
 
 Phases 3 and 4 were measured, then re-measured, because the panel's results depended on the
