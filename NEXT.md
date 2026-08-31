@@ -4,7 +4,7 @@ One page, kept current. [`BACKLOG.md`](BACKLOG.md) holds the reasoning and every
 [`docs/training-plan.md`](docs/training-plan.md) holds the full phase plan and its results. This
 file is only the next thing to do.
 
-**Last updated:** 20 August 2026 · `main` at `813f457` · 233 tests passing
+**Last updated:** 20 August 2026 · `main` at `3b21fb0` · 233 tests passing (9m32s)
 
 ---
 
@@ -16,42 +16,47 @@ file is only the next thing to do.
 | Evolutionary search | measured | Learned to exploit randomness; nothing transferred against the solver |
 | PPO | measured | Closes the gap to the CFR agent: −380.9 → −11.6 BB/100 after 8M hands. Flat after 2M |
 
-All three families are now measured on the same panel with the same instrument, which is the
-condition Phase 4 has been waiting on since the plan was written.
+All three are measured, and **Phase 4 — the comparison the project's title promises — is done**
+(`results/comparison/phase4.json`). One panel, 40,000 hands, one wall-clock axis, in BB/100:
 
-Phase 3's result, in one line: PPO learned and **what it learned transferred**. Against the
-solver the untrained networks scored −384.6, −381.7 and −376.3 BB/100; after 8M hands the same
-three scored −36.2, +34.3 and −33.0. Evolutionary search, same panel and same bar, moved
-−403.9 → −370.1 and was scored *no change*. All 27 rows improved; CFR lookup miss rate 0.0%.
-Full tables in [`docs/training-plan.md`](docs/training-plan.md) and
-`results/ppo/phase3_endpoint.json`.
+| family | wall-clock | vs random | vs always-call | vs CFR |
+|---|---|---|---|---|
+| CFR (the solver) | — | +377.2 | +722.9 | — |
+| evolution, 50 generations | 3.16 h | +192.7 | +0.5 | −370.1 |
+| PPO, 2M hands | 1.02 h | +216.3 | +297.9 | **+6.8** |
+| PPO, 8M hands | 4.81 h | +125.2 | +475.4 | −11.6 |
+
+**PPO reaches break-even against the solver in about an hour. Evolutionary search, given three
+times that compute, is still 370 BB/100 behind.**
 
 ---
 
-## The next step: Phase 4 — the comparison
+## The next step: explain the non-transitivity
 
-All three families on one panel with one instrument, across the budget ladder. This is what the
-project's title promises and what the report is missing. It is mostly assembly: the
-measurements exist, in `results/cfr/`, `results/evolution/` and `results/ppo/`.
+The comparison produced a result it does not explain, and it is the most interesting thing in
+the table. PPO at 2M hands draws level with the CFR agent head to head (+6.8), yet the solver
+takes far more off both baselines — +377.2 against random to PPO's +216.3, and +722.9 against
+always-call to PPO's +297.9.
 
-Four things to carry into it rather than rediscover:
+Two agents that are level against each other extract very different amounts from the same weak
+opponents. So **strength here is not a scalar**, and any single-number ranking of the three
+families would be a fiction. It also cuts against the intuition that a near-equilibrium
+strategy should be the *less* exploitative one, which is why it is worth a look rather than a
+footnote.
 
-**The PPO ladder is flat after 2M hands.** +387.6 BB/100 against the CFR agent at 2M, +369.2 at
-8M, on seed spreads of 40 and 62. Three quarters of each run's wall-clock bought nothing
-measurable. Do not spend Phase 4's budget on the assumption that more hands help.
+Nothing about the mechanism is established. Worth ruling out first, cheaply, before reaching
+for an explanation:
 
-**Only the CFR column is quotable.** Seed spreads against the solver are 40–134 BB/100; against
-random and always-call they run 92–609. Against always-call at 8M the three seeds scored
-+435.1, +185.2 and +794.3 — direction certain, magnitude unresolved. Compare families on the
-opponent from outside their lineage, and treat the baselines as floor checks.
-
-**The two families are not on one budget axis yet.** Evolution's ladder is generations at a
-fixed hand count; PPO's is hands. They are the same wall-clock only by coincidence, and the
-comparison has to say which axis it is using before it plots anything.
-
-**Break-even is against *this* CFR agent** — six buckets, one raise per street. Not a strong
-solver, and not an exploitability figure. Item 1 closed with no usable bound, so no-limit still
-has none. The comparison should say so where it would otherwise be read as a strength claim.
+- **An instrument artefact.** Both rows came through the same `benchmark()` at the same width
+  and seed, and the CFR miss rates were 0.01% and 0.05%, so the benchmark was still the
+  benchmark. But the two families' rows were produced by different scripts, and that is the
+  kind of difference that has bitten this project before.
+- **The raise cap.** The panel constrains play to the solver's tree, one raise per street. A
+  policy that would exploit a station by raising repeatedly cannot, and the cap may be binding
+  differently for the two families.
+- **Genuine intransitivity.** The honest possibility, and the one the audit's "strong but
+  exploitable" prediction points at. If it survives the first two checks it is a finding, and
+  a better one than the ranking it denies.
 
 ---
 
