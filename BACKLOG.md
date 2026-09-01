@@ -20,7 +20,7 @@ find and cheap to forget.
 | 2 | Which bucketing to use | **Done** — the crossover, measured at 7.8σ |
 | 3 | Re-run the crossover experiment | **Closed** — superseded by item 2, will not be done |
 | 4 | Recover the paper | **Largely superseded** by `docs/abstraction-crossover.html` |
-| 5 | Do not lose to Slumbot | **Open** — the first externally-produced number this project would have |
+| 5 | Do not lose to Slumbot | **Open** — M1 done: −1750 ± 524 mbb/hand, the first externally-produced number |
 
 **Next phase planned, not started:** [`docs/training-plan.md`](docs/training-plan.md) — GA and
 PPO heads-up, measured against the CFR agent. It supersedes the E5 trigger below: the
@@ -331,6 +331,10 @@ assuming either is complete. Otherwise this is closed.
 **Goal: a measured head-to-head result against Slumbot at 0 mbb/hand or better.** Full brief,
 milestones and the measurement protocol are in
 [`docs/EXTERNAL_BENCHMARK.md`](docs/EXTERNAL_BENCHMARK.md).
+
+**M0 and M1 are done.** 1 September: **−1750.2 ± 524 mbb/hand** over 10,000 hands, at zero
+protocol errors, an 8.7% lookup miss rate and an exact 5,000/5,000 seat split. The project has a
+number it did not compute about itself. It is a heavy loss, and it is reported as one.
 
 Why it is here rather than in the deferred list: item 1 closed with **no usable bound**, which
 leaves no-limit with no exploitability figure at all. Everything this project can currently say

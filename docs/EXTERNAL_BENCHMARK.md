@@ -44,14 +44,74 @@ Staged, so progress is visible long before the goal is met.
 
 | | Milestone | Meaning |
 |---|---|---|
-| M0 | One legal hand played end to end against the live API | Protocol works |
-| M1 | 10,000 hands, any result, with a CI | **First externally-produced number in this repo** |
+| M0 | One legal hand played end to end against the live API | **Done, 31 August** |
+| M1 | 10,000 hands, any result, with a CI | **Done, 1 September — −1750 ± 524 mbb/hand** |
 | M2 | Within 200 mbb/hand | Competitive with the blueprint generation |
 | M3 | Within 50 mbb/hand | Abstraction and translation are close to sound |
 | M4 | **0 mbb/hand or better** | Goal |
 
 M1 is the one that changes the project. Everything after it is improvement against a scale
 that already exists.
+
+## M1, as measured — 1 September 2026
+
+**−1750.2 ± 524 mbb/hand**, 95% interval [−2274, −1226], over 10,000 hands
+(`results/slumbot/m1.json`, `scripts/slumbot_measure.py`). We lose, heavily, and that is the
+first figure in this repository that somebody else's agent produced.
+
+**The health checks, which are what make it a measurement rather than a run that happened:**
+
+| | |
+|---|---|
+| protocol errors | 0 of 10,000 hands |
+| lookup miss rate | 8.7% (1,817/20,897), against the pilot's 9.5% |
+| seat split | 5,000 / 5,000, exact |
+| bets too large for the abstraction | 413, about 2% of decisions |
+
+An 8.7% miss rate is the genuinely off-tree nodes — Slumbot re-raises and the solver knows one
+raise per street — not a broken lookup. For contrast, the row this project withdrew was taken at
+74.3%.
+
+**What is actually playing.** A 100bb, one-raise-per-street, six-bucket, 4,000-iteration solver
+against a 200bb unlimited-raise opponent built with serious compute. GTO Wizard beats Slumbot by
+194 ± 41 mbb/hand; this is 1,750 the other way. The result is what it looks like, and M1 asked
+for a number rather than a good one.
+
+### `baseline_winnings` is not a second estimate of the same thing
+
+Slumbot returns a `baseline_winnings` field per hand, and it was tempting: on the pilot it
+correlated 0.85 with actual winnings and differencing cut the spread by 37%. The full sample
+resolves what it is, and the answer is not "a variance-reduced win rate".
+
+    raw win rate            −1750.2 mbb/hand
+    differenced               −68.3 mbb/hand
+    ⟹ the baseline's own mean ≈ −1681.9 mbb/hand
+
+A control variate leaves the mean alone only when its own expectation is zero. This one averages
+−1682, so differencing changes *what is being estimated*, not merely its precision. The
+differenced figure says this agent performed about as well as Slumbot's baseline strategy did
+holding the same cards — a real and separate fact, and not the win rate.
+
+Reported as the result: **−1750**. Reporting the −68 would have been wrong by a factor of
+twenty-five, in the flattering direction, and this is exactly the trap the cap-2 row set in
+item 1. The measurement script prints both and refuses to prefer the second.
+
+### What M2 needs
+
+Two things, and the second is the real one.
+
+**More hands.** At the measured spread of 2,169 chips per hand, ±200 mbb/hand takes about 45,000
+hands — roughly 30 hours at the API's pace of 0.4 hands/second. There is no shortcut through the
+baseline, for the reason above.
+
+**The stack depth.** Slumbot plays 200bb because that is the ACPC convention and what published
+work reports against; this project's 100bb was an unexamined default. Training a solver at 200bb
+is a one-time move onto the standard rather than an adaptation to one opponent — the distinction
+matters, because retraining per opponent would leave no agent with a fixed identity and no number
+comparable across runs. It would also invalidate the existing panel figures unless both solvers
+are kept.
+
+Doing that before spending 30 hours of API time is the sensible order.
 
 ## The hard part: action translation
 

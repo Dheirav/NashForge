@@ -4,7 +4,7 @@ One page, kept current. [`BACKLOG.md`](BACKLOG.md) holds the reasoning and every
 [`docs/training-plan.md`](docs/training-plan.md) holds the full phase plan and its results. This
 file is only the next thing to do.
 
-**Last updated:** 20 August 2026 · `main` at `3b21fb0` · 233 tests passing (9m32s)
+**Last updated:** 1 September 2026 · `main` at `d3d9a02` · 233 tests + 44 Slumbot tests
 
 ---
 
@@ -31,7 +31,7 @@ times that compute, is still 370 BB/100 behind.**
 
 ---
 
-## Closed today: the Phase 4 intransitivity
+## Closed, 20 August: the Phase 4 intransitivity
 
 It is **explained** — see
 [`docs/training-plan.md`](docs/training-plan.md). All three candidate explanations were tested:
@@ -53,29 +53,37 @@ solver that costs nothing; against anything weak it leaves the value uncollected
 
 ---
 
-## Now: item 5 — do not lose to Slumbot
+## Now: item 5 — M1 is done, M2 is the next question
 
-M0 is done: `slumbot/api.py` plays a hand end to end against the live API, with 21 offline tests
-on the betting-string parsing. The next steps, from
-[`docs/EXTERNAL_BENCHMARK.md`](docs/EXTERNAL_BENCHMARK.md):
+**M1: −1750.2 ± 524 mbb/hand over 10,000 hands** (`results/slumbot/m1.json`). Zero protocol
+errors, 8.7% lookup miss rate, exact 5,000/5,000 seat split. The first figure here that somebody
+else's agent produced, and a heavy loss — reported as one.
 
-**The stack depth is the first problem, and it is not small.** Slumbot plays 20,000 chips at
-50/100 — **200 big blinds**, confirmed against the live server. This project's engine and solver
-use 200 chips at 1/2, which is **100**. A strategy fitted for 100bb is off-tree at 200bb from
-its first decision. Either something is built for the depth Slumbot plays, or the depth is
-reported as a caveat on every number that follows. Decide which before writing the translation
-layer, because it changes what the layer is for.
+What is playing: a 100bb, one-raise-per-street, six-bucket, 4,000-iteration solver against a
+200bb unlimited-raise opponent. M1 asked for a number, not a good one.
 
-**Then the translation layer**, as its own module with its own tests. Slumbot bets any legal
-amount; this project plays six abstract actions. Inbound, a bet landing between two abstraction
-sizes has to be mapped onto one, and nearest-size mapping is itself exploitable — randomised
-translation between the two neighbours is the standard fix. Outbound, an abstract action has to
-become a chip amount. `bet_levels()` gives the raw levels; turning those into an amount owed
-needs position and the posted blinds, which the API module deliberately does not do.
+**Do not use `baseline_winnings` as a win rate.** It looked like free variance reduction —
+correlated 0.85, 37% tighter — but its own mean is −1682 mbb/hand, so differencing changes the
+estimand rather than the precision. It measures how this agent did *relative to Slumbot's
+baseline holding the same cards* (−68 ± 301), which is a different question. Quoting it as the
+result would have been wrong by a factor of twenty-five, flatteringly.
 
-**Then M1**: 10,000 hands with a confidence interval, any result. Worth investigating first that
-the API returns `baseline_winnings` per hand — its own variance-reduced estimate, which may do
-some of the work the brief assigns to duplicate seating and AIVAT.
+### M2 — within 200 mbb/hand
+
+**Train a solver at 200bb first, then measure.** Not because Slumbot demands it: 200bb is the
+ACPC convention and what published work reports against, and this project's 100bb was an
+unexamined default in `results/cfr/nolimit_strategy.json`. Moving to it once makes every future
+external comparison possible; retraining per opponent would leave no agent with a fixed identity.
+Note it invalidates the existing panel figures unless both solvers are kept, which is a real cost
+to weigh.
+
+Then the hand count: at the measured spread of 2,169 chips/hand, ±200 mbb/hand needs about
+**45,000 hands** — roughly 30 hours at the API's 0.4 hands/second. There is no shortcut through
+the baseline. Retraining before spending 30 hours of someone else's free API is the sensible
+order.
+
+Also worth raising: 4,000 solver iterations is very few. The crossover ran to 288,000 at a
+2,560-second budget. Iteration count may matter more than depth.
 
 ---
 

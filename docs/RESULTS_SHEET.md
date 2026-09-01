@@ -112,6 +112,33 @@ a peer and produces a policy that cannot punish a weak opponent.**
 
 ---
 
+## Result 5 — the first number this project did not compute about itself
+
+Every figure above was measured by this project's own instrument. **Slumbot** is a fixed CFR
+strategy at heads-up no-limit behind a public API, used as a benchmark in published work.
+
+**−1750.2 ± 524 mbb/hand over 10,000 hands.** We lose, heavily.
+
+| check | |
+|---|---|
+| protocol errors | 0 of 10,000 hands |
+| lookup miss rate | 8.7% — the genuinely off-tree nodes, not a broken lookup |
+| seat split | 5,000 / 5,000, exact |
+
+What is playing: a **100bb, one-raise-per-street, six-bucket, 4,000-iteration** solver against a
+**200bb unlimited-raise** opponent built with serious compute. GTO Wizard beats Slumbot by
+194 ± 41 mbb/hand; this is 1,750 the other way. The milestone asked for a number with a
+confidence interval, not a good one, and a loss reported as a loss is the point.
+
+**One trap avoided.** Slumbot returns a `baseline_winnings` field that looked like free variance
+reduction — correlated 0.85 with actual winnings, 37% tighter. Differencing it gives −68 ± 301,
+which is nearly break-even. It is not the win rate: the baseline's own mean is −1682 mbb/hand,
+so differencing changes *what is being estimated*, not its precision. It measures how this agent
+did relative to Slumbot's baseline holding the same cards. Quoting it would have been wrong by a
+factor of twenty-five, in the flattering direction.
+
+---
+
 ## Why these numbers can be believed
 
 A solver that has converged to the wrong thing looks exactly like one that has converged, so the
