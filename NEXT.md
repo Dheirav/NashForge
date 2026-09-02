@@ -100,6 +100,37 @@ Two things to fix before any longer run:
 
 ---
 
+## Open defect: the two betting implementations disagree by 20% on raises
+
+Found 2 September, characterised in `tests/test_betting_equivalence.py`, written up in
+[`docs/training-plan.md`](docs/training-plan.md). **It should be fixed. It is not fixed.**
+
+`games/nolimit.py` sizes a pot-fraction raise off the pot *after* the call, the standard
+convention; `training/fitness.py` sizes it off the pot *before*, so the engine raises about 20%
+smaller. Everything else — fold, check, call, all-in — agrees to the chip.
+
+The crossover is unaffected (it never touches the engine), as are Kuhn, Leduc, the Slumbot
+bridge, PPO and evolution. What is affected is a CFR strategy trained in the traversal game and
+measured in the engine: it makes smaller raises than it was fitted for, which makes the CFR
+benchmark slightly soft.
+
+**Fixing it naively makes it worse.** `rl/poker_env.py:353` trains PPO through the same function,
+and evolution likewise, so changing the convention moves the mismatch onto the two families that
+cost seventeen hours to retrain rather than the one that costs three.
+
+**The consistent fix, when someone takes it:**
+
+1. Change `training/fitness.py:121` and its siblings to size off the pot after the call.
+2. Retrain PPO — 3 seeds × 8M hands, about 14 hours — and evolutionary search, about 3.
+3. Re-measure the endpoint tests and Phase 4, about an hour.
+4. Delete `test_pot_fraction_raises_disagree_and_this_is_the_known_defect`; its sibling then
+   becomes the whole guarantee.
+
+Roughly an overnight run. Worth doing before any further external measurement, because it is the
+difference between an agent that plays the game it was solved for and one that does not.
+
+---
+
 ## After that
 
 **Phase 5 — six-max.** After heads-up is complete. Note the CFR agent cannot serve as a

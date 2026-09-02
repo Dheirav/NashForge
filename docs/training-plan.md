@@ -441,6 +441,59 @@ reproducible.
 `scripts/diagnostics/check_instrument.py` is kept as the check that would catch this class
 returning.
 
+### Two betting implementations, and a 20% divergence between them — found 2 September
+
+Poker's betting is written twice here. `engine.PokerGame` is the audited one and is where every
+published figure is measured. `games/nolimit.py` rebuilds it, deliberately and for a stated
+reason: the engine mutates state in place and consumes a dealt deck, so a CFR traverser cannot
+branch over an action and back up.
+
+So the solver is **trained** in the traversal game and **scored** in the engine, and until now
+nothing had checked that the two agree about chips. `tests/test_betting_equivalence.py` drives
+identical abstract action sequences through both and compares pot and stacks.
+
+**They agree exactly on every line that does not contain a pot-fraction raise** — fold, check,
+call and all-in cost the same to the chip. **Pot-fraction raises diverge by about 20%:**
+
+| | pot the raise is sized against |
+|---|---|
+| `games/nolimit.py:200` | `sum(contributions) + to_call` — after the call |
+| `training/fitness.py:121` | `game.state.pot.total` — before the call |
+
+```
+raise-pot preflop, blinds 1/2, small blind acting
+  traversal: call 1 -> pot 4 -> raise 4, total in 6, pot 8
+  engine:    pot 3 -> raise 3, plus the call, total in 5, pot 7
+```
+
+The traversal game follows the standard convention — a pot-sized raise means calling first, then
+betting the pot including your call.
+
+**What it affects, and what it does not.** The abstraction crossover is untouched: `crossover.py`
+and `head_to_head.py` reference the engine zero times, so both strategies were trained *and*
+measured in the traversal game, under identical rules. Kuhn and Leduc are different games
+entirely. PPO and evolutionary search train *through* `training/fitness.py`, so they learned the
+engine's convention and are consistent with how they are measured. The Slumbot bridge sizes
+raises after the call, matching the game its solver was trained in.
+
+What is affected is narrow: **a CFR strategy trained in the traversal game and then measured in
+the engine** — the CFR agent's rows as the panel opponent, Phase 4's `vs CFR` column, and the
+viewer. Those numbers are real measurements; what is true is that the agent makes raises about
+20% smaller than the ones it was fitted for, so it is a slightly *softer* benchmark than the
+strategy it came from. Everything scored against it was scored under the same conditions, so the
+comparisons between families hold.
+
+**Why it is recorded rather than fixed.** Fixing `training/fitness.py` naively makes things
+worse. `rl/poker_env.py:353` uses the same function for PPO's *training*, and evolution's too, so
+changing the convention moves the mismatch off CFR — which retrains in three hours — and onto two
+families that need seventeen. The only consistent fix retrains everything, and that is a
+deliberate overnight job rather than a hotfix. **It should be fixed**; it is listed in
+[`NEXT.md`](../NEXT.md) rather than left as folklore.
+
+The test passes while the defect exists and fails once it is corrected, which is deliberate: it
+characterises the divergence so it cannot be rediscovered by accident, and tells whoever unifies
+the convention to delete it.
+
 ### Phase 5 — six-max
 
 After heads-up is complete. Note that the CFR agent cannot serve as a benchmark there, so the
