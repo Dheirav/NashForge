@@ -68,6 +68,10 @@ Thumbs.db
 # checkout could produce it. Negated rather than force-added so the next one is
 # tracked without anyone having to remember.
 !results/**/*.pkl
+# ...except the mid-run checkpoints, which are crash insurance rather than a
+# result. They are rewritten fifty times a run and superseded by the final file.
+*.partial.pkl
+*.partial.json
 *.h5
 *.pth
 

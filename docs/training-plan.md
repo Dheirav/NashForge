@@ -441,6 +441,54 @@ reproducible.
 `scripts/diagnostics/check_instrument.py` is kept as the check that would catch this class
 returning.
 
+### The training lever, and where it runs out — 2 September
+
+`results/cfr/nolimit_strategy.pkl` shipped with 4,000 iterations, which at the crossover's
+measured 32 iterations/second is about **two minutes of training**. Retraining the same
+abstraction — same six buckets, same one-raise cap, same seed — at 150,000 and 250,000
+iterations, and ranking the three head to head on `evaluation.benchmark` at 40,000 hands:
+
+| step | head-to-head gain |
+|---|---|
+| 4,000 → 150,000 | **+185.0 ± 13 BB/100** |
+| 150,000 → 250,000 | **+12.3 ± 7 BB/100** |
+
+**The lever is spent.** A 37× increase in training bought 185 BB/100; a further 1.67× bought
+12.3 — separated from zero and not worth the three hours. Information sets reached went 25,154 at
+150,000 and 25,154 at 250,000: coverage saturated, and the extra iterations refined a fixed set
+of nodes rather than finding new ones. Roughly half the abstraction's 49,200 information sets are
+unreachable in practice under this betting tree.
+
+So **the abstraction is now the binding constraint, not training** — which is the answer to a
+question that had never been asked, and the cheap one to ask first.
+
+It transferred externally too, at a discount. Against Slumbot the 4,000-iteration solver scored
+−1750 ± 524 mbb/hand and the 150,000-iteration one −987 ± 374, an improvement of +764 ± 644.
+Internally the same upgrade is +185 ± 13 BB/100; externally it is +76 ± 64. **Internal strength
+overstated the external gain by about 2.4×**, which is worth carrying: beating your own previous
+agent is evidence about a third party, not a measurement of one.
+
+#### The baselines rank these three exactly backwards
+
+| | vs random | vs always-call | true strength |
+|---|---|---|---|
+| 4,000 | **+377.2** | +722.9 | weakest |
+| 150,000 | +280.1 | **+827.7** | middle |
+| 250,000 | +264.8 | +633.5 | **strongest** |
+
+Against a random opponent the ordering is monotonically **inverted** — 377 → 280 → 265 as the
+solver genuinely improves. Against the calling station there is no ordering at all.
+
+This is the third independent sighting of the effect and the cleanest. As CFR converges toward
+equilibrium it becomes *less exploitative* of weak opponents while becoming *stronger* against a
+peer: equilibrium play is unexploitable, not maximally exploitative. It is the same trade found
+in PPO the same week — the policy level with the solver that took far less off both baselines,
+moving all-in on 0.1% of its decisions against the solver's 15.0%. Two different algorithms,
+the same mechanism.
+
+**The panel's `vs random` column is therefore actively misleading as a strength signal for CFR
+agents.** Anyone tuning on it would tune backwards. Rank on the head-to-head or not at all.
+
 ### Two betting implementations, and a 20% divergence between them — found 2 September
 
 Poker's betting is written twice here. `engine.PokerGame` is the audited one and is where every
