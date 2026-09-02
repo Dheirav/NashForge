@@ -61,6 +61,13 @@ Thumbs.db
 
 # Model files (if large)
 *.pkl
+# ...but a solved strategy under results/ is a result, not a build artifact.
+# These were excluded by the blanket rule above, so the strategy behind every
+# CFR number -- the panel's opponent, Phase 4's yardstick, the GUI's agent, both
+# Slumbot runs -- existed only on the machine that trained it, and no clone or
+# checkout could produce it. Negated rather than force-added so the next one is
+# tracked without anyone having to remember.
+!results/**/*.pkl
 *.h5
 *.pth
 
