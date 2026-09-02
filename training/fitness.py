@@ -118,7 +118,20 @@ def abstract_action_to_engine_action(action_idx: int, game, player_id: int):
                 _ACTION_CACHE['call'] = Action('call')
             return _ACTION_CACHE['call']
     
-    pot = game.state.pot.total
+    # The pot a raise is sized against includes the call that precedes it.
+    #
+    # This read `game.state.pot.total` -- the pot *before* calling -- which made
+    # every pot-fraction raise about 20% smaller than the same abstract action
+    # in `games/nolimit.py`, where the solver is trained. A pot-sized raise
+    # conventionally means calling first and then betting the pot including your
+    # call, which is what `NoLimitHoldem._raise_cost` does:
+    #
+    #     pot = sum(state.contributions) + to_call
+    #
+    # The divergence is measured in tests/test_betting_equivalence.py: the two
+    # implementations agreed to the chip on every line without a pot-fraction
+    # raise and differed on every line with one.
+    pot = game.state.pot.total + to_call
     
     if action_idx == 2:
         # Raise 0.5x pot

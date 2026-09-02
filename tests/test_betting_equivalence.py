@@ -29,6 +29,14 @@ two strategies. The first guess was a lookup bug in `cfr/play.py`; measuring it
 showed that guard never fires. The real difference is that the two paths play
 different implementations.
 
+Fixed on 2 September
+--------------------
+`training/fitness.py` sized a pot-fraction raise off the pot *before* the call
+and `games/nolimit.py` off the pot after it, so every raise in the engine was
+about 20% smaller than the same abstract action in the game the solver trains
+in. The engine now follows the traversal game's convention, which is the
+standard one. These tests are what found it and what keep it fixed.
+
 What is compared, and what is not
 ----------------------------------
 Only the betting, which is the part that was rebuilt. Both are driven through
@@ -122,11 +130,8 @@ def sequences(depth):
             yield head + (action,)
 
 
-RAISES = (2, 3, 4)          # the three pot-fraction raises; all-in is sized apart
-
-
 def survey(traversal, depth):
-    """Every comparable sequence at `depth`, split by whether it contains a raise."""
+    """Every comparable sequence at `depth`, split by whether the two agree."""
     agree, differ = [], []
     for actions in sequences(depth):
         engine = engine_chips(actions)
@@ -140,60 +145,31 @@ def survey(traversal, depth):
 
 
 @pytest.mark.parametrize("depth", [1, 2, 3])
-def test_lines_without_a_pot_fraction_raise_agree_exactly(traversal, depth):
+def test_the_two_betting_implementations_agree_on_chips(traversal, depth):
     """
-    Fold, check, call and all-in cost the same in both implementations.
+    Same actions in, same chips out, over the enumerated betting tree.
 
-    This is the half that is a guarantee rather than a description: wherever the
-    two games are not sizing a raise off the pot, they agree on chips to the
-    last one.
+    They did not, until 2 September. `training/fitness.py` sized a pot-fraction
+    raise off `game.state.pot.total`, the pot *before* the call, where
+    `games/nolimit.py` sizes it off the pot after -- the standard convention, in
+    which a pot-sized raise means calling first and then betting the pot
+    including your call. Every raise in the engine was therefore about 20%
+    smaller than the same abstract action in the game the solver trains in, and
+    a CFR strategy was scored making bets it had not been fitted for.
+
+    Everything else agreed to the chip even then, which is what made the
+    divergence hard to notice: fold, check, call and all-in were never wrong.
+
+    Sequences either implementation rejects are skipped rather than asserted
+    about. The point is to compare where both agree a line is legal, not to
+    re-check the legal-action rules, which both take from `abstraction.betting`.
     """
-    _, differ = survey(traversal, depth)
-    offenders = [row for row in differ
-                 if not any(a in RAISES for a in row[0])]
-    assert not offenders, (
-        f"{len(offenders)} non-raise sequences disagree at depth {depth}: "
-        f"{offenders[0]}")
-
-
-@pytest.mark.parametrize("depth", [1, 2])
-def test_pot_fraction_raises_disagree_and_this_is_the_known_defect(traversal, depth):
-    """
-    A pot-sized raise costs less in the engine than in the game it was solved in.
-
-    `games/nolimit.py:200` sizes the raise off the pot *after* the call --
-    ``pot = sum(contributions) + to_call`` -- which is the standard convention: a
-    pot-sized raise means calling first, then betting the pot including your
-    call. `training/fitness.py:121` sizes it off ``game.state.pot.total``, the
-    pot *before* the call, and so raises about 20% smaller.
-
-        raise-pot preflop, blinds 1/2, small blind acting
-          traversal: call 1 -> pot 4 -> raise 4, total in 6
-          engine:    pot 3 -> raise 3, plus the call, total in 5
-
-    **This test passes while the defect exists and fails once it is fixed.** That
-    is deliberate. It is a characterisation, not an endorsement -- the point is
-    that the divergence cannot be rediscovered by accident, and that whoever
-    corrects the convention is told to delete this test rather than left
-    wondering whether the failure is theirs.
-
-    Not fixed yet because fixing it naively makes things worse.
-    `training/fitness.py` is also what PPO and evolutionary search *train*
-    through (`rl/poker_env.py:353`), so changing it moves the mismatch from CFR,
-    which retrains in three hours, onto two families that need seventeen. The
-    only consistent fix retrains everything, and that is a deliberate overnight
-    job rather than a hotfix.
-    """
-    _, differ = survey(traversal, depth)
-    raising = [row for row in differ if any(a in RAISES for a in row[0])]
-    assert raising, (
-        f"no raise sequence diverges at depth {depth} -- if the sizing "
-        "convention has been unified, delete this test and its sibling above "
-        "becomes the whole story")
-    for actions, engine, theirs in raising:
-        assert engine[0] < theirs[0], (
-            f"{actions}: expected the engine to build the smaller pot, "
-            f"got engine={engine} traversal={theirs}")
+    agree, differ = survey(traversal, depth)
+    assert agree, f"no comparable sequences at depth {depth}"
+    assert not differ, (
+        f"{len(differ)} of {len(agree) + len(differ)} sequences disagree at "
+        f"depth {depth}. First: actions={differ[0][0]} "
+        f"engine(pot,stacks)={differ[0][1]} traversal={differ[0][2]}")
 
 
 def test_the_blinds_are_posted_the_same_way(traversal):
