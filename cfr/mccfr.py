@@ -119,12 +119,28 @@ class MCCFRSolver:
 
     # ------------------------------------------------------------------
 
-    def train(self, iterations: int) -> None:
-        """Run ``iterations`` passes, each traversing once per player."""
-        for _ in range(iterations):
+    def train(self, iterations: int, on_progress=None,
+              progress_every: int = 0) -> None:
+        """
+        Run ``iterations`` passes, each traversing once per player.
+
+        ``on_progress(done, total, solver)`` is called every ``progress_every``
+        iterations when both are given. Optional and off by default, so every
+        existing caller is unaffected.
+
+        It exists because this loop is silent, and a silent loop is one nobody
+        can size. A 500,000-iteration run was killed at six hours having printed
+        nothing and written nothing: there was no way to tell whether it was
+        halfway or nearly done, and no partial result to keep. A callback lets
+        the caller report progress and checkpoint without this module needing to
+        know what either means.
+        """
+        for done in range(1, iterations + 1):
             for traverser in range(self.game.num_players):
                 self._walk(self.game.initial_state(), traverser)
             self.iterations += 1
+            if on_progress and progress_every and done % progress_every == 0:
+                on_progress(done, iterations, self)
 
     def average_strategy(self) -> Dict[Hashable, np.ndarray]:
         """The converged strategy: information set key -> action probabilities."""

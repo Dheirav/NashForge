@@ -57,6 +57,30 @@ def parse_args():
     return parser.parse_args()
 
 
+def _resident_mb():
+    """This process's resident size, or 0 where /proc is unavailable."""
+    try:
+        with open("/proc/self/status") as handle:
+            for line in handle:
+                if line.startswith("VmRSS:"):
+                    return int(line.split()[1]) / 1024
+    except OSError:
+        pass
+    return 0.0
+
+
+def _write(path, strategy, abstraction, args, results, iterations, seconds):
+    """The strategy and its summary, written together so neither outlives the other."""
+    with open(path, "wb") as handle:
+        pickle.dump({"strategy": strategy, "abstraction": abstraction,
+                     "args": vars(args), "results": results}, handle)
+    with open(os.path.splitext(path)[0] + ".json", "w") as handle:
+        json.dump({"args": vars(args), "results": results,
+                   "information_sets_reached": len(strategy),
+                   "iterations_completed": iterations,
+                   "seconds": seconds}, handle, indent=2)
+
+
 def main():
     args = parse_args()
     rng = np.random.default_rng(args.seed)
@@ -83,7 +107,32 @@ def main():
     print(f"\nTraining MCCFR for {args.iterations:,} iterations...")
     solver = MCCFRSolver(game, rule=VANILLA, seed=args.seed)
     start = time.perf_counter()
-    solver.train(args.iterations)
+
+    def checkpoint(done, total, live):
+        """
+        Report, and save what exists so far.
+
+        Both halves are here because their absence cost a run: a 500,000
+        iteration attempt was killed at six hours having printed nothing to
+        size it by and written nothing to keep. Memory is the ceiling rather
+        than time -- the abstraction's table is 4.7 MB and the solver's
+        bookkeeping reached 4.9 GB -- so the resident size is reported too,
+        being the number that predicts the ending.
+        """
+        taken = time.perf_counter() - start
+        rss = _resident_mb()
+        eta = (total - done) * taken / done / 60
+        print(f"  {done:>8,}/{total:,}  {taken / done * 1000:5.1f} ms/it  "
+              f"{len(live.nodes):>7,} infosets  {rss:6.0f} MB  "
+              f"eta {eta:5.1f} min", flush=True)
+        if args.output:
+            # `<base>.partial.pkl`, so its summary lands beside it as
+            # `<base>.partial.json` rather than colliding with the final one.
+            _write(os.path.splitext(args.output)[0] + ".partial.pkl",
+                   live.average_strategy(), abstraction, args, {}, done, taken)
+
+    solver.train(args.iterations, on_progress=checkpoint,
+                 progress_every=max(1, args.iterations // 50))
     elapsed = time.perf_counter() - start
     print(f"  {elapsed:.1f}s ({elapsed / args.iterations * 1000:.1f} ms/iteration)")
     print(f"  information sets reached: {len(solver.nodes):,} "
