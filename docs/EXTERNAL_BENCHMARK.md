@@ -45,7 +45,7 @@ Staged, so progress is visible long before the goal is met.
 | | Milestone | Meaning |
 |---|---|---|
 | M0 | One legal hand played end to end against the live API | **Done, 31 August** |
-| M1 | 10,000 hands, any result, with a CI | **Done, 1 September — −1750 ± 524 mbb/hand** |
+| M1 | 10,000 hands, any result, with a CI | **Done — −987 ± 374 mbb/hand** (2 Sept, converged solver) |
 | M2 | Within 200 mbb/hand | Competitive with the blueprint generation |
 | M3 | Within 50 mbb/hand | Abstraction and translation are close to sound |
 | M4 | **0 mbb/hand or better** | Goal |
@@ -95,6 +95,39 @@ holding the same cards — a real and separate fact, and not the win rate.
 Reported as the result: **−1750**. Reporting the −68 would have been wrong by a factor of
 twenty-five, in the flattering direction, and this is exactly the trap the cap-2 row set in
 item 1. The measurement script prints both and refuses to prefer the second.
+
+### Re-measured with a converged solver — 2 September
+
+M1 was taken with the strategy that shipped, which turned out to have had about **two minutes of
+training**: 4,000 iterations at the 32 iterations/second the crossover measured. Retraining the
+*same* abstraction — same six buckets, same one-raise cap, same seed — for 150,000 iterations
+(2h56m, 70.5 ms/iteration) and re-running gives:
+
+| solver | vs Slumbot | miss rate |
+|---|---|---|
+| 4,000 iterations | −1750.2 ± 524 mbb/hand | 8.7% |
+| **150,000 iterations** | **−986.6 ± 374 mbb/hand** | 10.4% |
+| improvement | **+763.7 ± 644** | separated |
+
+Zero protocol errors and an exact 5,000/5,000 seat split on both runs. **Training was worth
+roughly half the gap**, and the remaining −987 is what the coarse abstraction, the 100bb depth
+mismatch and the one-raise cap cost.
+
+**Internal strength overstated the external gain by about 2.4x.** Head to head on this
+project's own instrument the 150k solver beats the 4k one by +185 ± 13 BB/100 — fourteen
+standard errors. Against Slumbot the same upgrade is worth +76 ± 64 BB/100, real but barely
+separated. Beating your own previous agent is evidence about a third party, not a measurement of
+it, which is the same lesson the Phase 4 intransitivity taught in a different place.
+
+**The baseline field disagreed in sign again.** Differenced, this run reads **+384 ± 348** — the
+wrong side of zero, claiming a win. Twice now, on two different solvers, reporting the
+variance-reduced figure would have inverted the finding. The script prints both and refuses to
+prefer the second.
+
+**Iterations are not exhausted.** At 150,000 the solver had reached 25,154 of the abstraction's
+49,200 information sets — barely half. There is likely more available from training alone before
+abstraction becomes the binding constraint, and it is much cheaper than either widening the
+abstraction or moving to 200bb.
 
 ### What M2 needs
 

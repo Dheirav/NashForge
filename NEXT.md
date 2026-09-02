@@ -4,7 +4,7 @@ One page, kept current. [`BACKLOG.md`](BACKLOG.md) holds the reasoning and every
 [`docs/training-plan.md`](docs/training-plan.md) holds the full phase plan and its results. This
 file is only the next thing to do.
 
-**Last updated:** 1 September 2026 · `main` at `d3d9a02` · 233 tests + 44 Slumbot tests
+**Last updated:** 2 September 2026 · `main` at `23d9a47` · 233 tests + 44 Slumbot tests
 
 ---
 
@@ -53,37 +53,50 @@ solver that costs nothing; against anything weak it leaves the value uncollected
 
 ---
 
-## Now: item 5 — M1 is done, M2 is the next question
+## Now: the solver was under-trained, and it was worth half the gap
 
-**M1: −1750.2 ± 524 mbb/hand over 10,000 hands** (`results/slumbot/m1.json`). Zero protocol
-errors, 8.7% lookup miss rate, exact 5,000/5,000 seat split. The first figure here that somebody
-else's agent produced, and a heavy loss — reported as one.
+`results/cfr/nolimit_strategy.pkl` shipped with **4,000 iterations** — about two minutes of
+training at the crossover's measured 32 iterations/second. Retraining the same abstraction for
+**150,000** iterations (2h56m) and re-measuring:
 
-What is playing: a 100bb, one-raise-per-street, six-bucket, 4,000-iteration solver against a
-200bb unlimited-raise opponent. M1 asked for a number, not a good one.
+| | vs Slumbot | vs the 4k solver | vs random | vs always-call |
+|---|---|---|---|---|
+| 4,000 iterations | −1750 ± 524 | — | +377.2 | +722.9 |
+| **150,000 iterations** | **−987 ± 374** | **+185.0 ± 13** | +280.1 | +827.7 |
 
-**Do not use `baseline_winnings` as a win rate.** It looked like free variance reduction —
-correlated 0.85, 37% tighter — but its own mean is −1682 mbb/hand, so differencing changes the
-estimand rather than the precision. It measures how this agent did *relative to Slumbot's
-baseline holding the same cards* (−68 ± 301), which is a different question. Quoting it as the
-result would have been wrong by a factor of twenty-five, flatteringly.
+**Training was the binding constraint, not the abstraction.** It halved the Slumbot gap and wins
+the head-to-head by fourteen standard errors.
 
-### M2 — within 200 mbb/hand
+**Three things this turned up, all worth keeping:**
 
-**Train a solver at 200bb first, then measure.** Not because Slumbot demands it: 200bb is the
-ACPC convention and what published work reports against, and this project's 100bb was an
-unexamined default in `results/cfr/nolimit_strategy.json`. Moving to it once makes every future
-external comparison possible; retraining per opponent would leave no agent with a fixed identity.
-Note it invalidates the existing panel figures unless both solvers are kept, which is a real cost
-to weigh.
+**Internal strength overstates external gain by ~2.4x.** +185 ± 13 BB/100 internally became
++76 ± 64 against Slumbot. Beating your own previous agent is evidence about a third party, not a
+measurement of one.
 
-Then the hand count: at the measured spread of 2,169 chips/hand, ±200 mbb/hand needs about
-**45,000 hands** — roughly 30 hours at the API's 0.4 hands/second. There is no shortcut through
-the baseline. Retraining before spending 30 hours of someone else's free API is the sensible
-order.
+**The baselines still cannot rank.** The 150k solver is decisively stronger yet scores *worse*
+against random (+280.1 against +377.2). Ranking these two by their random score would have picked
+the weaker agent — the Phase 4 intransitivity, appearing again in an independent place.
 
-Also worth raising: 4,000 solver iterations is very few. The crossover ran to 288,000 at a
-2,560-second budget. Iteration count may matter more than depth.
+**`train_nolimit.py`'s own evaluation disagrees with `evaluation.benchmark`.** On always-call it
+reported the 150k solver worse (+348.1 against +581.5) where the audited instrument says better
+(+827.7 against +722.9). Opposite conclusions, same two strategies. The benchmark path is the one
+every Phase 4 number came through and it reproduces exactly; treat the trainer's built-in
+evaluation as unfit for comparisons until someone works out why.
+
+### The next lever is more iterations, not less abstraction
+
+At 150,000 iterations the solver had reached **25,154 of 49,200** information sets — barely half
+the abstraction it already has. More training is cheaper than widening buckets, lifting the raise
+cap, or moving to 200bb, and it has not stopped paying yet.
+
+Two things to fix before any longer run:
+
+- **`train_nolimit.py` prints nothing during training and saves only at the end.** A 500,000
+  iteration attempt ran six hours, reached ~4.9 GB, and was killed with nothing written. It needs
+  a progress line and periodic checkpointing.
+- **Memory, not time, is the ceiling.** The abstraction's table is 4.7 MB; the solver's
+  bookkeeping reached 4.9 GB. 150,000 iterations peaked around 1.6 GB, so roughly 250,000 is what
+  this machine can hold.
 
 ---
 

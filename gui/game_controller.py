@@ -65,12 +65,15 @@ def load_cfr_opponent(rng, probe):
     """
     path = os.path.abspath(STRATEGY_PATH)
     if not os.path.exists(path):
-        # Nothing in the tree regenerates this: it is a committed artifact,
-        # so a missing one is a checkout problem rather than a training one.
+        # It is NOT a committed artifact: `*.pkl` is gitignored, so this file
+        # exists only where it was trained. A clone does not have it and no
+        # checkout will produce it -- it has to be retrained.
         raise AgentUnavailable(
             f"no solved strategy at {path}.\n"
-            "It ships in the repository -- restore it with "
-            "`git checkout results/cfr/nolimit_strategy.pkl` -- "
+            "It is gitignored (*.pkl), so a fresh clone will not have it. "
+            "Retrain with:\n"
+            "  venv/bin/python scripts/cfr/train_nolimit.py --iterations 150000 "
+            "--output results/cfr/nolimit_strategy.pkl\n"
             "or play with --opponent random.")
     with open(path, "rb") as handle:
         saved = pickle.load(handle)

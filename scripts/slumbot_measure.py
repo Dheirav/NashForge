@@ -73,6 +73,11 @@ def main():
     parser.add_argument("--hands", type=int, default=M1_HANDS)
     parser.add_argument("--seed", type=int, default=20260820)
     parser.add_argument("--out", default=os.path.join(OUT, "m1.json"))
+    #: Which solver is playing. There are two now -- the 4,000-iteration one
+    #: that shipped and a 150,000-iteration one that beats it head to head by
+    #: 185 BB/100 -- and a result that does not say which produced it cannot be
+    #: compared with the other.
+    parser.add_argument("--strategy", default=STRATEGY)
     args = parser.parse_args()
 
     if args.hands < M1_HANDS:
@@ -80,11 +85,12 @@ def main():
                      "scripts/slumbot_pilot.py is the script that does not "
                      "report a result")
 
-    player = SolverPlayer(STRATEGY, np.random.default_rng(args.seed))
+    player = SolverPlayer(args.strategy, np.random.default_rng(args.seed))
     winnings, baseline, positions = [], [], Counter()
     errors, token, started = [], None, time.time()
 
     print(f"M1 — {args.hands:,} hands against Slumbot, seed {args.seed}")
+    print(f"strategy: {os.path.basename(args.strategy)}")
     print("100bb one-raise solver against a 200bb unlimited-raise opponent\n",
           flush=True)
 
@@ -142,6 +148,7 @@ def report(player, winnings, baseline, positions, errors, args, elapsed):
     with open(args.out, "w") as handle:
         json.dump({
             "milestone": "M1",
+            "strategy": os.path.basename(args.strategy),
             "hands": len(winnings),
             "seed": args.seed,
             "units": "mbb/hand",
