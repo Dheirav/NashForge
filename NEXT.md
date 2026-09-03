@@ -119,8 +119,11 @@ August checkpoints. The pre-fix numbers survive as records; the agents behind th
 
 ### Still to do, in order
 
-1. **Retrain evolutionary search** (~3h). It trains through the same function, so its genome is
-   still fitted for the old convention. Until then Phase 4's evolution row is stale.
+1. ~~Retrain evolutionary search.~~ **Will not be done.** `preflight_training.py` refuses, and it
+   is right: repeatability is r = +0.12 at the real 6,000-hand budget, and giving every genome the
+   same cards does not help (spearman +0.01). The genomes are near-indistinguishable, so selection
+   sorts noise and three hours would buy nothing. Phase 4's evolution row stays on the old raise
+   convention and is marked as such.
 2. **Re-run Phase 4** (~10 min) once evolution is refitted. Every figure in that table was
    measured under the old sizing.
 3. **Re-run Slumbot** (~7h). The CFR agent's raises changed, so −987 ± 374 is stale.

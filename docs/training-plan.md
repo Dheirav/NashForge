@@ -320,10 +320,15 @@ arithmetic over files that already existed.
 | family | wall-clock | vs random | vs always-call | vs CFR |
 |---|---|---|---|---|
 | CFR (the solver) | — | **+377.2** | **+722.9** | — |
-| evolution, 50 generations | 3.16 h | +192.7 | +0.5 | −370.1 |
+| evolution, 50 generations † | 3.16 h | +192.7 | +0.5 | −370.1 |
 | PPO, 500k hands | 0.26 h | +204.1 | +278.6 | −59.5 |
 | PPO, 2M hands | 1.02 h | +221.5 | +293.5 | **+10.4** |
 | PPO, 8M hands | 4.81 h | +135.4 | +467.9 | −10.7 |
+
+† Measured under the pre-3-September raise sizing, where a pot-fraction raise was about 20%
+smaller. Evolution was not retrained because its fitness cannot be selected on — see above — so
+this row is not on the same footing as the other two. It is left rather than dropped because the
+endpoint test behind it is sound; it is marked rather than silently mixed.
 
 BB/100, big blind 2. The solver has no row against itself: a strategy against a copy of itself
 is zero by symmetry, and printing that zero would put a structural identity in a column of
@@ -440,6 +445,62 @@ reproducible.
 
 `scripts/diagnostics/check_instrument.py` is kept as the check that would catch this class
 returning.
+
+### Evolutionary fitness cannot be selected on — 3 September
+
+Evolution was to be retrained through the corrected raise sizing. `preflight_training.py` refused,
+and it was right to.
+
+**The check.** Score the same population twice under different hands and correlate the two
+rankings. Below about 0.5 the ranking is mostly luck and selection optimises noise. It reported
+**r = −0.07** at the preflight's default 120 hands per matchup.
+
+**It is not my change.** Run against the pre-fix code the same check reads **r = −0.28** at
+**487 BB/100** of noise per genome, against **−0.07** at **273** after. The corrected sizing
+roughly halved the noise. This also kills the speculation that the fix is what widened PPO's seed
+spreads: on this measurement it does the opposite.
+
+**It is not under-sampling either.** The preflight scores at 120 hands per matchup where the real
+run uses 6,000, so the first explanation was that the gate simply measures at a budget the run
+never uses. Re-run at the real 6,000:
+
+| hands/matchup | correlation | noise per genome |
+|---|---|---|
+| 120 | −0.07 | 273 BB/100 |
+| **6,000** | **+0.12** | **59 BB/100** |
+
+Fifty times the sampling cut the noise by a factor of five, exactly as the project's own scaling
+predicts — and moved repeatability from −0.07 to +0.12. Nowhere near 0.5.
+
+**And it is not card luck between genomes.** `training/evolution.py` already carries the machinery
+for scoring a whole population against one fixed set of hands — `generate_eval_hand_seeds`,
+`evaluate_population_fixed_hands` — but `train_generation` uses it only for a monitoring readout;
+the fitness that drives selection comes from `evaluate_population`, which deals fresh random hands
+per genome. Pointing selection at the shared-card path was the obvious remaining fix and costs
+nothing. Scored under two different shared samples at 6,000 hands:
+
+| | ranking agreement |
+|---|---|
+| shared cards across the population | pearson +0.14, **spearman +0.01** |
+| independent random hands | +0.12 |
+
+**No improvement at all.** Sampling is working — noise per genome fell from 93 BB/100 at 800 hands
+to 33 at 6,000 — and the rankings still do not agree.
+
+**The finding.** There is no signal being drowned out. These genomes are genuinely
+near-indistinguishable: the real fitness differences between them are smaller than poker's
+variance, whatever cards are dealt and however many. **Evolutionary fitness cannot be selected on
+at any affordable budget**, and no sampling scheme fixes that.
+
+This sharpens Phase 2 rather than contradicting it. The endpoint result stands — the evolved
+genome beats a random opponent by +206 BB/100, measured at 40,000 hands by a sound instrument.
+What cannot be claimed is that *selection* produced it: fifty generations ran on a signal with
+r ≈ 0.12, which is drift. "Evolutionary search plateaus" was the prediction; "its fitness was
+never strong enough to select on" is the measurement, and it is a better answer.
+
+**Consequence for Phase 4.** Evolution is not retrained, so its row remains measured under the old
+raise convention while CFR and PPO are on the corrected one. The table below marks it rather than
+presenting the three families as being on one footing.
 
 ### Re-measured after the raise-sizing fix — 3 September
 

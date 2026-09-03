@@ -32,10 +32,21 @@ def check(name, ok, detail):
         FAILURES.append(name)
 
 
+#: Hands per matchup. The default is small so the preflight is quick, but the
+#: repeatability check below is a question about the budget the *run* will use,
+#: and at 120 it cannot answer it: the project's own measurements put the
+#: re-scoring swing at 136 BB/100 over 2,000 hands and 31 over 24,000, so a
+#: population scored twice at 480 hands per genome disagrees with itself by
+#: design. Pass --hands-per-matchup to check the budget you are about to spend.
+HANDS_PER_MATCHUP = int(os.environ.get("PREFLIGHT_HANDS", 120))
+for _i, _a in enumerate(sys.argv):
+    if _a == "--hands-per-matchup" and _i + 1 < len(sys.argv):
+        HANDS_PER_MATCHUP = int(sys.argv[_i + 1])
+
 config = TrainingConfig(
     network=NetworkConfig(hidden_sizes=[32, 16]),
     evolution=EvolutionConfig(population_size=10, mutation_sigma=0.1),
-    fitness=FitnessConfig(num_players=2, hands_per_matchup=120,
+    fitness=FitnessConfig(num_players=2, hands_per_matchup=HANDS_PER_MATCHUP,
                           matchups_per_agent=4, starting_stack=200,
                           small_blind=1, big_blind=2, num_workers=1),
     num_generations=6, seed=0, experiment_name="preflight",
