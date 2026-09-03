@@ -167,9 +167,16 @@ def main():
                         help="Continue from the last checkpoint of this seed.")
     parser.add_argument("--rungs", type=int, nargs="+", default=list(RUNGS))
     parser.add_argument("--monitor-hands", type=int, default=MONITOR_HANDS)
+    #: Where checkpoints go. It was hardcoded, and a retrain wrote over the
+    #: checkpoints it was meant to be compared against -- the agents behind the
+    #: published pre-fix numbers are gone because of it. A run that supersedes
+    #: another should have to say so.
+    parser.add_argument("--out-dir", default=SCRATCH,
+                        help="checkpoint directory; defaults to the shared one, "
+                             "so a comparison run should give its own")
     args = parser.parse_args()
 
-    out = os.path.join(SCRATCH, f"seed{args.seed}")
+    out = os.path.join(args.out_dir, f"seed{args.seed}")
     os.makedirs(out, exist_ok=True)
     history_path = os.path.join(out, "history.json")
     state_path = os.path.join(out, "state_latest.pt")

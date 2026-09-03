@@ -49,7 +49,9 @@ MATCHUPS = 4
 BENCH_EVERY = 5
 BENCH_HANDS = 3000
 
-OUT = os.path.join(HERE, "phase2")
+#: Overridable, for the reason train_ppo.py's --out-dir exists: a retrain that
+#: writes where the run it supersedes wrote destroys the comparison.
+OUT = os.environ.get("EVOLUTION_OUT", os.path.join(HERE, "phase2"))
 RESULTS = os.path.join(OUT, "history.json")
 os.makedirs(OUT, exist_ok=True)
 
