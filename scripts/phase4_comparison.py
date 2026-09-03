@@ -65,6 +65,23 @@ HANDS = 40_000
 EVAL_SEED = 20260820
 
 EVOLUTION_GENERATIONS = 50
+#: Hands is the budget axis, not wall-clock.
+#:
+#: Wall-clock was the first choice because it is the only unit all three
+#: families recorded, and it turned out to encode whatever else the machine was
+#: doing: the same 8M-hand run read 4.81 h on a quiet box and 10.42 h when three
+#: seeds shared it with another project's tuner. An axis that moves by a factor
+#: of two on load is measuring the machine, not the algorithm.
+#:
+#: Hands played is exact, machine-independent, and the currency both learned
+#: families actually spend. The solver is not on this axis at all -- it traverses
+#: a tree rather than playing hands, and it is the opponent here rather than a
+#: competitor.
+EVOLUTION_POPULATION = 30
+EVOLUTION_MATCHUPS = 4
+EVOLUTION_HANDS_PER_MATCHUP = 6000
+EVOLUTION_HANDS = (EVOLUTION_GENERATIONS * EVOLUTION_POPULATION
+                   * EVOLUTION_MATCHUPS * EVOLUTION_HANDS_PER_MATCHUP)
 PPO_SCRATCH = os.path.expanduser("~/pokerbot-scratch/phase3")
 
 RESULTS = os.path.join(ROOT, "results")
@@ -160,7 +177,7 @@ def evolution_endpoint():
 # CFR, measured here on the shared instrument
 # ---------------------------------------------------------------------------
 
-def measure_cfr(hands):
+def measure_cfr(hands, strategy_path=CFR_STRATEGY):
     """
     The solver against the two baselines, at the endpoint tests' width.
 
@@ -169,7 +186,7 @@ def measure_cfr(hands):
     of measurements.
     """
     import pickle
-    with open(CFR_STRATEGY, "rb") as handle:
+    with open(strategy_path, "rb") as handle:
         saved = pickle.load(handle)
 
     rows = {}
@@ -199,6 +216,16 @@ def main():
     parser.add_argument("--out", default=os.path.join(RESULTS, "comparison",
                                                       "phase4.json"))
     parser.add_argument("--dry-run", action="store_true")
+    #: Which PPO endpoint to read. There are two now -- the pre-fix run and the
+    #: refit under the corrected raise sizing -- and a comparison that does not
+    #: say which it used cannot be checked against the other.
+    parser.add_argument("--ppo-source",
+                        default=os.path.join(RESULTS, "ppo", "phase3_endpoint.json"))
+    #: Which solver plays the CFR column. It must be the same one PPO was
+    #: measured against -- `train_ppo.build_panel` reads
+    #: results/cfr/nolimit_strategy.pkl -- or the two halves of this table are
+    #: about different opponents.
+    parser.add_argument("--cfr-strategy", default=CFR_STRATEGY)
     args = parser.parse_args()
 
     if args.hands < HANDS and not args.dry_run:
@@ -206,14 +233,14 @@ def main():
                      "pass --dry-run if that is deliberate")
 
     evolution = evolution_endpoint()
-    with open(os.path.join(RESULTS, "ppo", "phase3_endpoint.json")) as handle:
+    with open(args.ppo_source) as handle:
         ppo = json.load(handle)
     if ppo["hands_per_matchup"] != HANDS:
         raise SystemExit(f"PPO endpoint was taken at {ppo['hands_per_matchup']:,} "
                          f"hands, not {HANDS:,}; the rows are not comparable")
 
     print(f"measuring the CFR agent at {args.hands:,} hands, seed {EVAL_SEED}")
-    cfr = measure_cfr(args.hands)
+    cfr = measure_cfr(args.hands, args.cfr_strategy)
 
     seconds = {"evolution": evolution_seconds(), "ppo": ppo_seconds()}
     report(evolution, ppo, cfr, seconds)
@@ -225,7 +252,8 @@ def main():
                        "units": "BB/100, big_blind 2",
                        "wall_clock_seconds": seconds,
                        "evolution": evolution, "cfr": cfr,
-                       "ppo_source": "results/ppo/phase3_endpoint.json"},
+                       "ppo_source": os.path.basename(args.ppo_source),
+                       "cfr_strategy": os.path.basename(args.cfr_strategy)},
                       handle, indent=1)
         print(f"\nwrote {args.out}")
 
@@ -252,24 +280,21 @@ def report(evolution, ppo, cfr, seconds):
     print("\n" + "=" * 78)
     print("Phase 4 — every family against the same panel, at 40,000 hands, in BB/100")
     print("=" * 78)
-    print(f"{'family':<22}{'wall-clock':>11}{'vs random':>13}"
+    print(f"{'family':<22}{'hands':>13}{'vs random':>13}"
           f"{'vs always-call':>16}{'vs CFR':>12}")
     print("-" * 78)
 
-    print(f"{'CFR (the solver)':<22}{'--':>11}"
+    print(f"{'CFR (the solver)':<22}{'--':>13}"
           f"{cfr['random']['bb_per_100']:>+13.1f}"
           f"{cfr['always-call']['bb_per_100']:>+16.1f}{'--':>12}")
 
-    hours = seconds["evolution"] / 3600
-    print(f"{'evolution, 50 gens':<22}{hours:>9.2f} h"
+    print(f"{'evolution, 50 gens':<22}{EVOLUTION_HANDS:>13,}"
           f"{evolution['random']['trained']:>+13.1f}"
           f"{evolution['always-call']['trained']:>+16.1f}"
           f"{evolution['cfr']['trained']:>+12.1f}")
 
     for rung in ppo["rungs"]:
-        hours = seconds["ppo"][rung] / 3600
-        label = f"PPO, {rung/1e6:g}M hands"
-        print(f"{label:<22}{hours:>9.2f} h"
+        print(f"{'PPO':<22}{rung:>13,}"
               f"{rungs[rung]['random']['trained']:>+13.1f}"
               f"{rungs[rung]['always-call']['trained']:>+16.1f}"
               f"{rungs[rung]['cfr']['trained']:>+12.1f}")
@@ -282,14 +307,19 @@ def report(evolution, ppo, cfr, seconds):
 
     # The comparison the budget axis makes available, and the reason it was
     # worth putting the two families on one.
-    ppo_2m = rungs[2_000_000]["cfr"]
+    smallest = min(ppo["rungs"])
     evo = evolution["cfr"]
-    print(f"At {seconds['ppo'][2_000_000]/3600:.2f} h PPO scores "
-          f"{ppo_2m['trained']:+.1f} against the solver.")
-    print(f"At {seconds['evolution']/3600:.2f} h — over three times the compute — "
-          f"evolutionary search scores {evo['trained']:+.1f},")
+    print(f"PPO scores {rungs[smallest]['cfr']['trained']:+.1f} against the "
+          f"solver on {smallest:,} hands.")
+    print(f"Evolutionary search spent {EVOLUTION_HANDS:,} — "
+          f"{EVOLUTION_HANDS / smallest:.0f} times as many — and scores "
+          f"{evo['trained']:+.1f},")
     print(f"a gain of {evo['difference']:+.1f} +/- {evo['difference_ci95']:.0f} "
           "over its own untrained network, which is no change.")
+    print()
+    print("Wall-clock is deliberately absent. It read 4.81 h for the 8M rung on")
+    print("a quiet machine and 10.42 h for the same run sharing cores, so it")
+    print("measures the load rather than the algorithm. Hands are exact.")
 
 
 if __name__ == "__main__":

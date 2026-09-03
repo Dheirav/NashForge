@@ -19,15 +19,19 @@ file is only the next thing to do.
 All three are measured, and **Phase 4 — the comparison the project's title promises — is done**
 (`results/comparison/phase4.json`). One panel, 40,000 hands, one wall-clock axis, in BB/100:
 
-| family | wall-clock | vs random | vs always-call | vs CFR |
+| family | hands | vs random | vs always-call | vs CFR |
 |---|---|---|---|---|
-| CFR (the solver) | — | +377.2 | +722.9 | — |
-| evolution, 50 generations | 3.16 h | +192.7 | +0.5 | −370.1 |
-| PPO, 2M hands | 1.02 h | +221.5 | +293.5 | **+10.4** |
-| PPO, 8M hands | 4.81 h | +135.4 | +467.9 | −10.7 |
+| CFR (the solver) | — | +383.6 | +719.6 | — |
+| evolution, 50 generations † | 36,000,000 | +192.7 | +0.5 | −370.1 |
+| PPO | 500,000 | +228.9 | +452.1 | **+60.2** |
+| PPO | 2,000,000 | +156.5 | +380.9 | −1.7 |
+| PPO | 8,000,000 | +262.4 | +494.7 | **+59.1** |
 
-**PPO reaches break-even against the solver in about an hour. Evolutionary search, given three
-times that compute, is still 370 BB/100 behind.**
+† pre-fix raise convention; evolution was not retrained because its fitness cannot be selected on.
+
+**PPO beats the solver on 500,000 hands. Evolutionary search spent 36,000,000 — seventy-two times
+as many — and is still 370 BB/100 behind.** The axis is hands, not wall-clock: the same 8M run
+read 4.81 h quiet and 10.42 h contended, so wall-clock was measuring the machine.
 
 ---
 

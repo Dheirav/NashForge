@@ -317,13 +317,13 @@ wall-clock all along: the CFR budgets are seconds by construction, `phase2_histo
 `seconds` per generation, and each PPO history keeps `seconds` per interval. The axis was
 arithmetic over files that already existed.
 
-| family | wall-clock | vs random | vs always-call | vs CFR |
+| family | hands | vs random | vs always-call | vs CFR |
 |---|---|---|---|---|
-| CFR (the solver) | — | **+377.2** | **+722.9** | — |
-| evolution, 50 generations † | 3.16 h | +192.7 | +0.5 | −370.1 |
-| PPO, 500k hands | 0.26 h | +204.1 | +278.6 | −59.5 |
-| PPO, 2M hands | 1.02 h | +221.5 | +293.5 | **+10.4** |
-| PPO, 8M hands | 4.81 h | +135.4 | +467.9 | −10.7 |
+| CFR (the solver) | — | **+383.6** | **+719.6** | — |
+| evolution, 50 generations † | 36,000,000 | +192.7 | +0.5 | −370.1 |
+| PPO | 500,000 | +228.9 | +452.1 | **+60.2** |
+| PPO | 2,000,000 | +156.5 | +380.9 | −1.7 |
+| PPO | 8,000,000 | +262.4 | +494.7 | **+59.1** |
 
 † Measured under the pre-3-September raise sizing, where a pot-fraction raise was about 20%
 smaller. Evolution was not retrained because its fitness cannot be selected on — see above — so
@@ -334,10 +334,25 @@ BB/100, big blind 2. The solver has no row against itself: a strategy against a 
 is zero by symmetry, and printing that zero would put a structural identity in a column of
 measurements.
 
-**PPO reaches break-even against the solver in about one hour of training. Evolutionary search,
-given more than three times that compute, is still 370 BB/100 behind** — and its gain over its
-own untrained network was +33.8 ± 37, which is no change. Both families sit on one wall-clock
-axis, so this is a like-for-like budget statement rather than a comparison of endpoints.
+**PPO beats the solver on 500,000 hands. Evolutionary search spent 36,000,000 — seventy-two
+times as many — and is still 370 BB/100 behind** — its gain over its own untrained network was
++33.8 ± 37, which is no change. Both families spend the same currency, so this is a like-for-like
+budget statement rather than a comparison of endpoints.
+
+**The axis is hands, and it used to be wall-clock.** Wall-clock was chosen because it was the only
+unit all three families recorded, and it turned out to encode whatever else the machine was doing:
+the identical 8M-hand run read 4.81 h on a quiet box and 10.42 h when three seeds shared it with
+another project's tuner. An axis that moves by a factor of two under load is measuring the
+machine. **The earlier phrasing of this result — "reaches break-even in about an hour" — was
+therefore substantially a statement about CPU contention, and is withdrawn.** Hands played is
+exact, machine-independent, and what both learned families actually spend. The solver is off the
+axis entirely: it traverses a tree rather than playing hands, and here it is the opponent rather
+than a competitor.
+
+**Under the corrected raise sizing PPO is at or above parity across the whole ladder** — +60.2,
+−1.7 and +59.1 against the solver, where before the fix it read −59.5, +10.4 and −10.7. The
+finding is stronger than the one it replaces, though the seed spreads behind it are five to six
+times wider and unexplained.
 
 **The table is non-transitive, and that is the most interesting thing in it.** PPO at 2M draws
 level with the CFR agent head to head, yet the solver takes far more off both baselines —
