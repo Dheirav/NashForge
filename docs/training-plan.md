@@ -334,9 +334,29 @@ BB/100, big blind 2. The solver has no row against itself: a strategy against a 
 is zero by symmetry, and printing that zero would put a structural identity in a column of
 measurements.
 
-**PPO beats the solver on 500,000 hands. Evolutionary search spent 36,000,000 — seventy-two
-times as many — and is still 370 BB/100 behind** — its gain over its own untrained network was
-+33.8 ± 37, which is no change. Both families spend the same currency, so this is a like-for-like
+**Evolutionary search spent 36,000,000 hands — seventy-two times PPO's smallest rung — and is
+still 370 BB/100 behind the solver**, on a gain over its own untrained network of +33.8 ± 37,
+which is no change. That comparison is separated many times over and is the firm result here.
+
+**PPO's own position against the solver is not established.** Per seed it reads:
+
+| rung | seed 0 | seed 1 | seed 2 | mean | spread |
+|---|---|---|---|---|---|
+| 500,000 | +26.4 | +142.3 | +11.8 | +60.2 | 130.5 |
+| 2,000,000 | +18.1 | +75.5 | −98.8 | −1.7 | 174.3 |
+| 8,000,000 | +79.3 | +71.1 | +26.9 | +59.1 | 52.4 |
+
+With three seeds and a standard deviation of 72, the +60.2 at 500,000 hands carries a standard
+error of ±41 and is **not separated from zero**. All three seeds being positive is a sign test at
+p ≈ 0.125, which is not significant either. The defensible statement is that **PPO reaches
+approximate parity with the solver, consistently in direction and not established in magnitude**.
+An earlier version of this section claimed it beat the solver on 500,000 hands; that was a mean
+quoted without checking it against its own spread, which is the specific failure this document
+records four other instances of, and it is withdrawn.
+
+Three seeds cannot settle it. Nor can the question of whether the raise-sizing fix widened the
+spreads at all: comparing 32.5 to 181.8 on three samples each is close to meaningless, and the
+pre-fix checkpoints no longer exist, so no further evidence can be gathered on that side. Both families spend the same currency, so this is a like-for-like
 budget statement rather than a comparison of endpoints.
 
 **The axis is hands, and it used to be wall-clock.** Wall-clock was chosen because it was the only
