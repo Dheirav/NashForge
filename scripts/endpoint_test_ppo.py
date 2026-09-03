@@ -84,8 +84,9 @@ def untrained_agent(train_seed):
     return PPOTrainer(config).agent
 
 
-def rung_path(train_seed, rung):
-    return os.path.join(SCRATCH, f"seed{train_seed}", f"ppo_rung{rung}.pt")
+def rung_path(train_seed, rung, scratch=None):
+    return os.path.join(scratch or SCRATCH, f"seed{train_seed}",
+                        f"ppo_rung{rung}.pt")
 
 
 def measure(agent, panel, hands, label):
@@ -137,6 +138,9 @@ def main():
     parser.add_argument("--out", default=os.path.join(OUT_DIR, "phase3_endpoint.json"))
     parser.add_argument("--dry-run", action="store_true",
                         help="Do not write the JSON. For checking the wiring.")
+    #: Where the checkpoints are. Seeds trained into their own directory -- as
+    #: --out-dir now allows -- are not found by the shared default.
+    parser.add_argument("--scratch", default=SCRATCH)
     parser.add_argument("--merge", nargs="+", metavar="JSON",
                         help="Combine per-seed runs into one report. Use when "
                              "the seeds were run as parallel processes.")
@@ -153,8 +157,8 @@ def main():
         parser.error(f"--hands below {HANDS:,} is monitoring, not a result; "
                      "pass --dry-run if that is deliberate")
 
-    missing = [rung_path(s, r) for s in args.seed for r in args.rungs
-               if not os.path.exists(rung_path(s, r))]
+    missing = [rung_path(s, r, args.scratch) for s in args.seed for r in args.rungs
+               if not os.path.exists(rung_path(s, r, args.scratch))]
     if missing:
         parser.error("no checkpoint at:\n  " + "\n  ".join(missing))
 
@@ -174,8 +178,8 @@ def main():
                            "untrained")
 
         for rung in args.rungs:
-            agent = PPOAgent.from_checkpoint(rung_path(train_seed, rung),
-                                             device="cpu")
+            agent = PPOAgent.from_checkpoint(
+                rung_path(train_seed, rung, args.scratch), device="cpu")
             trained = measure(agent, panel, args.hands, f"{rung:,}")
             records.append({
                 "seed": train_seed,

@@ -30,10 +30,14 @@ All three are measured, and **Phase 4 — the comparison the project's title pro
 † pre-fix raise convention; evolution was not retrained because its fitness cannot be selected on.
 
 **Evolutionary search spent 36,000,000 hands — seventy-two times PPO's smallest rung — and is
-still 370 BB/100 behind the solver.** That is the firm result. **PPO's own position against the
-solver is not established**: +60.2 at 500k carries a standard error of ±41 across three seeds and
-is not separated from zero. Approximate parity, consistent in direction, unestablished in
-magnitude. The axis is hands, not wall-clock: the same 8M run
+still 370 BB/100 behind the solver.** That is the firm result.
+
+**PPO, at six seeds**: level with the solver at 500,000 hands (+20.1, t = 0.69) and 2,000,000
+(+12.5, t = 0.51), and **beating it at 8,000,000 by +36.4 ± 13** (t = 2.74, separated). The
+three-seed reading had the shape backwards — it put the advantage at 500k and a dip at 2M. More
+training does help. Standard deviation against the solver also falls with training, 71.6 → 60.2 →
+32.5, so self-play converges to a consistent outcome given enough hands and the wide spreads are
+a property of under-trained policies rather than of the raise-sizing fix. The axis is hands, not wall-clock: the same 8M run
 read 4.81 h quiet and 10.42 h contended, so wall-clock was measuring the machine.
 
 ---
@@ -134,8 +138,7 @@ August checkpoints. The pre-fix numbers survive as records; the agents behind th
 2. **Re-run Phase 4** (~10 min) once evolution is refitted. Every figure in that table was
    measured under the old sizing.
 3. **Re-run Slumbot** (~7h). The CFR agent's raises changed, so −987 ± 374 is stale.
-4. **Widen the seed count** if the spread question matters. Three seeds cannot separate "the fix
-   made self-play noisier" from "these three diverged more than the last three".
+4. ~~Widen the seed count.~~ **Done** — six seeds, `results/ppo/phase3_endpoint_6seed.json`.
 
 Fix `scripts/train_ppo.py` to take an output directory before any of the above, so the next
 retrain does not destroy what it is being compared against.

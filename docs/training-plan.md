@@ -338,25 +338,38 @@ measurements.
 still 370 BB/100 behind the solver**, on a gain over its own untrained network of +33.8 ± 37,
 which is no change. That comparison is separated many times over and is the firm result here.
 
-**PPO's own position against the solver is not established.** Per seed it reads:
+**PPO's own position against the solver, at six seeds.** Three could not settle it, so seeds 3, 4
+and 5 were trained to 8M hands and measured on the same instrument
+(`results/ppo/phase3_endpoint_6seed.json`).
 
-| rung | seed 0 | seed 1 | seed 2 | mean | spread |
+| rung | mean | sd | stderr | t | verdict |
 |---|---|---|---|---|---|
-| 500,000 | +26.4 | +142.3 | +11.8 | +60.2 | 130.5 |
-| 2,000,000 | +18.1 | +75.5 | −98.8 | −1.7 | 174.3 |
-| 8,000,000 | +79.3 | +71.1 | +26.9 | +59.1 | 52.4 |
+| 500,000 | +20.1 | 71.6 | 29.2 | +0.69 | not separated from parity |
+| 2,000,000 | +12.5 | 60.2 | 24.6 | +0.51 | not separated from parity |
+| 8,000,000 | **+36.4** | 32.5 | 13.3 | **+2.74** | **separated** |
 
-With three seeds and a standard deviation of 72, the +60.2 at 500,000 hands carries a standard
-error of ±41 and is **not separated from zero**. All three seeds being positive is a sign test at
-p ≈ 0.125, which is not significant either. The defensible statement is that **PPO reaches
-approximate parity with the solver, consistently in direction and not established in magnitude**.
-An earlier version of this section claimed it beat the solver on 500,000 hands; that was a mean
-quoted without checking it against its own spread, which is the specific failure this document
-records four other instances of, and it is withdrawn.
+**PPO is level with the solver at 500,000 and 2,000,000 hands, and beats it at 8,000,000 by
++36.4 ± 13.**
 
-Three seeds cannot settle it. Nor can the question of whether the raise-sizing fix widened the
-spreads at all: comparing 32.5 to 181.8 on three samples each is close to meaningless, and the
-pre-fix checkpoints no longer exist, so no further evidence can be gathered on that side. Both families spend the same currency, so this is a like-for-like
+Three seeds had read +60.2 at 500,000 hands and −1.7 at 2,000,000, which suggested an advantage
+that appeared early and then dipped. Six seeds say the opposite: the 500,000 mean falls to +20.1
+once seeds giving −0.2 and −80.7 are included, and the only rung separated from parity is the
+largest. **More training does help; it took six seeds to see it, and the three-seed reading had
+the shape backwards.** An earlier version of this section claimed PPO beat the solver on 500,000
+hands. That was a mean quoted without checking it against its own spread — the specific failure
+this document records four other instances of — it was withdrawn before these seeds were run, and
+they confirm the withdrawal was right.
+
+**The spreads answer the other question.** Standard deviation against the solver falls with
+training: **71.6 → 60.2 → 32.5** at 500k, 2M and 8M, and the seed ranges fall likewise, 226 → 182
+→ 102. Self-play converges to a consistent outcome given enough hands, and the wide spreads seen
+after the raise-sizing fix are a property of **under-trained policies** rather than of the fix.
+That is as close to an answer as is now available, and it points away from the earlier
+speculation that the corrected sizing made self-play noisier.
+
+Whether the fix changed the spreads at all remains formally unanswerable — 32.5 against 181.8 on
+three samples each is close to meaningless, and the pre-fix checkpoints were overwritten, so no
+further evidence can be gathered on that side. Both families spend the same currency, so this is a like-for-like
 budget statement rather than a comparison of endpoints.
 
 **The axis is hands, and it used to be wall-clock.** Wall-clock was chosen because it was the only
