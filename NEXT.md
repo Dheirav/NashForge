@@ -100,34 +100,35 @@ Two things to fix before any longer run:
 
 ---
 
-## Open defect: the two betting implementations disagree by 20% on raises
+## Fixed 2–3 September: the two betting implementations, and what it cost
 
-Found 2 September, characterised in `tests/test_betting_equivalence.py`, written up in
-[`docs/training-plan.md`](docs/training-plan.md). **It should be fixed. It is not fixed.**
+`training/fitness.py` sized a pot-fraction raise off the pot *before* the call where
+`games/nolimit.py` sized it *after* — the standard convention — so every raise in the engine was
+about 20% smaller than the same abstract action in the game the solver trains in. Fixed;
+`tests/test_betting_equivalence.py` now asserts agreement across the enumerated betting tree
+instead of characterising a gap.
 
-`games/nolimit.py` sizes a pot-fraction raise off the pot *after* the call, the standard
-convention; `training/fitness.py` sizes it off the pot *before*, so the engine raises about 20%
-smaller. Everything else — fold, check, call, all-in — agrees to the chip.
+PPO trains through that function, so all three seeds were retrained at 8M hands and re-measured.
+**The Phase 3 finding survives** — the 2M rung against the CFR agent moved from +394.2 to +393.9 —
+but **the seed spreads widened five- to six-fold** (2M vs CFR: 32.5 → 181.8). The number barely
+moved; the confidence in it dropped a lot, and the cause is not established. See
+[`docs/training-plan.md`](docs/training-plan.md).
 
-The crossover is unaffected (it never touches the engine), as are Kuhn, Leduc, the Slumbot
-bridge, PPO and evolution. What is affected is a CFR strategy trained in the traversal game and
-measured in the engine: it makes smaller raises than it was fitted for, which makes the CFR
-benchmark slightly soft.
+**Cost:** `scripts/train_ppo.py` hardcodes its output directory, so the retrain overwrote the
+August checkpoints. The pre-fix numbers survive as records; the agents behind them do not.
 
-**Fixing it naively makes it worse.** `rl/poker_env.py:353` trains PPO through the same function,
-and evolution likewise, so changing the convention moves the mismatch onto the two families that
-cost seventeen hours to retrain rather than the one that costs three.
+### Still to do, in order
 
-**The consistent fix, when someone takes it:**
+1. **Retrain evolutionary search** (~3h). It trains through the same function, so its genome is
+   still fitted for the old convention. Until then Phase 4's evolution row is stale.
+2. **Re-run Phase 4** (~10 min) once evolution is refitted. Every figure in that table was
+   measured under the old sizing.
+3. **Re-run Slumbot** (~7h). The CFR agent's raises changed, so −987 ± 374 is stale.
+4. **Widen the seed count** if the spread question matters. Three seeds cannot separate "the fix
+   made self-play noisier" from "these three diverged more than the last three".
 
-1. Change `training/fitness.py:121` and its siblings to size off the pot after the call.
-2. Retrain PPO — 3 seeds × 8M hands, about 14 hours — and evolutionary search, about 3.
-3. Re-measure the endpoint tests and Phase 4, about an hour.
-4. Delete `test_pot_fraction_raises_disagree_and_this_is_the_known_defect`; its sibling then
-   becomes the whole guarantee.
-
-Roughly an overnight run. Worth doing before any further external measurement, because it is the
-difference between an agent that plays the game it was solved for and one that does not.
+Fix `scripts/train_ppo.py` to take an output directory before any of the above, so the next
+retrain does not destroy what it is being compared against.
 
 ---
 

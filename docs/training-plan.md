@@ -441,6 +441,50 @@ reproducible.
 `scripts/diagnostics/check_instrument.py` is kept as the check that would catch this class
 returning.
 
+### Re-measured after the raise-sizing fix — 3 September
+
+`training/fitness.py` was corrected to size a pot-fraction raise off the pot *after* the call,
+matching `games/nolimit.py` and the standard convention. PPO trains through that function, so all
+three seeds were retrained at 8M hands and the endpoint test re-run under the corrected
+instrument (`results/ppo/phase3_endpoint_refit.json`).
+
+**The result survives.** Gain over an untrained policy from the same initialisation, against the
+CFR agent:
+
+| rung | before the fix | after | move |
+|---|---|---|---|
+| 500,000 | +324.3 | +455.8 | +131.5 |
+| **2,000,000** | **+394.2** | **+393.9** | **−0.4** |
+| 8,000,000 | +373.1 | +454.7 | +81.6 |
+
+Only one of nine cells moved beyond its own seed spread. The 2M rung — the one Phase 4 quotes —
+shifted by 0.4 BB/100. So the divergence was real and was **not** what the Phase 3 finding rested
+on, which is stronger evidence for that finding than the original measurement was: it now holds
+with the two betting implementations in agreement.
+
+**But the seed spreads widened five- to six-fold.**
+
+| | before | after |
+|---|---|---|
+| 2M vs CFR | 32.5 | **181.8** |
+| 8M vs CFR | 48.4 | 63.8 |
+| 2M vs random | 73.3 | 192.1 |
+
+Every apparent move in the table except one sits *inside* the new spread, so most of what looks
+like change is seeds disagreeing more rather than the fix doing something. The cause is not
+established. Two candidates: the corrected sizing genuinely makes self-play noisier, since bigger
+raises commit more chips per decision, or these three seeds simply diverged more than the last
+three. Distinguishing them needs more seeds.
+
+**The practical consequence is a loss of confidence rather than a change of conclusion.** With a
+spread of 182, the 2M rung's +393.9 is much softer than the old +394.2 ± 33 implied. The number
+barely moved; what can be claimed about it did.
+
+**The pre-fix checkpoints no longer exist.** `scripts/train_ppo.py` hardcodes its output directory,
+so the retrain wrote over the August checkpoints. The published pre-fix numbers remain as records
+in `results/ppo/phase3_endpoint.json` but the agents behind them are gone, so those figures cannot
+be reproduced and no cleaner before/after comparison than the table above is available.
+
 ### The training lever, and where it runs out — 2 September
 
 `results/cfr/nolimit_strategy.pkl` shipped with 4,000 iterations, which at the crossover's
