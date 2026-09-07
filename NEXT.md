@@ -88,11 +88,22 @@ measurement of one.
 against random (+280.1 against +377.2). Ranking these two by their random score would have picked
 the weaker agent — the Phase 4 intransitivity, appearing again in an independent place.
 
-**`train_nolimit.py`'s own evaluation disagrees with `evaluation.benchmark`.** On always-call it
-reported the 150k solver worse (+348.1 against +581.5) where the audited instrument says better
-(+827.7 against +722.9). Opposite conclusions, same two strategies. The benchmark path is the one
-every Phase 4 number came through and it reproduces exactly; treat the trainer's built-in
-evaluation as unfit for comparisons until someone works out why.
+**`train_nolimit.py`'s own evaluation disagrees with `evaluation.benchmark`, and the reason is
+now known — see [`docs/training-plan.md`](docs/training-plan.md).** Re-measured after the
+raise-sizing fix, the two still give opposite verdicts: benchmark says the 150k solver is better
+against always-call by +109.3, `play_hands` says worse by −162.7.
+
+**The engine ends a hand when an all-in is called; the traversal game does not.** It keeps
+producing check/call decisions for players with zero stacks, and those filler actions extend the
+history string — which is the information-set key. Same hand, different keys. 19.7% of sampled
+decision nodes have a legal-action list that `_solver_actions` reconstructs wrongly, because it
+counts raises on the current street only and knows nothing about stacks.
+
+The engine is right; real poker has no decisions left once both players are all-in. So
+`evaluation.benchmark` stays the path to trust and the trainer's evaluation stays unfit for
+comparisons — but note the solver is **trained** in the traversal game, so part of its table is
+fitted for nodes that never occur. Fixing it means terminating betting in `games/nolimit.py` once
+all players are all-in and retraining every solver.
 
 ### The next lever is more iterations, not less abstraction
 

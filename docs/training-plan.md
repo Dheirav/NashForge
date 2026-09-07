@@ -648,6 +648,51 @@ the same mechanism.
 **The panel's `vs random` column is therefore actively misleading as a strength signal for CFR
 agents.** Anyone tuning on it would tune backwards. Rank on the head-to-head or not at all.
 
+### The two games still differ after an all-in — found 8 September
+
+The raise-sizing fix made engine and traversal betting agree to the chip, and
+`tests/test_betting_equivalence.py` asserts it. The two evaluation paths still give **opposite
+verdicts on the same two strategies**, measured at 20,000 hands against always-call after the fix:
+
+| solver | `evaluation.benchmark` (engine) | `cfr.play.play_hands` (traversal) |
+|---|---|---|
+| 4,000 iterations | +729.6 | +497.2 |
+| 150,000 iterations | +838.9 | +334.5 |
+| | 150k **better** by +109.3 | 150k **worse** by −162.7 |
+
+**The cause is what happens after an all-in.** In the engine, all-in followed by a call sends the
+hand straight to showdown — measured: `over=True` after two actions, stacks `[0, 0]`. The
+traversal game keeps producing decision nodes on every later street, asking for a check/call from
+players who have no chips: `11/51/`, `11/51/1`, `11/51/11/`.
+
+Those filler actions extend the history string, and **the history string is the information-set
+key**. So the same hand produces different keys in the two games, and the solver is trained on
+nodes the engine never visits. The solver takes all-in on about 15% of its decisions against a
+calling station, so these lines are not rare.
+
+`evaluation.benchmark._solver_actions` compounds it. It reconstructs the legal list from
+`history.split("/")[-1]` — the current street only — and has no knowledge of stacks, so after an
+all-in on an earlier street it reports raising as available again. Comparing its reconstruction
+against the traversal game's own `legal_actions` over 15,640 sampled decision nodes: **3,088
+disagree, 19.7%**, every example of the same shape:
+
+    history='11/51/'   to_call=0   traversal=[1]   reconstructed=[1, 2, 3, 4, 5]
+
+**Which side is right.** The engine is: real poker has no decisions left once both players are
+all-in. The traversal game's extra nodes are an artefact of a traverser that advances streets
+without checking whether anyone can still act.
+
+**What follows.** `evaluation.benchmark` remains the path to trust, and the trainer's built-in
+evaluation stays unfit for comparisons — but the reason is now known and is worse than
+"unexplained": it is measuring a game with nodes that do not exist. More seriously, **the solver
+is trained in that game too**, so a fraction of its table is fitted for situations it will never
+face. That is a train/deploy mismatch of the same class as the raise sizing, and correcting it
+means changing `games/nolimit.py` to terminate betting once all players are all-in, then
+retraining every solver.
+
+Not done here: it invalidates all three solvers and every CFR figure measured through them, so it
+is a deliberate piece of work rather than a patch. Recorded with the measurement that found it.
+
 ### Two betting implementations, and a 20% divergence between them — found 2 September
 
 Poker's betting is written twice here. `engine.PokerGame` is the audited one and is where every
