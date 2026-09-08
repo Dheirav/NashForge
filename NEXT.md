@@ -4,7 +4,7 @@ One page, kept current. [`BACKLOG.md`](BACKLOG.md) holds the reasoning and every
 [`docs/training-plan.md`](docs/training-plan.md) holds the full phase plan and its results. This
 file is only the next thing to do.
 
-**Last updated:** 8 September 2026 · `main` at `6b17150` · 285 tests (collection alone ~6 min)
+**Last updated:** 8 September 2026 · `main` at `9912610` · 285 tests (collection alone ~6 min)
 
 ---
 
@@ -36,7 +36,7 @@ about 200. Neither ever beat it: the earlier reading came from a panel whose CFR
 **4,000 iterations — about two minutes of training**.
 
 **Evolutionary search still spent 36,000,000 hands to PPO's 500,000** — seventy-two times as many
-— and is 129 BB/100 further behind. That comparison survives the panel change and is the firm
+— and is 121 BB/100 further behind. That comparison survives the panel change and is the firm
 result.
 
 ### Three claims the panel upgrade overturned
