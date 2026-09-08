@@ -117,6 +117,12 @@ class NoLimitHoldem(Game):
             return True
         if state.street >= len(STREET_NAMES):
             return True
+        # All-in with the board complete: nobody can act and there is nothing
+        # left to deal, so the hand is over. Without this the state is neither
+        # terminal nor actionable and the traverser asks chance for a street
+        # that does not exist.
+        if self._all_in(state) and len(state.board) == STREET_BOARD_SIZE[-1]:
+            return True
         return False
 
     def _street_closed(self, state: NoLimitState) -> bool:
@@ -137,9 +143,28 @@ class NoLimitHoldem(Game):
         # caller is all-in and the uncalled excess is returned at showdown.
         return min(state.stacks) == 0
 
+    def _all_in(self, state: NoLimitState) -> bool:
+        """
+        True once no one can act again: someone is out of chips and the bets are
+        level, so the board simply runs out to showdown.
+
+        Without this the traverser kept producing decision nodes on every later
+        street and asking a check/call from a player holding nothing. Those
+        filler actions are not free: they extend `history`, and `history` is the
+        information-set key, so the same hand keyed differently here than in the
+        engine — which ends the hand at an all-in call. A fraction of every
+        solver's table was therefore fitted for situations that cannot occur,
+        and the two evaluation paths disagreed on which of two strategies was
+        stronger. Measured 8 September: 19.7% of sampled decision nodes had a
+        legal-action list the engine's reconstruction could not match.
+        """
+        return min(state.stacks) == 0 and state.committed[0] == state.committed[1]
+
     def current_player(self, state: NoLimitState) -> int:
         if not state.hole:
             return CHANCE
+        if self._all_in(state):
+            return CHANCE                      # run the board out; nobody acts
         if self._street_closed(state):
             return CHANCE                      # deal the next street
         actions = _street_actions(state.history)
