@@ -70,16 +70,49 @@ real improvement are compatible; the earlier phrasing denied the second.
 **Retrain at 200bb, then re-measure Slumbot.** In that order, so the seven-hour external run
 measures the best agent available rather than being spent twice.
 
-**1. The 200bb retrain (~1 h of compute).** Slumbot plays 200 big blinds because that is the ACPC
-convention and what published work reports against; this project's 100bb was an unexamined
-default in `results/cfr/nolimit_strategy.json`. Moving to it once makes every future external
-comparison possible, and it is the only lever left that could plausibly halve the Slumbot gap
-again — the training lever is spent (150k → 250k bought +12.3 ± 7).
+**1. The 200bb retrain (at least 4h47m, not the ~1 h this line used to claim).** Slumbot plays 200
+big blinds because that is the ACPC convention and what published work reports against; this
+project's 100bb was an unexamined default in `results/cfr/nolimit_strategy.json`. Moving to it
+once makes every future external comparison possible.
 
-  **Decide this up front:** a 200bb solver invalidates the panel again, because every Phase 4
-  figure is at 100bb. Either keep both solvers and say explicitly which panel each number used,
-  or accept another full re-measurement pass. Discovering that afterwards is how this session
-  went.
+  **The cost.** The 250k run on the corrected game measured **17,257 s = 4h47m** (14.5 it/s,
+  `results/cfr/nolimit_strategy_v2_250k.json`). A 200bb tree is deeper, so it is that or more.
+  The earlier "~1 h" here was invented, not measured.
+
+  **Do it as a correction, not as an experiment.** 200bb is the ACPC convention and what Slumbot,
+  Libratus and DeepStack all report at. The current bridge loads a 100bb-fitted table and plays it
+  into a 200bb game — the lookups do not miss, because the infoset key is `bucket|history` and
+  carries no stack depth, so it plays on happily with every sizing calibrated for half the money
+  being behind. −987 is partly measuring that misfit.
+
+  **It is the agent that is non-standard, not the measurement.** Slumbot's game is 200bb whatever
+  we bring to it, so −987 was always a legitimate vs-Slumbot number in the units everyone reports.
+  The `−1750 → −987 → ?` series holds the game fixed and varies the agent, and "trained at the
+  right depth" is another agent change like 4k → 150k → 250k. Switching depth does not break it.
+
+  **The gain is still unmeasured**, and this was previously oversold here as "the only lever left
+  that could plausibly halve the Slumbot gap". At `raise_cap=1` one raise per street has to cover
+  twice the depth, so the action abstraction does relatively *more* damage at 200bb than at 100.
+  Expect less than you would like, and take a worse number as the honest one. It also points at
+  the raise cap, not the depth, as the next real lever.
+
+  **Watch `information_sets_reached`.** v2 at 100bb reached 23,470. The 200bb tree should be
+  larger: with the all-in fix hands end once the money is in, and at 200bb that takes more betting,
+  so more nodes survive to later streets. The same 250,000 iterations over a bigger tree is
+  relatively less converged. Run 250k for comparability, then read that field — a large jump is the
+  argument for a longer run *before* spending seven hours on Slumbot, not after.
+
+  **Decided, 8 September: two solvers, and the panel does not move.** A 200bb solver would
+  invalidate Phase 4, whose every figure is at 100bb — and that is not a re-measurement but a
+  retraining, because `rl/ppo/config.py` and evolution's `FitnessConfig` both set
+  `starting_stack=200`. Both learned families were *trained* at 100bb; scoring them at 200bb
+  measures them in a game they never saw, and retraining them is 8M hands × 6 seeds plus 36M
+  hands. Days.
+
+  So: train to `results/cfr/nolimit_strategy_200bb_250k.pkl` and **do not promote it** over
+  `nolimit_strategy.pkl`. `scripts/slumbot_measure.py` already takes `--strategy`, so this needs
+  no code change. Internal comparison stays at 100bb, the external number is at 200bb, and each
+  figure says which.
 
 **2. Slumbot, re-measured (~7 h).** **−987 ± 374 is now stale**, for a reason that did not apply
 when it was last dismissed: the all-in fix means the current solver plays a *different game* — it
