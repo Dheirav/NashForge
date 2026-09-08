@@ -34,81 +34,99 @@ to "which abstraction" is not an abstraction, it is a budget.
 
 ## Result 2 — the three families compared
 
-| family | wall-clock | vs random | vs always-call | **vs CFR agent** |
+| family | hands | vs random | vs always-call | **vs CFR agent** |
 |---|---|---|---|---|
-| CFR (the solver) | — | +377.2 | +722.9 | — |
-| evolution, 50 generations | 3.16 h | +192.7 | +0.5 | **−370.1** |
-| PPO, 500k hands | 0.26 h | +204.1 | +278.6 | **−59.5** |
-| PPO, 2M hands | 1.02 h | +221.5 | +293.5 | **+10.4** |
-| PPO, 8M hands | 4.81 h | +135.4 | +467.9 | **−10.7** |
+| CFR (the solver, 250k) | — | +245.9 | +603.4 | — |
+| evolution, 50 generations | 36,000,000 | +202.7 | −0.2 | **−200.9** |
+| PPO | 500,000 | +191.2 | +372.6 | **−79.7** |
+| PPO | 2,000,000 | +137.2 | +373.2 | **−73.5** |
+| PPO | 8,000,000 | +226.8 | +329.1 | **−72.0** |
 
-**PPO reaches parity with the solver in about one hour. Evolutionary search does not reach it in
-three.** Both families sit on the same wall-clock axis, so this compares budgets and not just
-endpoints. The solver has no row against itself — that is zero by symmetry, a structural
-identity rather than a measurement.
+**Both learned families lose to the solver**, PPO by about 75 BB/100 and evolutionary search by
+about 200. Neither beats it at any budget.
+
+**Evolutionary search spent 36,000,000 hands to PPO's 500,000 — seventy-two times as many — and
+is 121 BB/100 further behind.** That is the firm comparison: both families moved together when
+the panel changed, so it does not depend on which solver holds the seat.
+
+The axis is **hands**, not wall-clock. An earlier version of this sheet used wall-clock and said
+PPO reached parity "in about an hour". The identical 8M-hand run read 4.81 h on a quiet machine
+and 10.42 h sharing cores with another job, so that axis was measuring the machine. Hands are
+exact and are what both families actually spend. The solver is off the axis entirely: it
+traverses a tree rather than playing hands, and here it is the opponent rather than a competitor.
 
 Read the **vs CFR** column. It is the only opponent from outside both families' lineage, and its
-seed-to-seed spread is 33–79 BB/100 against the baselines' 73–637.
+seed-to-seed spread is three to ten times tighter than the baselines'.
 
 ---
 
 ## Result 3 — what each method actually learned
 
-**Evolutionary search learned to exploit randomness, not to play poker.** +206 BB/100 against a
-random opponent, nothing against a station that never folds, and still −370 against the solver
-after fifty generations. It did learn; what it learned did not transfer.
+**Evolutionary search learned to exploit randomness, and a little else.** +202.7 BB/100 against a
+random opponent, nothing against a station that never folds, and −200.9 against the solver after
+fifty generations. Its gain over an untrained genome from the same distribution is
+**+50.0 ± 20 BB/100** — small, but separated from zero.
 
-**PPO's learning transferred.** Untrained networks scored −399.1, −385.9 and −366.3 against the
-solver; the same three after 8M hands scored −34.8, +35.4 and −32.7. All 27 measured rows
-improved.
+That last figure was previously reported as +33.8 ± 37, "no change". It was measured against a
+solver with two minutes of training, whose exploitation of a weak opponent was large enough to
+bury the difference. A better opponent made a real effect visible rather than hiding one.
 
-**PPO's budget ladder is flat after 2M hands.** +394.2 at 2M against +373.1 at 8M, on spreads of
-33 and 48 — three quarters of each run's wall-clock bought nothing measurable.
+**PPO learns more, and still loses.** Untrained networks score around −250 against the solver and
+about −75 after eight million hands, so the training is doing something substantial. It is not
+enough to reach parity with a converged solver.
+
+**PPO's ladder is flat.** −79.7 at 500,000 hands, −73.5 at 2,000,000, −72.0 at 8,000,000. Sixteen
+times the training buys roughly 8 BB/100, well inside the seed spread. An earlier version of this
+sheet said more training helped; that was an artefact of measuring against an under-trained
+opponent.
 
 ---
 
-## Result 4 — the table does not rank, and why
+## Result 4 — a finding withdrawn: the ranking is transitive after all
 
-PPO at 2M draws level with the solver head to head (+10.4), yet the solver takes nearly twice as
-much off both baselines. Two agents level against each other extract very different amounts from
-the same weak opponents, so **strength here is not a scalar** and no single ranking of the three
-families exists.
+An earlier version of this sheet said the three families could not be ranked at all. That rested
+on two edges measured against the under-trained panel: PPO drew level with the solver (+10.4)
+while the solver beat the evolved genome by +370.1, and yet PPO beat that same genome by only
++23.9 where transitivity demanded about +360. No single ordering allowed both.
 
-Three explanations were tested. Two failed:
-
-- **An instrument artefact** — measuring the solver through both families' code paths gives
-  bit-identical results. Ruled out.
-- **The one-raise-per-street cap** — lifting it *widened* the gap, −430.1 to −437.4. Ruled out.
-
-The third is the answer, and it was settled by measuring the edge of the tournament graph that
-nobody had: **PPO against the evolved genome.**
+Both of those edges moved when the panel was replaced with a converged solver. Re-measured on the
+current panel — 40,000 hands per seed, three seeds:
 
 | edge | BB/100 to the first named |
 |---|---|
-| CFR vs PPO | +10.4 — level |
-| CFR vs evolution | +370.1 |
-| **PPO vs evolution** | **+23.9** — spread 80.8, one seed lost |
+| CFR vs PPO (2M) | +73.5 |
+| CFR vs evolution | +200.9 |
+| **PPO vs evolution** | **+96.5** — per seed +75.2, +273.3, −58.9 |
 
-Transitivity predicted about **+360** for that edge. **PPO is level with the solver and also
-level with the genome the solver beats by 370** — no single ordering permits both.
+Transitivity now predicts **+127.4** for the third edge. The measurement is +96.5 with a
+standard error of ±96.5 across the three seeds, which span 332 BB/100. **The discrepancy is a
+quarter of the size of the error bar, so there is no intransitivity left to explain.** The
+original observation was a property of the panel, not of the agents.
 
-### The mechanism
+Two of the three explanations tried in August still stand as ruled out, and are worth keeping for
+what they cost: measuring the solver through both families' code paths gives bit-identical results
+(not an instrument artefact), and lifting the one-raise-per-street cap *widened* the gap rather
+than closing it (not the abstraction). The third explanation was accepted on evidence that has
+since been withdrawn.
 
-Counting what each agent does against a station that never folds, ~250,000 decisions each:
+### What survives — and it is smaller than the story it replaces
 
-| | fold | check/call | raise ½ | raise pot | raise 2× | all-in |
-|---|---|---|---|---|---|---|
-| CFR solver | 1.5% | 24.2% | 20.9% | 21.0% | 17.3% | **15.0%** |
-| PPO, 2M hands | 3.5% | 34.1% | 35.3% | 13.2% | 13.8% | **0.1%** |
+Counting what each agent actually does against a station that never folds, ~300,000 decisions each:
 
-They raise at similar *rates* (74.3% vs 62.4%), so frequency is not it. **PPO has effectively
-eliminated the all-in from its strategy.** Against an opponent who never folds the value is in
-large bets — and PPO trained by self-play against snapshots of itself, which do fold, so it
-never met an opponent worth jamming into. Against the solver that costs nothing and they are
-level; against anything weak it leaves the value uncollected.
+| | score | fold | check/call | raise ½ | raise pot | raise 2× | all-in |
+|---|---|---|---|---|---|---|---|
+| CFR solver | +603.4 | 0.3% | 45.4% | 29.4% | 16.0% | 7.3% | 1.6% |
+| PPO, 2M hands | +397.3 | 2.7% | 42.4% | 23.8% | 19.2% | 11.7% | 0.2% |
 
-This is the audit's "strong but exploitable" prediction made specific: **self-play optimises for
-a peer and produces a policy that cannot punish a weak opponent.**
+The two raise at almost exactly the same rate — 54.3% against 54.9% — and PPO's raises are on
+average the *larger* of the two, yet it collects 206 BB/100 less from the same opponent. So the
+previous explanation does not carry the difference either: that version read "PPO has eliminated
+the all-in", against a solver that jammed 15.0% of the time. A converged solver jams **1.6%**.
+The remaining difference is *which spots* get bet, which counting frequencies cannot see.
+
+PPO does fold 2.7% of the time against an opponent who never folds — a pure loss, and a genuine
+mark of self-play against snapshots that do fold — but it is far too small to account for 206
+BB/100. **This is left open rather than explained away.**
 
 ---
 
@@ -117,7 +135,11 @@ a peer and produces a policy that cannot punish a weak opponent.**
 Every figure above was measured by this project's own instrument. **Slumbot** is a fixed CFR
 strategy at heads-up no-limit behind a public API, used as a benchmark in published work.
 
-**−1750.2 ± 524 mbb/hand over 10,000 hands.** We lose, heavily.
+**−987 ± 374 mbb/hand over 10,000 hands.** We lose, heavily.
+
+An earlier run with a 4,000-iteration solver read −1750 ± 524; retraining that solver to 150,000
+iterations halved the gap. **The −987 is itself now stale**: the solver has since been retrained
+again on a corrected game and a re-measurement is outstanding.
 
 | check | |
 |---|---|
@@ -125,9 +147,9 @@ strategy at heads-up no-limit behind a public API, used as a benchmark in publis
 | lookup miss rate | 8.7% — the genuinely off-tree nodes, not a broken lookup |
 | seat split | 5,000 / 5,000, exact |
 
-What is playing: a **100bb, one-raise-per-street, six-bucket, 4,000-iteration** solver against a
+What is playing: a **100bb, one-raise-per-street, six-bucket** solver against a
 **200bb unlimited-raise** opponent built with serious compute. GTO Wizard beats Slumbot by
-194 ± 41 mbb/hand; this is 1,750 the other way. The milestone asked for a number with a
+194 ± 41 mbb/hand; this is 987 the other way. The milestone asked for a number with a
 confidence interval, not a good one, and a loss reported as a loss is the point.
 
 **One trap avoided.** Slumbot returns a `baseline_winnings` field that looked like free variance
@@ -151,9 +173,9 @@ instrument is validated before any result is quoted.
   four defects fixed and three valuation models, still could not beat a converged strategy. That
   investigation was **closed with no usable bound** — no-limit has no exploitability figure here,
   and the report says so rather than substituting a flattering one.
-- **233 automated regression tests.**
+- **285 automated regression tests.**
 
-### Four measurement failures, all reported
+### Seven measurement failures, all reported
 
 1. **The audit of 12 August.** The old fitness function scored the wrong player and the deck
    re-dealt the same two hands every hand. An untrained random network scored +451 BB/100 under
@@ -170,8 +192,30 @@ instrument is validated before any result is quoted.
    own test*, which exposed two further layers. Re-measuring moved every figure less than its own
    seed spread, and the seed spreads tightened.
 
+5. **Two implementations of betting, differing by 20%.** `engine.PokerGame` sized a pot-fraction
+   raise off the pot *before* the call; `games/nolimit.py`, where the solver trains, sized it
+   *after* — the standard convention. Every raise in the engine was about a fifth too small, so
+   strategies were scored making bets they had not been fitted for.
+6. **The traversal game did not end hands at an all-in.** It kept asking a check/call from players
+   holding nothing. Those filler actions extend the information-set key, so the same hand keyed
+   differently in the two games and part of every solver's table was fitted for situations that
+   cannot occur.
+7. **The calling station was raising.** `always_call_policy` indexed by position in the legal
+   list, so with nothing to call it picked *raise half pot*. The passive baseline raised whenever
+   checking was free. This was why two evaluation paths gave opposite verdicts on the same two
+   strategies — they now agree to 4.8 BB/100, from 232.4.
+
+**And the panel itself.** Every figure about PPO and evolutionary search was measured against a
+solver with **4,000 iterations — about two minutes of training**. A properly converged one beats
+it by +165 BB/100, and re-measuring against that overturned four published claims: PPO does not
+beat the solver, more training does not close the gap, evolutionary search *did* learn something
+transferable after all, and the intransitivity of Result 4 dissolved. An under-trained solver is far more exploitative than a
+converged one, which flattered one family and buried the other's improvement.
+
 Each was caught by a check that already existed. **A measurement that is too coarse or subtly
-wrong does not return "no result" — it returns a plausible one.**
+wrong does not return "no result" — it returns a plausible one.** Four of the seven were found by
+improving the instrument rather than by gathering new data, which is the pattern worth taking
+from this project.
 
 ---
 
@@ -192,7 +236,7 @@ measurements score — the same mask, the same solver tree, the same settle.
 ## Reproducing the numbers
 
 ```bash
-venv/bin/python -m pytest -q                          # 233 tests, ~9m30s
+venv/bin/python -m pytest -q                          # 285 tests; collection alone ~6 min
 venv/bin/python scripts/endpoint_test_ppo.py --seed 0 1 2   # Result 3
 venv/bin/python scripts/phase4_comparison.py               # Result 2
 venv/bin/python scripts/make_figures.py                    # every figure

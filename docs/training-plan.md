@@ -393,7 +393,11 @@ the advantage at the smallest rung and a dip in the middle. Six seeds reverse th
 numbers above supersede them; `results/comparison/phase4.json` and `phase4_refit.json` are the
 earlier runs and should not be quoted.
 
-**The table is non-transitive, and that is the most interesting thing in it.** PPO at 2M draws
+**~~The table is non-transitive, and that is the most interesting thing in it.~~ Withdrawn 8
+September — see "The intransitivity, withdrawn" below. Every edge in the paragraph that follows
+was measured against the 4,000-iteration panel and none of them survived its replacement. Kept
+because the reasoning was sound on the numbers available, and because what replaced it is
+weaker.** PPO at 2M draws
 level with the CFR agent head to head, yet the solver takes far more off both baselines —
 +377.2 against random to PPO's +221.5, and +722.9 against always-call to PPO's +293.5. Two
 agents level against each other extract very different amounts from the same weak opponents,
@@ -411,7 +415,7 @@ in `phase2_endpoint.log` was taken beside a 74.3% lookup miss rate, and only the
 boundary and refuses to run if the withdrawn row ever loses the miss-rate marker that
 identifies it.
 
-### The intransitivity, measured and explained — 20 August
+### The intransitivity, measured and explained — 20 August (withdrawn 8 September)
 
 Phase 4's table did not rank, and three explanations were listed. Two were checked and failed:
 the two families' rows are on one instrument, bit-for-bit
@@ -458,6 +462,50 @@ This is the audit's prediction that policy gradient would produce "a strong but 
 made specific and measured: **self-play optimises for a peer, and produces a policy that cannot
 punish a weak opponent.** It is also why no single-number ranking of these three families should
 be quoted, in this report or anywhere downstream of it.
+
+### The intransitivity, withdrawn — 8 September
+
+Everything above this line is measured against the 4,000-iteration solver. When that panel was
+replaced (see "The panel was a solver with two minutes of training"), both of the edges the argument rests on
+moved, so the third was re-measured on the converged panel — three seeds, 40,000 hands each,
+same script:
+
+| edge | August, 4k panel | September, converged panel |
+|---|---|---|
+| CFR vs PPO (2M) | +10.4 | +73.5 |
+| CFR vs evolution | +370.1 | +200.9 |
+| PPO vs evolution | +23.9 (spread 80.8) | **+96.5** (per seed +75.2, +273.3, −58.9; spread 332.2) |
+
+Transitivity predicted +359.7 in August against a measured +23.9 — a shortfall of 336, against a
+spread of 81. It predicts **+127.4** now against a measured **+96.5**, with a standard error of
+±96.5 across the three seeds. The shortfall is 31, a quarter of its own error bar. **There is no
+intransitivity in the current table**, and the two learned families order exactly where the
+solver's edges over them say they should.
+
+The mechanism goes with it. The August action counts were taken against a solver that went all-in
+on 15.0% of its decisions; the converged solver jams on **1.6%**:
+
+| | score vs always-call | fold | check/call | raise ½ | raise pot | raise 2× | all-in |
+|---|---|---|---|---|---|---|---|
+| CFR solver, 250k | +603.4 | 0.3% | 45.4% | 29.4% | 16.0% | 7.3% | 1.6% |
+| PPO, 2M hands | +397.3 | 2.7% | 42.4% | 23.8% | 19.2% | 11.7% | 0.2% |
+
+~300,000 decisions each. The two raise at 54.3% and 54.9%, and PPO's average raise is the larger
+of the two — it prefers pot and 2× where the solver prefers a half-pot bet — yet it collects 206
+BB/100 less. Neither frequency nor sizing explains the gap; what is left is *which* spots are bet,
+and this instrument counts actions rather than situations. PPO's 2.7% fold rate against an
+opponent who never folds is a real defect of self-play against snapshots that do fold, but it is
+worth a few BB/100, not two hundred.
+
+**What replaces the August claim.** Not "strength is not a scalar" — the current table is
+consistent with a scalar. The surviving, weaker statement is that the *baselines* rank badly: the
+250k solver is decisively stronger than the 4k one and still scores worse against random
+(+280.1 to +377.2). Rank agents by head-to-head, not by a baseline column.
+
+**What this cost.** The August investigation was three diagnostics and a full explanation built on
+two edges from a panel nobody had checked. Two of the three candidate explanations it ruled out
+stayed ruled out; the one it accepted was an artefact of the fourth thing it did not think to
+question. The lesson is filed with the other seven in `docs/RESULTS_SHEET.md`.
 
 ### The instrument defect found on 20 August, and how
 
@@ -640,10 +688,13 @@ solver genuinely improves. Against the calling station there is no ordering at a
 
 This is the third independent sighting of the effect and the cleanest. As CFR converges toward
 equilibrium it becomes *less exploitative* of weak opponents while becoming *stronger* against a
-peer: equilibrium play is unexploitable, not maximally exploitative. It is the same trade found
-in PPO the same week — the policy level with the solver that took far less off both baselines,
-moving all-in on 0.1% of its decisions against the solver's 15.0%. Two different algorithms,
-the same mechanism.
+peer: equilibrium play is unexploitable, not maximally exploitative. The solver's own action
+counts show it directly — the 4,000-iteration solver moved all-in on **15.0%** of its decisions
+against a calling station, the 250,000-iteration one on **1.6%**.
+
+That same 15.0% was the baseline August measured PPO's 0.1% against, and read as a defect of
+self-play. Most of the gap was the panel converging rather than PPO failing; see "The
+intransitivity, withdrawn".
 
 **The panel's `vs random` column is therefore actively misleading as a strength signal for CFR
 agents.** Anyone tuning on it would tune backwards. Rank on the head-to-head or not at all.

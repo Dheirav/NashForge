@@ -13,11 +13,11 @@ file is only the next thing to do.
 | | | |
 |---|---|---|
 | CFR | measured | Validated against Kuhn's −1/18 and exact Leduc exploitability. Produced the abstraction crossover, +0.916 ± 0.118 chips/hand at the 2560s budget |
-| Evolutionary search | measured | Learned to exploit randomness; nothing transferred against the solver |
-| PPO | measured | Closes the gap to the CFR agent: −383.8 → −10.7 BB/100 after 8M hands. Flat after 2M |
+| Evolutionary search | measured | Loses to the solver by 200.9 BB/100. Fifty generations are worth +50.0 ± 20 — small, separated, and invisible against a weaker opponent |
+| PPO | measured | Loses to the solver by about 75 BB/100 at every rung. Flat: more training does not close it |
 
 All three are measured, and **Phase 4 — the comparison the project's title promises — is done**
-(`results/comparison/phase4_6seed.json`). One panel, 40,000 hands, a hands axis, in BB/100:
+(`results/comparison/phase4_v2panel.json`). One panel, 40,000 hands, a hands axis, in BB/100:
 
 | family | hands | vs random | vs always-call | vs CFR |
 |---|---|---|---|---|
@@ -93,25 +93,34 @@ lineage.
 
 ---
 
-## Closed, 20 August: the Phase 4 intransitivity
+## Withdrawn, 8 September: the Phase 4 intransitivity
 
-It is **explained** — see
-[`docs/training-plan.md`](docs/training-plan.md). All three candidate explanations were tested:
-the instrument agrees bit-for-bit, lifting the raise cap widened the gap rather than closing it,
-and the third turned out to be the answer.
+**It was the panel.** The August finding — that the three families could not be ranked — rested
+on two edges taken against the 4,000-iteration solver: PPO level with it (+10.4) while it beat
+the evolved genome by +370.1, against a measured PPO-vs-genome edge of only +23.9.
 
-The tournament graph's missing edge settles it. PPO against the evolved genome scores **+23.9
-BB/100** (per seed −12.7, +68.2, +16.3, spread 80.8) where transitivity predicted about +360.
-PPO is level with the solver *and* level with the genome the solver beats by 370, which no
-single ordering allows.
+Re-measured on the converged panel, three seeds at 40,000 hands each:
 
-The mechanism is in the action counts. Against a station that never folds the solver goes all-in
-on **15.0%** of its decisions and PPO on **0.1%**; the two raise at similar rates, so the
-difference is sizing rather than frequency. Self-play optimises against a peer, and its
-snapshots fold — so the policy never learned to jam into an opponent who does not. Against the
-solver that costs nothing; against anything weak it leaves the value uncollected.
+| edge | BB/100 to the first named |
+|---|---|
+| CFR vs PPO (2M) | +73.5 |
+| CFR vs evolution | +200.9 |
+| **PPO vs evolution** | **+96.5** — per seed +75.2, +273.3, −58.9, spread 332.2 |
 
-**Do not quote a single-number ranking of the three families.** The data does not support one.
+Transitivity predicts +127.4 for the third edge and it measured +96.5 ± 96.5 (SE across seeds).
+**The shortfall is a quarter of its own error bar.** Nothing to explain.
+
+The mechanism claimed in August goes with it. "PPO has eliminated the all-in" was stated against
+a solver that jammed on 15.0% of decisions; a converged solver jams on **1.6%**, PPO on 0.2%.
+The two now raise at 54.3% and 54.9% and PPO's raises are the larger, yet it takes +397.3 off a
+calling station to the solver's +603.4. The difference is in *which spots*, which counting cannot
+see. Open, not explained.
+
+**Still true:** the two baselines cannot rank agents (see below), so do not quote a ranking taken
+from a random or always-call column. That is a weaker claim than the withdrawn one and it is the
+one the data supports.
+
+Reproduce: `venv/bin/python scripts/diagnostics/check_intransitivity.py --hands 40000 --seeds 0 1 2`
 
 ---
 
@@ -138,7 +147,8 @@ measurement of one.
 
 **The baselines still cannot rank.** The 150k solver is decisively stronger yet scores *worse*
 against random (+280.1 against +377.2). Ranking these two by their random score would have picked
-the weaker agent — the Phase 4 intransitivity, appearing again in an independent place.
+the weaker agent. The baselines rank badly on their own; that much survived the
+withdrawal above.
 
 **~~`train_nolimit.py`'s evaluation disagrees with `evaluation.benchmark`.~~ Resolved 8
 September** — see [`docs/training-plan.md`](docs/training-plan.md). The cause was

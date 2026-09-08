@@ -9,23 +9,31 @@ the two questions that would establish it.
 
 1. The edge nobody measured
 ---------------------------
-Phase 4's tournament graph has a hole in it. CFR against PPO is measured, CFR
+Phase 4's tournament graph had a hole in it. CFR against PPO is measured, CFR
 against evolutionary search is measured, and **PPO against evolutionary search
 never was** — both learned families were only ever scored against the solver and
 the two baselines, never against each other.
 
-That edge is the test. PPO draws level with the solver, and the solver beats the
-evolved genome by 370 BB/100. If strength were a scalar, PPO should beat it by
-about the same. If PPO beats it by substantially less, the ordering is not a
-ordering, and the non-transitivity shows up on an edge that was never part of the
-observation that raised the question.
+That edge is the test. The solver's own two edges fix what a scalar notion of
+strength predicts for it; a measurement substantially below that prediction is a
+non-transitivity showing up where nothing in the original observation put it.
+
+**Answered, and then unanswered.** In August, against the 4,000-iteration panel,
+this read +23.9 where transitivity demanded +360, and that gap was the whole
+finding. Re-run on 8 September against the converged panel it reads +96.5 where
+transitivity demands +127.4 — a shortfall of 31 against a seed-to-seed standard
+error of 96.5. The intransitivity was a property of the under-trained panel. The
+edges below are the current ones; keep them current, because a stale pair here
+manufactures a finding.
 
 2. Where the gap against a calling station comes from
 ------------------------------------------------------
-The widest gap in Phase 4 is against always-call: the solver takes +722.9 and PPO
-+293.5, while the two are level with each other. A station that never folds can
-only be beaten by betting for value, so the natural hypothesis is that the two
-agents bet at different rates against it.
+The widest gap in Phase 4 is against always-call: the solver takes +603.4 and PPO
++397.3, though the solver also beats PPO head to head, so this no longer needs a
+special explanation. A station that never folds can only be beaten by betting for
+value, so the natural hypothesis is that the two agents bet at different rates
+against it. Measured, they do not -- 54.3% against 54.9%, and PPO's raises are
+the larger of the two.
 
 This counts what each actually does. PPO trained by self-play against snapshots
 of itself and never met a calling station in training; the solver was fitted for
@@ -140,34 +148,51 @@ def missing_edge(hands, seeds):
 
     mean = float(np.mean(scores))
     spread = max(scores) - min(scores)
-    print(f"\n   mean {mean:+.1f} BB/100, spread {spread:.1f}\n")
-    return mean, spread
+    # The standard error across seeds, not the per-match interval. August read a
+    # shortfall of 336 against a spread of 81 and called it a finding; September
+    # read 31 against a standard error of 96 and withdrew it. Which of those two
+    # a run is looking at is the whole verdict, so it is computed here rather
+    # than left to the reader.
+    stderr = (float(np.std(scores, ddof=1)) / len(scores) ** 0.5
+              if len(scores) > 1 else float("nan"))
+    print(f"\n   mean {mean:+.1f} BB/100, spread {spread:.1f}, "
+          f"standard error ±{stderr:.1f} across {len(scores)} seeds\n")
+    return mean, stderr
 
 
-def report_graph(ppo_vs_evo):
+def report_graph(ppo_vs_evo, stderr):
     """
     The three edges together, and what transitivity would have required.
 
-    The solver beats the evolved genome by 370.1. PPO is level with the solver.
-    A scalar notion of strength therefore predicts PPO beats it by about 370 too;
-    the size of the shortfall is the size of the problem with that notion.
+    A scalar notion of strength predicts the third edge from the other two, and
+    the shortfall against that prediction is the size of the problem with the
+    notion -- but only read against the seed spread, which is what the August
+    version of this finding did not do and what withdrew it.
+
+    These two edges are the current panel's (`results/comparison/phase4_v2panel.json`,
+    the 2M rung). They are hardcoded because they come from a different script;
+    update them whenever the panel changes, or this manufactures a shortfall out
+    of a stale pair.
     """
-    cfr_vs_ppo, cfr_vs_evo = 10.4, 370.1
+    cfr_vs_ppo, cfr_vs_evo = 73.5, 200.9
     print("   the graph, in BB/100 to the first named\n")
-    print(f"     CFR      vs PPO         {cfr_vs_ppo:+9.1f}   (level)")
+    print(f"     CFR      vs PPO         {cfr_vs_ppo:+9.1f}")
     print(f"     CFR      vs evolution   {cfr_vs_evo:+9.1f}")
     print(f"     PPO      vs evolution   {ppo_vs_evo:+9.1f}   <- measured here")
-    shortfall = cfr_vs_evo - ppo_vs_evo
-    print(f"\n   transitivity predicted about {cfr_vs_evo - cfr_vs_ppo:+.1f} "
+    predicted = cfr_vs_evo - cfr_vs_ppo
+    shortfall = predicted - ppo_vs_evo
+    print(f"\n   transitivity predicted about {predicted:+.1f} "
           f"for the third edge.")
     print(f"   Shortfall: {shortfall:+.1f} BB/100.")
-    if ppo_vs_evo < 0:
-        print("   PPO LOSES to the genome the solver crushes: a genuine cycle.")
-    elif shortfall > 100:
-        print("   PPO beats it by far less than the solver does, on an edge that")
-        print("   was no part of the observation that raised the question.")
+    if stderr != stderr:                      # one seed: no error bar to read it against
+        print("   One seed. The shortfall above is not evidence of anything.")
+    elif shortfall > 2 * stderr:
+        print(f"   That is {shortfall / stderr:.1f} standard errors below the")
+        print("   prediction, on an edge that was no part of the observation")
+        print("   which raised the question. The ordering is not an ordering.")
     else:
-        print("   The edge is roughly where a scalar strength would put it, so")
+        print(f"   That is {shortfall / stderr:.1f} standard errors, which is")
+        print("   nothing. The edge is where a scalar strength would put it and")
         print("   the intransitivity does not extend to this pair.")
 
 
@@ -215,8 +240,8 @@ def main():
     args = parser.parse_args()
 
     print(f"{args.hands:,} hands per matchup, seed {EVAL_SEED}\n")
-    mean, _ = missing_edge(args.hands, args.seeds)
-    report_graph(mean)
+    mean, stderr = missing_edge(args.hands, args.seeds)
+    report_graph(mean, stderr)
     aggression(args.hands)
 
 
