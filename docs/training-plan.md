@@ -648,6 +648,55 @@ the same mechanism.
 **The panel's `vs random` column is therefore actively misleading as a strength signal for CFR
 agents.** Anyone tuning on it would tune backwards. Rank on the head-to-head or not at all.
 
+### The panel was a solver with two minutes of training — corrected 8 September
+
+Every figure this project has published about PPO and evolutionary search was measured against
+`results/cfr/nolimit_strategy.pkl`, which shipped with **4,000 iterations**. A 250,000-iteration
+solver trained on the corrected game beats it head to head by **+165.2 ± 13 BB/100**, so it was
+promoted to the panel (the old one is kept as `nolimit_strategy_4k.pkl`) and both families were
+re-measured against it.
+
+| family | hands | vs random | vs always-call | vs CFR |
+|---|---|---|---|---|
+| CFR (the solver, 250k) | — | +245.9 | +603.4 | — |
+| evolution, 50 generations | 36,000,000 | +202.7 | −0.2 | **−200.9** |
+| PPO | 500,000 | +191.2 | +372.6 | **−79.7** |
+| PPO | 2,000,000 | +137.2 | +373.2 | **−73.5** |
+| PPO | 8,000,000 | +226.8 | +329.1 | **−72.0** |
+
+**Both learned families lose.** Three earlier claims fall:
+
+| claim | vs the 4k panel | vs the 250k panel |
+|---|---|---|
+| PPO beats the solver at 8M | +36.4 ± 13 | **−72.0**, t = −10.02 |
+| More training helps | +20.1 → +12.5 → +36.4 | **flat**: −79.7 → −73.5 → −72.0 |
+| Evolution learned nothing transferable | +33.8 ± 37 | **+50.0 ± 20, separated** |
+
+**The two errors point in opposite directions, for one reason.** An under-trained solver is far
+more *exploitative* than a converged one: the 4k agent took +383.6 off random and +719.6 off
+always-call, where the 250k agent manages +245.9 and +603.4. That exploitation flattered PPO's
+relative standing and simultaneously buried evolution's improvement beneath a larger loss. It is
+the same equilibrium-versus-exploitation trade recorded three times above, and the fourth
+occasion on which changing the instrument — not gathering new data — overturned a finding.
+
+**What survives.** PPO remains far ahead of evolutionary search, −72.0 against −200.9 on one
+panel, and evolution still spent 36,000,000 hands to PPO's 500,000. That comparison is unaffected
+by which solver holds the panel seat, because both families moved together.
+
+**A correction to the fitness finding above.** "Fifty generations were largely drift" was too
+strong. The ranking signal genuinely cannot be selected on — r = +0.12 at the real budget, and
+shared cards do not help — but selection on it still produced +50.0 ± 20 BB/100, visible once the
+opponent stopped drowning it out. A weak ranking and a real improvement are compatible.
+
+**One thing this cost.** The all-in fix below prompted a 4h48m retrain on the expectation that it
+would close the evaluation-path discrepancy. It did not; the calling-station bug did. The retrain
+produced the solver now on the panel, so it was not wasted, but the cheaper bug should have been
+found first — both candidates were visible and the expensive one was chosen.
+
+Also fixed here: `phase4_comparison.py` printed "which is no change" as a **hardcoded string**,
+written when evolution's gain was +33.8 ± 37 and correctly not separated. Against the new panel
+the gain is +50.0 ± 20 and the frozen verdict would have gone on denying it. It is computed now.
+
 ### The evaluation paths disagreed because the calling station was raising — resolved 8 September
 
 `train_nolimit.py`'s evaluation and `evaluation.benchmark` gave opposite verdicts on the same two

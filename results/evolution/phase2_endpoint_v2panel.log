@@ -1,0 +1,24 @@
+Hall of Fame: No pre-seeded models loaded
+Initialized population with 30 genomes
+Genome size: 3558 parameters
+Network architecture: [19, 64, 32, 6]
+trained genome from run_20260815_152435
+40,000 hands per matchup, duplicate play, seats alternating
+
+CFR agent loaded into the panel
+
+opponent                 untrained       after 50 gens            difference
+----------------------------------------------------------------------------
+    (random vs untrained  60s)
+    (random vs trained    75s)
+random                +13.1 +/-14          +202.7 +/-15         +189.5 +/-40   improved
+
+    (always-call vs untrained  48s)
+    (always-call vs trained    44s)
+always-call           -11.6 +/-14            -0.2 +/-4           +11.5 +/-28   no change
+
+    (cfr vs untrained  88s)
+    (cfr vs trained    169s)
+cfr                  -250.9 +/-8           -200.9 +/-7           +50.0 +/-20   improved
+
+CFR lookup miss rate 0.0% — a benchmark that has quietly become random would show here.

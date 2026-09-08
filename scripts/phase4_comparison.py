@@ -122,11 +122,35 @@ def ppo_seconds():
 # ---------------------------------------------------------------------------
 
 ROW = re.compile(
-    r"^(random|always-call)\s+([-+][\d.]+)\s*\+/-\s*(\d+)\s+"
+    r"^(random|always-call|cfr)\s+([-+][\d.]+)\s*\+/-\s*(\d+)\s+"
     r"([-+][\d.]+)\s*\+/-\s*(\d+)\s+([-+][\d.]+)\s*\+/-\s*(\d+)")
 
 
-def evolution_endpoint():
+def evolution_endpoint(single_log=None):
+    """One log if given, else the historical two-file split."""
+    if single_log:
+        with open(single_log) as handle:
+            text = handle.read()
+        rows = {}
+        for line in text.splitlines():
+            found = ROW.match(line.strip())
+            if found:
+                name, u, u_ci, t, t_ci, d, d_ci = found.groups()
+                rows[name] = {"untrained": float(u), "untrained_ci95": float(u_ci),
+                              "trained": float(t), "trained_ci95": float(t_ci),
+                              "difference": float(d), "difference_ci95": float(d_ci),
+                              "source": os.path.basename(single_log)}
+        if set(rows) != {"random", "always-call", "cfr"}:
+            raise SystemExit(f"expected three rows in {single_log}, "
+                             f"parsed {sorted(rows)}")
+        if "CFR lookup miss rate 0.0%" not in text:
+            raise SystemExit(f"{single_log} does not report a 0.0% miss rate; "
+                             "the CFR row cannot be trusted")
+        return rows
+    return _evolution_endpoint_split()
+
+
+def _evolution_endpoint_split():
     """
     The fifty-generation endpoint, with the CFR row taken from the re-measurement.
 
@@ -226,13 +250,18 @@ def main():
     #: results/cfr/nolimit_strategy.pkl -- or the two halves of this table are
     #: about different opponents.
     parser.add_argument("--cfr-strategy", default=CFR_STRATEGY)
+    #: A single endpoint log carrying all three rows. The default pair splits
+    #: random/always-call from the CFR row because that row had to be redone at
+    #: a 0.0% miss rate; a run measured cleanly in one pass does not need the
+    #: split, and mixing panels across the two files would be worse than either.
+    parser.add_argument("--evolution-log")
     args = parser.parse_args()
 
     if args.hands < HANDS and not args.dry_run:
         parser.error(f"--hands below {HANDS:,} is monitoring, not a result; "
                      "pass --dry-run if that is deliberate")
 
-    evolution = evolution_endpoint()
+    evolution = evolution_endpoint(args.evolution_log)
     with open(args.ppo_source) as handle:
         ppo = json.load(handle)
     if ppo["hands_per_matchup"] != HANDS:
@@ -314,8 +343,14 @@ def report(evolution, ppo, cfr, seconds):
     print(f"Evolutionary search spent {EVOLUTION_HANDS:,} — "
           f"{EVOLUTION_HANDS / smallest:.0f} times as many — and scores "
           f"{evo['trained']:+.1f},")
+    # Computed, not asserted. This read "which is no change" for as long as
+    # evolution was measured against a 4,000-iteration solver, where the gain
+    # was +33.8 +/- 37. Against a converged one it is +50.0 +/- 20 and
+    # separated, and a hardcoded verdict would have gone on denying it.
+    separated = abs(evo["difference"]) > evo["difference_ci95"]
     print(f"a gain of {evo['difference']:+.1f} +/- {evo['difference_ci95']:.0f} "
-          "over its own untrained network, which is no change.")
+          f"over its own untrained network, which is "
+          f"{'a real improvement' if separated else 'no change'}.")
     print()
     print("Wall-clock is deliberately absent. It read 4.81 h for the 8M rung on")
     print("a quiet machine and 10.42 h for the same run sharing cores, so it")

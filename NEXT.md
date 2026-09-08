@@ -21,24 +21,47 @@ All three are measured, and **Phase 4 — the comparison the project's title pro
 
 | family | hands | vs random | vs always-call | vs CFR |
 |---|---|---|---|---|
-| CFR (the solver) | — | +383.6 | +719.6 | — |
-| evolution, 50 generations † | 36,000,000 | +192.7 | +0.5 | **−370.1** |
-| PPO | 500,000 | +191.2 | +372.6 | +20.1 |
-| PPO | 2,000,000 | +137.2 | +373.2 | +12.5 |
-| PPO | 8,000,000 | +226.8 | +329.1 | **+36.4** |
+| CFR (the solver, 250k) | — | +245.9 | +603.4 | — |
+| evolution, 50 generations | 36,000,000 | +202.7 | −0.2 | **−200.9** |
+| PPO | 500,000 | +191.2 | +372.6 | **−79.7** |
+| PPO | 2,000,000 | +137.2 | +373.2 | **−73.5** |
+| PPO | 8,000,000 | +226.8 | +329.1 | **−72.0** |
 
-† pre-fix raise convention; evolution was not retrained because its fitness cannot be selected on.
+Every row on one panel, 8 September (`results/comparison/phase4_v2panel.json`). The CFR agent is
+now the 250,000-iteration solver trained on the corrected game, not the 4,000-iteration one — see
+below for what that changed.
 
-**Evolutionary search spent 36,000,000 hands — seventy-two times PPO's smallest rung — and is
-still 370 BB/100 behind the solver.** That is the firm result.
+**Both learned families lose to the solver.** PPO by about 75 BB/100, evolutionary search by
+about 200. Neither ever beat it: the earlier reading came from a panel whose CFR agent had
+**4,000 iterations — about two minutes of training**.
 
-**PPO, at six seeds**: level with the solver at 500,000 hands (+20.1, t = 0.69) and 2,000,000
-(+12.5, t = 0.51), and **beating it at 8,000,000 by +36.4 ± 13** (t = 2.74, separated). The
-three-seed reading had the shape backwards — it put the advantage at 500k and a dip at 2M. More
-training does help. Standard deviation against the solver also falls with training, 71.6 → 60.2 →
-32.5, so self-play converges to a consistent outcome given enough hands and the wide spreads are
-a property of under-trained policies rather than of the raise-sizing fix. The axis is hands, not wall-clock: the same 8M run
-read 4.81 h quiet and 10.42 h contended, so wall-clock was measuring the machine.
+**Evolutionary search still spent 36,000,000 hands to PPO's 500,000** — seventy-two times as many
+— and is 129 BB/100 further behind. That comparison survives the panel change and is the firm
+result.
+
+### Three claims the panel upgrade overturned
+
+| claim | measured against the 4k panel | against the 250k panel |
+|---|---|---|
+| PPO beats the solver at 8M | +36.4 ± 13 | **−72.0**, t = −10 |
+| More training helps | ladder rises | **flat**: −79.7, −73.5, −72.0 |
+| Evolution learned nothing transferable | +33.8 ± 37, no change | **+50.0 ± 20, improved** |
+
+None were bad measurements. They were correct readings against an opponent too weak to
+distinguish anything, and the two errors point in **opposite directions** for one reason: an
+under-trained solver is far more exploitative than a converged one. The 4k agent beat random by
++383.6 and always-call by +719.6, where the 250k agent manages +245.9 and +603.4. That
+exploitation flattered PPO's relative position and buried evolution's improvement underneath it.
+
+It is the same equilibrium-versus-exploitation trade this project has now measured four times,
+and the fourth occasion on which **changing the instrument overturned a finding rather than new
+data doing it**.
+
+**On evolution's fitness.** The finding that its ranking signal cannot be selected on stands —
+repeatability is r = +0.12 at the real budget, and shared cards do not help. But "fifty
+generations were largely drift" was too strong: selection on that weak signal still produced
+**+50.0 ± 20 BB/100**, measurable once the opponent stopped drowning it out. A noisy ranking and a
+real improvement are compatible; the earlier phrasing denied the second.
 
 ---
 
