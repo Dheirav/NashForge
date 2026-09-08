@@ -71,8 +71,21 @@ def always_call_policy(call_action: int = 1) -> Policy:
     be bluffed, so it does not test semi-bluffing or draw play at all.
     """
     def policy(game, state, player: int, num_actions: int) -> Optional[np.ndarray]:
+        # The returned array is indexed by *position in the legal list*, not by
+        # abstract action. Writing 1.0 at index `call_action` therefore picked
+        # whatever happened to sit second: with nothing to call the legal list
+        # is [1, 2, 3, 4, 5] -- fold is dropped as dominated -- so index 1 is
+        # action 2, raise half pot. This "calling station" raised every time
+        # checking was free, which is most of postflop.
+        #
+        # Found 8 September: it is why `play_hands` and `evaluation.benchmark`
+        # gave opposite verdicts on the same two strategies. The benchmark's
+        # `always_call_agent` reads the mask by abstract action and was always
+        # right; every "vs always call" figure from `train_nolimit.py` was
+        # measured against a semi-aggressive opponent wearing the name.
+        legal = list(game.legal_actions(state))
         probabilities = np.zeros(num_actions)
-        probabilities[min(call_action, num_actions - 1)] = 1.0
+        probabilities[legal.index(call_action) if call_action in legal else 0] = 1.0
         return probabilities
     return policy
 

@@ -88,22 +88,24 @@ measurement of one.
 against random (+280.1 against +377.2). Ranking these two by their random score would have picked
 the weaker agent — the Phase 4 intransitivity, appearing again in an independent place.
 
-**`train_nolimit.py`'s own evaluation disagrees with `evaluation.benchmark`, and the reason is
-now known — see [`docs/training-plan.md`](docs/training-plan.md).** Re-measured after the
-raise-sizing fix, the two still give opposite verdicts: benchmark says the 150k solver is better
-against always-call by +109.3, `play_hands` says worse by −162.7.
+**~~`train_nolimit.py`'s evaluation disagrees with `evaluation.benchmark`.~~ Resolved 8
+September** — see [`docs/training-plan.md`](docs/training-plan.md). The cause was
+`cfr/play.py`'s `always_call_policy`, which indexed by position in the legal-action list rather
+than by abstract action: with nothing to call the list is `[1,2,3,4,5]`, so index 1 is action 2,
+**raise half pot**. The "calling station" raised every time checking was free. Every "vs always
+call" figure the trainer printed was against a semi-aggressive opponent.
 
-**The engine ends a hand when an all-in is called; the traversal game does not.** It keeps
-producing check/call decisions for players with zero stacks, and those filler actions extend the
-history string — which is the information-set key. Same hand, different keys. 19.7% of sampled
-decision nodes have a legal-action list that `_solver_actions` reconstructs wrongly, because it
-counts raises on the current street only and knows nothing about stacks.
+Fixed. The same solver now scores +605.0 through benchmark and +609.9 through `play_hands` — a
+gap of 4.8 BB/100, inside noise, against 232.4 before. **The trainer's evaluation is trustworthy
+again.**
 
-The engine is right; real poker has no decisions left once both players are all-in. So
-`evaluation.benchmark` stays the path to trust and the trainer's evaluation stays unfit for
-comparisons — but note the solver is **trained** in the traversal game, so part of its table is
-fitted for nodes that never occur. Fixing it means terminating betting in `games/nolimit.py` once
-all players are all-in and retraining every solver.
+Found on the way, and also fixed: the traversal game produced decision nodes after an all-in was
+called, asking a check/call from players with no chips. Those filler actions extended the
+information-set key, so the same hand keyed differently than in the engine. 250,000 iterations
+now reach 23,470 information sets rather than 25,154 — the spurious nodes gone. A solver was
+retrained for 4h48m expecting this to close the evaluation gap; it did not, and the widening gap
+is what led to the baseline bug. `results/cfr/nolimit_strategy_v2_250k.pkl` is the first solver
+trained on a game that matches the engine.
 
 ### The next lever is more iterations, not less abstraction
 

@@ -648,7 +648,43 @@ the same mechanism.
 **The panel's `vs random` column is therefore actively misleading as a strength signal for CFR
 agents.** Anyone tuning on it would tune backwards. Rank on the head-to-head or not at all.
 
-### The two games still differ after an all-in — found 8 September
+### The evaluation paths disagreed because the calling station was raising — resolved 8 September
+
+`train_nolimit.py`'s evaluation and `evaluation.benchmark` gave opposite verdicts on the same two
+strategies. Two bugs were found chasing it; only the second was the cause.
+
+**`cfr/play.py`'s `always_call_policy` was not a calling station.** It returns an array indexed by
+*position in the legal-action list*, then wrote 1.0 at index `call_action = 1`. With nothing to
+call, fold is dropped as dominated and the legal list is `[1, 2, 3, 4, 5]` — so index 1 is action
+**2, raise half pot**. Verified directly: `legal [1,2,3,4,5] → picks action 2`. The baseline
+raised every time checking was free, which is most of postflop.
+
+`evaluation.benchmark`'s `always_call_agent` reads the mask by abstract action and was always
+correct. So **every "vs always call" figure `train_nolimit.py` printed was measured against a
+semi-aggressive opponent wearing a passive one's name** — including the +581.5 / +348.1 pair that
+started the investigation.
+
+Fixed by locating check/call's position in the legal list. The two paths now agree: the same
+solver scores **+605.0** through benchmark and **+609.9** through `play_hands`, a gap of 4.8
+BB/100, inside noise at 20,000 hands. It was 232.4 before. **The trainer's evaluation is
+trustworthy again**, and the warning against comparing across the two paths is lifted.
+
+**The all-in bug was real but was not this.** The traversal game had been producing decision nodes
+after an all-in was called, asking a check/call from players holding nothing — `11/51/`,
+`11/51/1` — where the engine ends the hand and goes to showdown. Those filler actions extend
+`history`, which is the information-set key, so the same hand keyed differently in the two games
+and 19.7% of sampled nodes had a legal-action list the engine's reconstruction could not match.
+
+`current_player` now returns CHANCE while all players are all-in so the board runs out, and
+`is_terminal` ends the hand once it is complete. The effect is measurable: **250,000 iterations
+now reach 23,470 information sets against 25,154 before** — 1,684 fewer, the spurious nodes gone.
+
+It did not close the evaluation gap, though. A solver was retrained for 4h48m on the expectation
+that it would, and the gap widened rather than closing, which is what sent the search on to the
+baseline. The retrain is not wasted — `nolimit_strategy_v2_250k.pkl` is the first solver trained
+on a game that matches the engine — but the cheaper bug should have been found first.
+
+### Superseded: the all-in divergence as first written — 8 September
 
 The raise-sizing fix made engine and traversal betting agree to the chip, and
 `tests/test_betting_equivalence.py` asserts it. The two evaluation paths still give **opposite
