@@ -4,7 +4,7 @@ One page, kept current. [`BACKLOG.md`](BACKLOG.md) holds the reasoning and every
 [`docs/training-plan.md`](docs/training-plan.md) holds the full phase plan and its results. This
 file is only the next thing to do.
 
-**Last updated:** 6 September 2026 · `main` at `af1120b` · 285 tests (collection alone ~6 min)
+**Last updated:** 8 September 2026 · `main` at `6b17150` · 285 tests (collection alone ~6 min)
 
 ---
 
@@ -65,6 +65,34 @@ real improvement are compatible; the earlier phrasing denied the second.
 
 ---
 
+## Now — the next thing to do
+
+**Retrain at 200bb, then re-measure Slumbot.** In that order, so the seven-hour external run
+measures the best agent available rather than being spent twice.
+
+**1. The 200bb retrain (~1 h of compute).** Slumbot plays 200 big blinds because that is the ACPC
+convention and what published work reports against; this project's 100bb was an unexamined
+default in `results/cfr/nolimit_strategy.json`. Moving to it once makes every future external
+comparison possible, and it is the only lever left that could plausibly halve the Slumbot gap
+again — the training lever is spent (150k → 250k bought +12.3 ± 7).
+
+  **Decide this up front:** a 200bb solver invalidates the panel again, because every Phase 4
+  figure is at 100bb. Either keep both solvers and say explicitly which panel each number used,
+  or accept another full re-measurement pass. Discovering that afterwards is how this session
+  went.
+
+**2. Slumbot, re-measured (~7 h).** **−987 ± 374 is now stale**, for a reason that did not apply
+when it was last dismissed: the all-in fix means the current solver plays a *different game* — it
+no longer visits nodes that cannot occur — and the promoted solver beats the one that produced
+−987's predecessor by +165 BB/100. That is a qualitative change, not the marginal +51 mbb/hand
+that made a re-run pointless before.
+
+**3. Phase 5 — six-max.** After heads-up. Needs the `play_match` stack-drift fix, and the CFR
+agent cannot serve as a benchmark there, so the panel loses its only opponent from outside the
+lineage.
+
+---
+
 ## Closed, 20 August: the Phase 4 intransitivity
 
 It is **explained** — see
@@ -87,9 +115,10 @@ solver that costs nothing; against anything weak it leaves the value uncollected
 
 ---
 
-## Now: the solver was under-trained, and it was worth half the gap
+## Closed, 2 September: the solver was under-trained, and it was worth half the gap
 
-`results/cfr/nolimit_strategy.pkl` shipped with **4,000 iterations** — about two minutes of
+The solver that then held `nolimit_strategy.pkl` — now kept as `nolimit_strategy_4k.pkl` —
+had **4,000 iterations**, about two minutes of
 training at the crossover's measured 32 iterations/second. Retraining the same abstraction for
 **150,000** iterations (2h56m) and re-measuring:
 
@@ -130,11 +159,16 @@ retrained for 4h48m expecting this to close the evaluation gap; it did not, and 
 is what led to the baseline bug. `results/cfr/nolimit_strategy_v2_250k.pkl` is the first solver
 trained on a game that matches the engine.
 
-### The next lever is more iterations, not less abstraction
+### That lever is now spent
 
-At 150,000 iterations the solver had reached **25,154 of 49,200** information sets — barely half
-the abstraction it already has. More training is cheaper than widening buckets, lifting the raise
-cap, or moving to 200bb, and it has not stopped paying yet.
+At the time this read "more iterations, not less abstraction", and it was right — 4,000 → 150,000
+was worth +185 ± 13. It has since been measured to exhaustion: **150,000 → 250,000 bought
++12.3 ± 7**, and information sets reached saturated. On the corrected game 250,000 iterations
+reach 23,470 of 49,200, down from 25,154 before the all-in fix removed the spurious nodes.
+
+Roughly half the abstraction is unreachable in practice under this betting tree, so further
+iterations refine a fixed set rather than finding new ones. The next gain has to come from
+somewhere else — which is why the Now section leads with 200bb.
 
 Two things to fix before any longer run:
 
@@ -174,16 +208,11 @@ August checkpoints. The pre-fix numbers survive as records; the agents behind th
 2. ~~Re-run Phase 4 once evolution is refitted.~~ The precondition cannot be met — item 1 closed
    evolution as never-to-be-refitted. Phase 4 was re-run without it, on the corrected sizing and
    the six-seed PPO data; evolution's row carries † and stays on the old convention.
-3. ~~Re-run Slumbot because the raise fix changed the agent.~~ **Wrong reason; not done.** The
-   Slumbot pipeline never imports `training/fitness.py` — `slumbot/bridge.py` sizes its own raises
-   off the pot after the call, which is the convention the fix moved the engine *to*. The fix
-   changed nothing about how the agent plays Slumbot, and **−987 ± 374 stands**.
-
-   Re-running with the 250k solver would also measure nothing. It beats the 150k one by
-   +12.3 ± 7 BB/100 internally, internal gains overstate external ones by ~2.4×, so expect about
-   +51 mbb/hand against an interval of ±374 — seven hours to look for an effect seven times
-   smaller than the error bar. A Slumbot re-run needs either far more hands (~45,000 for M2's
-   ±200) or a genuinely different agent, which means the 200bb retrain.
+3. ~~Re-run Slumbot because the raise fix changed the agent.~~ That reason was wrong — the
+   Slumbot pipeline never imports `training/fitness.py`, and `slumbot/bridge.py` already sized its
+   raises off the pot after the call. Declining on those grounds was right at the time, and the
+   grounds have since changed: **−987 ± 374 is stale now**, because the all-in fix means the
+   current solver plays a game the old one did not. See the Now section above.
 4. ~~Widen the seed count.~~ **Done** — six seeds, `results/ppo/phase3_endpoint_6seed.json`.
 
 ---
@@ -202,6 +231,24 @@ benchmark there, so the panel loses its only opponent from outside the lineage. 
   converged strategy. Stopped deliberately; the reasoning is in `BACKLOG.md` item 1.
 - **Re-running the exploitability crossover.** Superseded by the head-to-head result, which
   answered the same question conclusively in four hours.
+
+---
+
+## The solvers on disk
+
+Four now, and which one is `nolimit_strategy.pkl` has changed, so a figure without a named solver
+cannot be placed.
+
+| file | iterations | game | role |
+|---|---|---|---|
+| `nolimit_strategy.pkl` | 250,000 | corrected (all-in terminates) | **the panel opponent** |
+| `nolimit_strategy_v2_250k.pkl` | 250,000 | corrected | same solver, kept under its own name |
+| `nolimit_strategy_250k.pkl` | 250,000 | pre-all-in-fix | superseded |
+| `nolimit_strategy_150k.pkl` | 150,000 | pre-all-in-fix | produced the −987 Slumbot figure |
+| `nolimit_strategy_4k.pkl` | 4,000 | pre-all-in-fix | the old panel; every pre-8-September figure |
+
+All are tracked — `.gitignore` negates `*.pkl` under `results/`, because a solved strategy is a
+result and the 4,000-iteration one was once missing from the repository entirely.
 
 ---
 
