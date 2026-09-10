@@ -29,6 +29,7 @@ import pickle
 
 import numpy as np
 
+from abstraction.betting import CHECK_CALL
 from engine import PokerGame, get_abstract_action_mask
 # _constrain is private, and imported anyway: the alternative is a second copy
 # of the tree-narrowing rules that silently stops matching the one the agent
@@ -49,6 +50,20 @@ STRATEGY_PATH = os.path.join(os.path.dirname(__file__), "..", "results", "cfr",
 
 ACTION_LABELS = ["Fold", "Check/Call", "Raise ½ pot", "Raise pot",
                  "Raise 2× pot", "All-in"]
+
+
+def _resolve_label(index, to_call):
+    """
+    `Check` and `Call` are one abstract action; say which one this is.
+
+    The abstraction merges them because only one is ever legal -- `to_call` is
+    either zero or it is not -- so the distinction lives in the situation rather
+    than in the action space. On screen it has to be put back, or a person is
+    asked to press `Check/Call` with nothing to call.
+    """
+    if index != CHECK_CALL:
+        return ACTION_LABELS[index]
+    return "Check" if to_call == 0 else f"Call {to_call}"
 
 
 class AgentUnavailable(RuntimeError):
@@ -107,6 +122,10 @@ class GameController:
         self.to_call = 0
         self.agent_policy = None      # distribution shown in the side panel
         self.agent_last_action = None
+        #: What the agent faced when it acted, which is not what the person
+        #: faces now. `to_call` moves on to the next actor; the panel is still
+        #: showing the agent's node, so it needs its own copy to label from.
+        self.agent_to_call = 0
         self.message = None
 
         self._start_hand()
@@ -187,6 +206,7 @@ class GameController:
             choice = self.agent(self.game, player, self.mask, self.history)
             self.agent_policy = self.policy_probe[0]
             self.agent_last_action = choice
+            self.agent_to_call = self.to_call
             self._commit(player, choice)
 
         self._settle()
@@ -252,10 +272,18 @@ class GameController:
         return [bool(self.mask[i]) for i in range(NUM_ACTIONS)]
 
     def action_label(self, index):
-        """`Check` and `Call` are the same abstract action; say which it is."""
-        if index == 1:
-            return "Check" if self.to_call == 0 else f"Call {self.to_call}"
-        return ACTION_LABELS[index]
+        """The person's buttons. `Check` and `Call` are one abstract action."""
+        return _resolve_label(index, self.to_call)
+
+    def policy_label(self, index):
+        """
+        The same names for the agent's policy panel, from the agent's node.
+
+        Reading `to_call` here instead would label the panel with whatever the
+        person is facing now, so the row could read `Call 4` beside a
+        distribution the agent produced while checking.
+        """
+        return _resolve_label(index, self.agent_to_call)
 
     def showdown_visible(self):
         """The agent's cards, once the hand is paid and not before."""

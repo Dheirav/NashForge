@@ -213,7 +213,10 @@ class Renderer:
         row_h = (panel_h - 60) // len(ACTION_LABELS)
         bar_left = panel_x + 20
         bar_max = panel_w - 40
-        for i, label in enumerate(ACTION_LABELS):
+        # Named from the agent's own node, so row 1 reads `Check` when it was
+        # checking rather than the abstraction's merged `Check/Call`.
+        for i in range(len(ACTION_LABELS)):
+            label = self.controller.policy_label(i)
             top = panel_y + 48 + i * row_h
             weight = float(policy[i])
             # The sampled action is marked, because a 30% action being taken is

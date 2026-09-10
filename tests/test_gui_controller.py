@@ -17,7 +17,9 @@ import numpy as np
 import pytest
 
 from evaluation.benchmark import cfr_agent
-from gui.game_controller import (STARTING_STACK, GameController, NUM_ACTIONS)
+from abstraction.betting import CHECK_CALL
+from gui.game_controller import (STARTING_STACK, GameController, NUM_ACTIONS,
+                                 _resolve_label)
 
 STRATEGY = os.path.join(os.path.dirname(__file__), "..", "results", "cfr",
                         "nolimit_strategy.pkl")
@@ -157,3 +159,46 @@ def test_an_illegal_action_is_refused_rather_than_played():
         assert controller.choose(illegal[0]) is False
         assert controller.history == before, "an illegal action changed the game"
         assert controller.awaiting_human, "an illegal action passed the turn"
+
+
+def test_the_merged_action_is_named_for_the_situation():
+    """
+    `Check` and `Call` are one abstract action, and the screen has to say which.
+
+    The abstraction merges them because only one is ever legal, so the
+    distinction lives in `to_call` rather than in the action space. Left merged
+    on screen, a person is asked to press `Check/Call` with nothing to call.
+    """
+    assert _resolve_label(CHECK_CALL, 0) == "Check"
+    assert _resolve_label(CHECK_CALL, 4) == "Call 4"
+    # Every other row is the abstraction's own name, unchanged.
+    for index in range(NUM_ACTIONS):
+        if index != CHECK_CALL:
+            assert _resolve_label(index, 0) == _resolve_label(index, 4)
+
+
+def test_the_policy_panel_is_labelled_from_the_agents_node():
+    """
+    Not from `to_call`, which by then belongs to whoever acts next.
+
+    The panel shows the distribution the agent produced at the node it acted on.
+    Labelling it from the live `to_call` would print `Call 4` beside a
+    distribution the agent produced while checking, which is the same class of
+    error as reading a strategy against the wrong game.
+    """
+    controller = GameController(opponent="random", seed=10)
+    for _ in range(500):
+        controller.update()
+        if controller.awaiting_human and controller.agent_last_action is not None:
+            break
+        if controller.hand_over:
+            controller.next_hand()
+
+    if controller.agent_last_action is None:
+        pytest.skip("the agent did not act before the person was asked to")
+
+    controller.to_call = controller.agent_to_call + 7   # the next actor's, not the agent's
+    assert controller.policy_label(CHECK_CALL) == _resolve_label(
+        CHECK_CALL, controller.agent_to_call)
+    assert controller.action_label(CHECK_CALL) == _resolve_label(
+        CHECK_CALL, controller.to_call)
