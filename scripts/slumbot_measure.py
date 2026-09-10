@@ -37,8 +37,10 @@ Usage
     venv/bin/python scripts/slumbot_measure.py --hands 10000
 """
 import argparse
+import dataclasses
 import json
 import os
+import pickle
 import sys
 import time
 from collections import Counter
@@ -68,6 +70,100 @@ def interval(values):
     return mean, half
 
 
+def _strategy_depth(path):
+    """
+    Big blinds of stack the strategy was fitted for, read from the file itself.
+
+    This label was hardcoded as "100bb" until 9 September. That was true of
+    every strategy which had ever been passed here, and false the first time one
+    was not. It is written into the JSON as `caveat`, so a stale one mislabels
+    the record permanently rather than visibly.
+    """
+    with open(path, "rb") as handle:
+        trained = pickle.load(handle).get("args") or {}
+    stack, blind = trained.get("stack"), trained.get("big_blind")
+    if not stack or not blind:
+        return "unknown-depth"
+    return f"{stack // blind}bb"
+
+
+def _caveat(strategy):
+    """
+    What is playing whom, in one line.
+
+    A function rather than a local because it is printed from `main` and again
+    from `report`, and on 10 September it was a local of `main` that `report`
+    referred to. That crashed with a NameError after 739 minutes of API calls,
+    on the last line before the result would have been written.
+    """
+    return (f"{_strategy_depth(strategy)} one-raise-per-street solver "
+            "against Slumbot's 200bb unlimited-raise game")
+
+
+def _partial_path(out):
+    """Beside the result, named so it cannot be mistaken for one."""
+    return os.path.splitext(out)[0] + ".partial.json"
+
+
+def _save_partial(path, args, player, winnings, baseline, positions, errors,
+                  attempts, elapsed):
+    """
+    Every hand so far, written atomically every 500.
+
+    Ten thousand hands against Slumbot is nine hours of API round-trips, and on
+    9 September WSL went down at hand 1,500 and took the lot -- no traceback, no
+    partial, eighty-five minutes gone. The rate is fixed by the opponent's
+    latency, so the only way to make a run that long survivable is to be able to
+    resume it.
+
+    Written to a temporary name and renamed, because the failure this exists for
+    is the process disappearing mid-write.
+    """
+    tmp = path + ".tmp"
+    with open(tmp, "w") as handle:
+        json.dump({
+            "strategy": os.path.basename(args.strategy),
+            "seed": args.seed,
+            "hands": args.hands,
+            "attempts": attempts,
+            "winnings": winnings,
+            "baseline": baseline,
+            "positions": dict(positions),
+            "errors": errors,
+            "elapsed_seconds": elapsed,
+            "segments": args.segments,
+            # Without this a resumed run reports the miss rate of its last
+            # segment under the whole run's name. This project has already
+            # published +60.8 BB/100 beside a 74.3% miss rate it could not see;
+            # a rate that silently describes 500 hands of 10,000 is the same
+            # failure wearing a checkpoint.
+            "stats": dataclasses.asdict(player.stats),
+            "provenance": getattr(args, "provenance", None),
+            "note": "PARTIAL. Not a result -- resume with --resume.",
+        }, handle)
+    os.replace(tmp, path)
+
+
+def _load_partial(path, args):
+    """
+    Pick a run back up, or refuse to.
+
+    The three fields checked are the ones that would silently change what is
+    being estimated: a different strategy, a different seed or a different
+    target makes the two halves samples of different things, and pooling them
+    would produce a number nothing could reproduce.
+    """
+    with open(path) as handle:
+        saved = json.load(handle)
+    for field, want in (("strategy", os.path.basename(args.strategy)),
+                        ("seed", args.seed), ("hands", args.hands)):
+        if saved.get(field) != want:
+            raise SystemExit(
+                f"cannot resume {path}: {field} was {saved.get(field)!r}, "
+                f"this run is {want!r}. Delete it or fix the arguments.")
+    return saved
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--hands", type=int, default=M1_HANDS)
@@ -78,6 +174,8 @@ def main():
     #: 185 BB/100 -- and a result that does not say which produced it cannot be
     #: compared with the other.
     parser.add_argument("--strategy", default=STRATEGY)
+    parser.add_argument("--resume", action="store_true",
+                        help="continue from the .partial.json beside --out")
     args = parser.parse_args()
 
     if args.hands < M1_HANDS:
@@ -86,15 +184,37 @@ def main():
                      "report a result")
 
     player = SolverPlayer(args.strategy, np.random.default_rng(args.seed))
+    caveat = _caveat(args.strategy)
     winnings, baseline, positions = [], [], Counter()
     errors, token, started = [], None, time.time()
+    partial, first, prior_elapsed, args.segments = _partial_path(args.out), 0, 0.0, 1
+
+    if args.resume and os.path.exists(partial):
+        saved = _load_partial(partial, args)
+        winnings, baseline, errors = saved["winnings"], saved["baseline"], saved["errors"]
+        # JSON turns integer keys into strings; a Counter keyed on "0" and one
+        # keyed on 0 both look right and never sum.
+        positions = Counter({int(k): v for k, v in saved["positions"].items()})
+        first, prior_elapsed = saved["attempts"], saved["elapsed_seconds"]
+        args.segments = saved["segments"] + 1
+        args.provenance = saved.get("provenance")
+        # Protocol health carries across the join, or the miss rate printed at
+        # the end describes only the hands this process happened to play.
+        for name, value in (saved.get("stats") or {}).items():
+            setattr(player.stats, name, value)
+    elif args.resume:
+        print(f"no checkpoint at {partial}; starting from hand 1\n", flush=True)
 
     print(f"M1 — {args.hands:,} hands against Slumbot, seed {args.seed}")
     print(f"strategy: {os.path.basename(args.strategy)}")
-    print("100bb one-raise solver against a 200bb unlimited-raise opponent\n",
-          flush=True)
+    print(caveat, flush=True)
+    if first:
+        print(f"resuming at hand {first:,} of {args.hands:,} "
+              f"({prior_elapsed / 60:.0f} min already spent, "
+              f"segment {args.segments})")
+    print(flush=True)
 
-    for index in range(args.hands):
+    for index in range(first, args.hands):
         try:
             state = play_hand(player, token)
             token = state.token
@@ -105,18 +225,29 @@ def main():
             errors.append(f"hand {index + 1}: {error}")
         if (index + 1) % 500 == 0:
             done = index + 1
-            rate = done / (time.time() - started)
+            # Rate over this segment only. Dividing the whole count by this
+            # process's clock would credit a resumed run with hands another
+            # process played and put the ETA hours early.
+            segment = time.time() - started
+            rate = (done - first) / segment
             mean, half = interval(winnings)
             print(f"  {done:>6,}/{args.hands:,}  {rate:4.1f} hands/s  "
                   f"eta {(args.hands - done) / rate / 60:5.1f} min  "
                   f"[{mean:+7.0f} ± {half:.0f} mbb/hand so far]", flush=True)
+            _save_partial(partial, args, player, winnings, baseline, positions,
+                          errors, done, prior_elapsed + segment)
 
     report(player, winnings, baseline, positions, errors, args,
-           time.time() - started)
+           prior_elapsed + time.time() - started)
+
+    # Only once the result exists. The checkpoint is the fallback, and removing
+    # it before the thing it falls back to is written would recreate the hole.
+    if os.path.exists(partial):
+        os.remove(partial)
 
 
 def report(player, winnings, baseline, positions, errors, args, elapsed):
-    stats = player.stats
+    stats, caveat = player.stats, _caveat(args.strategy)
     raw_mean, raw_half = interval(winnings)
 
     usable = [w - b for w, b in zip(winnings, baseline) if b is not None]
@@ -140,9 +271,7 @@ def report(player, winnings, baseline, positions, errors, args, elapsed):
     print(f"  off-abstraction     {stats.off_abstraction}")
     print(f"  seats               {dict(positions)}")
     print(f"  protocol errors     {len(errors)}")
-    print(f"\n  Measures a 100bb one-raise-per-street solver against a 200bb")
-    print(f"  unlimited-raise opponent. Not this project's strength at")
-    print(f"  Slumbot's game.")
+    print(f"\n  Measures a {caveat}.")
 
     os.makedirs(os.path.dirname(args.out), exist_ok=True)
     with open(args.out, "w") as handle:
@@ -162,9 +291,9 @@ def report(player, winnings, baseline, positions, errors, args, elapsed):
             "off_abstraction": stats.off_abstraction,
             "seats": dict(positions),
             "protocol_errors": errors,
-            "caveat": "100bb one-raise-per-street solver against a 200bb "
-                      "unlimited-raise opponent; not this project's strength "
-                      "at Slumbot's game.",
+            "caveat": caveat,
+            "segments": getattr(args, "segments", 1),
+            "provenance": getattr(args, "provenance", None),
             "elapsed_seconds": elapsed,
         }, handle, indent=1)
     print(f"\nwrote {args.out}")
