@@ -135,29 +135,49 @@ BB/100. **This is left open rather than explained away.**
 Every figure above was measured by this project's own instrument. **Slumbot** is a fixed CFR
 strategy at heads-up no-limit behind a public API, used as a benchmark in published work.
 
-**−987 ± 374 mbb/hand over 10,000 hands.** We lose, heavily.
+**−997.8 ± 396 mbb/hand over 9,999 hands.** We lose, heavily.
 
-An earlier run with a 4,000-iteration solver read −1750 ± 524; retraining that solver to 150,000
-iterations halved the gap. **The −987 is itself now stale**: the solver has since been retrained
-again on a corrected game and a re-measurement is outstanding.
+| solver | stack depth | vs Slumbot | lookup miss rate |
+|---|---|---|---|
+| 4,000 iterations | 100bb | −1750.2 ± 524 | 8.7% |
+| 150,000 iterations | 100bb | −986.6 ± 374 | 10.4% |
+| **250,000, corrected game** | **200bb** | **−997.8 ± 396** | 11.9% |
+
+**Training bought the first halving and nothing has bought anything since.** Going from 4,000 to
+150,000 iterations closed half the gap. After that, three separate improvements together moved
+the number by 11.2 mbb/hand against a combined interval of ±545, which is not separated from no
+change at all: the all-in fix, which made the solver play a materially different game, another
+100,000 iterations, and training at 200bb so that the agent and its opponent are finally at the
+same stack depth.
+
+That last one was done as a correction rather than as an experiment. Slumbot plays 200 big blinds
+because that is the ACPC convention, and until now this project brought a strategy fitted for half
+that depth, so every sizing decision was calibrated for the wrong amount of money behind. The
+measurement was always legitimate, because Slumbot's game is 200bb whatever we bring to it, but
+the agent was handicapping itself. It no longer is, and the number did not move.
+
+**So the binding constraint is the abstraction, not the training.** What is playing is a
+**one-raise-per-street, six-bucket** solver against an opponent with an unrestricted betting tree
+and serious compute behind it. The rising miss rate says the same thing from another direction:
+8.7 percent to 10.4 to 11.9 as the solver improved and the stacks deepened, because deeper stacks
+reach more nodes the abstraction has no entry for.
 
 | check | |
 |---|---|
-| protocol errors | 0 of 10,000 hands |
-| lookup miss rate | 8.7% — the genuinely off-tree nodes, not a broken lookup |
-| seat split | 5,000 / 5,000, exact |
+| protocol errors | 1 of 10,000 hands |
+| lookup miss rate | 11.9% (2,915 of 24,527) which is genuinely off-tree nodes, not a broken lookup |
+| seat split | 5,000 / 4,999, one hand lost to the single protocol error |
 
-What is playing: a **100bb, one-raise-per-street, six-bucket** solver against a
-**200bb unlimited-raise** opponent built with serious compute. GTO Wizard beats Slumbot by
-194 ± 41 mbb/hand; this is 987 the other way. The milestone asked for a number with a
-confidence interval, not a good one, and a loss reported as a loss is the point.
+GTO Wizard beats Slumbot by 194 ± 41 mbb/hand and this is 998 the other way. The milestone asked
+for a number with a confidence interval, not a good one, and a loss reported as a loss is the
+point.
 
 **One trap avoided.** Slumbot returns a `baseline_winnings` field that looked like free variance
-reduction — correlated 0.85 with actual winnings, 37% tighter. Differencing it gives −68 ± 301,
-which is nearly break-even. It is not the win rate: the baseline's own mean is −1682 mbb/hand,
-so differencing changes *what is being estimated*, not its precision. It measures how this agent
-did relative to Slumbot's baseline holding the same cards. Quoting it would have been wrong by a
-factor of twenty-five, in the flattering direction.
+reduction, correlated 0.85 with actual winnings and 37 percent tighter. Differencing it gives
+−156 ± 311, which is close to break-even. It is not the win rate: the baseline's own mean is
+strongly negative, so differencing changes *what is being estimated* rather than its precision. It
+measures how this agent did relative to Slumbot's baseline holding the same cards. Quoting it
+would have been wrong by a factor of six, in the flattering direction.
 
 ---
 

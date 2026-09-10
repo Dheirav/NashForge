@@ -4,7 +4,7 @@ One page, kept current. [`BACKLOG.md`](BACKLOG.md) holds the reasoning and every
 [`docs/training-plan.md`](docs/training-plan.md) holds the full phase plan and its results. This
 file is only the next thing to do.
 
-**Last updated:** 8 September 2026 · `main` at `9912610` · 285 tests (collection alone ~6 min)
+**Last updated:** 10 September 2026 · `main` at `9912610` · 285 tests (collection alone ~6 min)
 
 ---
 
@@ -67,58 +67,39 @@ real improvement are compatible; the earlier phrasing denied the second.
 
 ## Now — the next thing to do
 
-**Retrain at 200bb, then re-measure Slumbot.** In that order, so the seven-hour external run
-measures the best agent available rather than being spent twice.
+**Both Slumbot steps are done, and the answer is that neither lever moved the number.**
+Path A completed on 10 September: a 200bb solver trained to 250,000 iterations
+(`results/cfr/nolimit_strategy_200bb_250k.pkl`, 3h30m, 23,970 information sets) and measured
+against Slumbot over 9,999 hands (`results/slumbot/m1_200bb_250k.json`, 739 min).
 
-**1. The 200bb retrain (at least 4h47m, not the ~1 h this line used to claim).** Slumbot plays 200
-big blinds because that is the ACPC convention and what published work reports against; this
-project's 100bb was an unexamined default in `results/cfr/nolimit_strategy.json`. Moving to it
-once makes every future external comparison possible.
+| solver | stack depth | vs Slumbot | miss rate |
+|---|---|---|---|
+| 4,000 iterations | 100bb | −1750.2 ± 524 | 8.7% |
+| 150,000 iterations | 100bb | −986.6 ± 374 | 10.4% |
+| 250,000, corrected game | 200bb | **−997.8 ± 396** | 11.9% |
 
-  **The cost.** The 250k run on the corrected game measured **17,257 s = 4h47m** (14.5 it/s,
-  `results/cfr/nolimit_strategy_v2_250k.json`). A 200bb tree is deeper, so it is that or more.
-  The earlier "~1 h" here was invented, not measured.
+The difference between the last two is **−11.2 mbb/hand against a combined interval of ±545**,
+which is not separated. Three improvements went into that gap and none of them showed: the all-in
+fix, another 100,000 iterations, and matching Slumbot's stack depth. The 200bb retrain was still
+worth doing, because the agent is no longer handicapping itself and the figure is now the honest
+one, but it did not buy anything.
 
-  **Do it as a correction, not as an experiment.** 200bb is the ACPC convention and what Slumbot,
-  Libratus and DeepStack all report at. The current bridge loads a 100bb-fitted table and plays it
-  into a 200bb game — the lookups do not miss, because the infoset key is `bucket|history` and
-  carries no stack depth, so it plays on happily with every sizing calibrated for half the money
-  being behind. −987 is partly measuring that misfit.
+**What this says about where to go next.** The training lever is spent and the depth lever is
+spent, so the binding constraint is the action abstraction: one raise per street and six card
+buckets, against an opponent with an unrestricted betting tree. The rising miss rate is the same
+message from another direction, 8.7 to 10.4 to 11.9 percent, because deeper stacks and a better
+solver reach more nodes the abstraction cannot express.
 
-  **It is the agent that is non-standard, not the measurement.** Slumbot's game is 200bb whatever
-  we bring to it, so −987 was always a legitimate vs-Slumbot number in the units everyone reports.
-  The `−1750 → −987 → ?` series holds the game fixed and varies the agent, and "trained at the
-  right depth" is another agent change like 4k → 150k → 250k. Switching depth does not break it.
+**1. Raise cap 2, if anything external is to improve.** This is the untested lever and it is the
+one the evidence now points at. It is also expensive: lifting the cap multiplies the betting tree,
+and `check_raise_cap.py` already found that lifting it *widened* the internal gap, so this is a
+question rather than a plan. Measure the tree size first and decide from that, because a run that
+does not fit in memory is how this project lost six hours before.
 
-  **The gain is still unmeasured**, and this was previously oversold here as "the only lever left
-  that could plausibly halve the Slumbot gap". At `raise_cap=1` one raise per street has to cover
-  twice the depth, so the action abstraction does relatively *more* damage at 200bb than at 100.
-  Expect less than you would like, and take a worse number as the honest one. It also points at
-  the raise cap, not the depth, as the next real lever.
-
-  **Watch `information_sets_reached`.** v2 at 100bb reached 23,470. The 200bb tree should be
-  larger: with the all-in fix hands end once the money is in, and at 200bb that takes more betting,
-  so more nodes survive to later streets. The same 250,000 iterations over a bigger tree is
-  relatively less converged. Run 250k for comparability, then read that field — a large jump is the
-  argument for a longer run *before* spending seven hours on Slumbot, not after.
-
-  **Decided, 8 September: two solvers, and the panel does not move.** A 200bb solver would
-  invalidate Phase 4, whose every figure is at 100bb — and that is not a re-measurement but a
-  retraining, because `rl/ppo/config.py` and evolution's `FitnessConfig` both set
-  `starting_stack=200`. Both learned families were *trained* at 100bb; scoring them at 200bb
-  measures them in a game they never saw, and retraining them is 8M hands × 6 seeds plus 36M
-  hands. Days.
-
-  So: train to `results/cfr/nolimit_strategy_200bb_250k.pkl` and **do not promote it** over
-  `nolimit_strategy.pkl`. `scripts/slumbot_measure.py` already takes `--strategy`, so this needs
-  no code change. Internal comparison stays at 100bb, the external number is at 200bb, and each
-  figure says which.
-
-**2. Slumbot, re-measured (~7 h).** **−987 ± 374 is now stale**, for a reason that did not apply
-when it was last dismissed: the all-in fix means the current solver plays a *different game* — it
-no longer visits nodes that cannot occur — and the promoted solver beats the one that produced
-−987's predecessor by +165 BB/100. That is a qualitative change, not the marginal +51 mbb/hand
-that made a re-run pointless before.
+**2. Two solvers, and the panel still does not move.** `nolimit_strategy.pkl` remains the
+100bb 250k solver that every Phase 4 figure was measured against. The 200bb solver is used by the
+Slumbot bridge only, through `--strategy`, and is never promoted. Internal comparison is at 100bb,
+the external number is at 200bb, and each figure says which.
 
 **3. Phase 5 — six-max.** After heads-up. Needs the `play_match` stack-drift fix, and the CFR
 agent cannot serve as a benchmark there, so the panel loses its only opponent from outside the
