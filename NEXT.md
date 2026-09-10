@@ -90,18 +90,55 @@ buckets, against an opponent with an unrestricted betting tree. The rising miss 
 message from another direction, 8.7 to 10.4 to 11.9 percent, because deeper stacks and a better
 solver reach more nodes the abstraction cannot express.
 
-**1. Raise cap 2, if anything external is to improve.** This is the untested lever and it is the
+**1. Card buckets: measured 10 September, and six is right for a short budget.**
+Three arms at 6, 20 and 50 buckets, wall-clock budgets, three seeds, played head to head
+(`results/cfr/bucket_sweep.json`, `scripts/cfr/bucket_sweep.py`). Chips per hand to the coarser
+arm:
+
+| budget | 6 vs 20 | 6 vs 50 | 20 vs 50 |
+|---|---|---|---|
+| 40s | +2.827 ± 0.352 | +3.762 ± 0.393 | +0.392 ± 0.365 |
+| 160s | +2.098 ± 0.165 | +4.567 ± 0.642 | +2.368 ± 1.139 |
+| 640s | +1.719 ± 1.548 | +3.149 ± 0.382 | +1.226 ± 0.239 |
+| 1280s | +0.751 ± 0.471 | +2.895 ± 0.217 | +1.909 ± 0.484 |
+
+The ordering is 6 > 20 > 50 at every rung, and **there is no crossing anywhere in the measured
+range**. The prediction written into the script before the run, that the fine arms would lose
+early and cross later, was wrong.
+
+**The shape says the question moved rather than closed.** The 6 versus 20 gap falls monotonically
+by a factor of nearly four, +2.827 to +0.751, and at the top rung it is barely separated. Against
+50 buckets there is no such trend and 20 wins at every budget, so fifty is simply too fine here.
+
+**Read the scope before quoting this.** The top rung is 1280 seconds, about 33,000 iterations. The
+shipped solver has **250,000**, seven and a half times beyond anything measured, which is exactly
+where the trend suggests twenty might overtake six. Do not raise the bucket count on this
+evidence, and do not conclude six is right at production budget either.
+
+**2. Why the follow-up is blocked, and what unblocks it.** The obvious next run is 6 against 20
+alone at 2560s and beyond. Two arms halve the memory, but the ladder still cannot reach the
+production budget: 250,000 iterations is roughly 8,000 seconds per arm, and the solver grows about
+39 MB per 3,000 iterations at 6 buckets and 49 MB at 50, which puts a single arm past 3 GB before
+anything else on the machine.
+
+That growth is **not** the checkpointing added on 9 September, which was measured and accounts for
+about 14 MB of 96 over 8,000 iterations. It is the solver, the information set count is flat long
+before the memory stops climbing, and the cause is still unknown. Diagnosing it is now on the
+critical path rather than a tidy-up: it is what decides whether the production-budget question can
+be answered on this machine at all.
+
+**3. Raise cap 2, if anything external is to improve.** This is the untested lever and it is the
 one the evidence now points at. It is also expensive: lifting the cap multiplies the betting tree,
 and `check_raise_cap.py` already found that lifting it *widened* the internal gap, so this is a
 question rather than a plan. Measure the tree size first and decide from that, because a run that
 does not fit in memory is how this project lost six hours before.
 
-**2. Two solvers, and the panel still does not move.** `nolimit_strategy.pkl` remains the
+**4. Two solvers, and the panel still does not move.** `nolimit_strategy.pkl` remains the
 100bb 250k solver that every Phase 4 figure was measured against. The 200bb solver is used by the
 Slumbot bridge only, through `--strategy`, and is never promoted. Internal comparison is at 100bb,
 the external number is at 200bb, and each figure says which.
 
-**3. Phase 5 — six-max.** After heads-up. Needs the `play_match` stack-drift fix, and the CFR
+**5. Phase 5 — six-max.** After heads-up. Needs the `play_match` stack-drift fix, and the CFR
 agent cannot serve as a benchmark there, so the panel loses its only opponent from outside the
 lineage.
 
