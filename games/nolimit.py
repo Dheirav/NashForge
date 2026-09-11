@@ -38,6 +38,23 @@ from engine.hand_eval_fast import evaluate_hand_fast
 from .base import CHANCE, Game
 
 #: Board cards revealed at the start of each street.
+#: Entries the hole-and-board bucket memo keeps before clearing.
+#:
+#: The memo is keyed on (hole, board), a space of roughly 1,326 x 2.1 million,
+#: so it never saturates: measured on 10 September it reached 2,800,227 entries
+#: by 60,000 iterations and accounted for 491 MB of the solver process. That is
+#: what put a 1280-second ceiling on `scripts/cfr/bucket_sweep.py`, since three
+#: arms train at once and the machine has 8 GB.
+#:
+#: Clearing is safe rather than merely cheap. `bucket_for` seeds its generator
+#: from `hash(key)`, so it is a pure function of hole and board and the memo
+#: only ever saves recomputation. `test_nolimit.py` pins that: the same holding
+#: buckets identically across a clear.
+#:
+#: 500,000 bounds it near 90 MB. Raise it if a run has memory to spare and is
+#: missing often; the cost of a clear is recomputation, never a wrong answer.
+BUCKET_CACHE_LIMIT = 500_000
+
 STREET_BOARD_SIZE = (0, 3, 4, 5)
 STREET_NAMES = ("preflop", "flop", "turn", "river")
 
@@ -82,19 +99,23 @@ class NoLimitHoldem(Game):
             decides whether the game fits in memory — see
             ``scripts/cfr/measure_abstraction.py``.
         equity_samples: Monte Carlo samples per postflop bucket lookup.
+        bucket_cache_limit: Entries kept in the hole-and-board bucket memo
+            before it is cleared. See :data:`BUCKET_CACHE_LIMIT`.
     """
 
     num_players = 2
 
     def __init__(self, abstraction: CardAbstraction, starting_stack: int = 200,
                  small_blind: int = 1, big_blind: int = 2, raise_cap: int = 1,
-                 equity_samples: int = 60):
+                 equity_samples: int = 60,
+                 bucket_cache_limit: int = BUCKET_CACHE_LIMIT):
         self.abstraction = abstraction
         self.starting_stack = starting_stack
         self.small_blind = small_blind
         self.big_blind = big_blind
         self.raise_cap = raise_cap
         self.equity_samples = equity_samples
+        self.bucket_cache_limit = bucket_cache_limit
         self._bucket_cache: dict = {}
 
     # ---- structure -------------------------------------------------------
@@ -380,6 +401,12 @@ class NoLimitHoldem(Game):
             community = [FULL_DECK[c] for c in key[1]]
             cached = self.abstraction.bucket(cards, community,
                                              np.random.default_rng(hash(key) % (2 ** 32)))
+            if len(self._bucket_cache) >= self.bucket_cache_limit:
+                # Cleared wholesale rather than evicted least-recently-used: an
+                # LRU costs bookkeeping on every hit, and this is on the hot
+                # path of every traversal. The memo is pure, so the only cost of
+                # dropping it is recomputing what it held.
+                self._bucket_cache.clear()
             self._bucket_cache[key] = cached
         return cached
 

@@ -321,3 +321,45 @@ def test_the_recorded_action_must_be_one_the_abstraction_has(game):
     for invalid in (FOLD, CHECK_CALL):
         with pytest.raises(ValueError):
             game.raise_by_fraction(dealt, 0.7, invalid)
+
+
+def test_a_bucket_survives_its_cache_being_cleared():
+    """
+    The bucket memo is a pure optimisation, which is what makes capping it safe.
+
+    `bucket_for` seeds its generator from `hash(key)`, so the same hole on the
+    same board buckets identically whether or not the memo happens to hold it.
+    The docstring's determinism guarantee comes from that seeding, not from the
+    cache, and this is the property the size cap depends on: clearing costs
+    recomputation, never a different answer.
+
+    Without a cap the memo is unbounded. Keyed on (hole, board) it spans roughly
+    1,326 x 2.1 million, so it never saturates: it reached 2,800,227 entries and
+    491 MB by 60,000 iterations, which is what capped `bucket_sweep.py` at a
+    1280-second budget.
+    """
+    abstraction = CardAbstraction(preflop_buckets=3, postflop_buckets=3,
+                                  samples=40, equity_samples=8)
+    abstraction.fit(np.random.default_rng(0))
+    game = NoLimitHoldem(abstraction, equity_samples=8)
+
+    holdings = [((0, 1), ()), ((0, 1), (2, 3, 4)), ((5, 6), (2, 3, 4, 7)),
+                ((8, 9), (2, 3, 4, 7, 10))]
+    first = [game.bucket_for(hole, board) for hole, board in holdings]
+
+    game._bucket_cache.clear()
+    again = [game.bucket_for(hole, board) for hole, board in holdings]
+    assert first == again, "a cleared memo changed the bucket"
+
+
+def test_the_bucket_cache_stops_growing_at_its_limit():
+    """The cap is what bounds a long run's memory; assert it actually binds."""
+    abstraction = CardAbstraction(preflop_buckets=3, postflop_buckets=3,
+                                  samples=40, equity_samples=8)
+    abstraction.fit(np.random.default_rng(0))
+    game = NoLimitHoldem(abstraction, equity_samples=8, bucket_cache_limit=8)
+
+    for card in range(40):
+        game.bucket_for((card, card + 1), ())
+    assert len(game._bucket_cache) <= 8, (
+        f"cache holds {len(game._bucket_cache)} entries past a limit of 8")
