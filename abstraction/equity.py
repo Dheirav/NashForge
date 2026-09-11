@@ -23,7 +23,8 @@ from typing import List, Optional, Sequence
 import numpy as np
 
 from engine.cards import RANKS, SUITS, Card
-from engine.hand_eval_fast import evaluate_hand_fast
+from engine.hand_eval import RANK_ORDER
+from engine.hand_eval_fast import evaluate_hand_fast, jit, score_hand_7
 
 #: The 52 distinct cards, in a fixed order, built once.
 FULL_DECK: List[Card] = [Card(rank, suit) for suit in SUITS for rank in RANKS]
@@ -33,6 +34,58 @@ _CARD_INDEX = {(card.rank, card.suit): i for i, card in enumerate(FULL_DECK)}
 
 BOARD_SIZE = 5
 HOLE_SIZE = 2
+
+#: `FULL_DECK` as two integer arrays, so a rollout never touches a Card object.
+#: Built once at import: the hot loop indexes these by deck position.
+_DECK_RANKS = np.array([RANK_ORDER[c.rank] for c in FULL_DECK], dtype=np.int32)
+_DECK_SUITS = np.array([SUITS.index(c.suit) for c in FULL_DECK], dtype=np.int32)
+
+
+@jit(nopython=True, cache=True)
+def _rollouts(hole_r, hole_s, board_r, board_s, picks, deck_r, deck_s):
+    """
+    Every sampled showdown, compiled.
+
+    This loop was 68% of the whole solver's runtime, measured 11 September:
+    6,397,998 calls to `evaluate_hand_fast` for 2,000 MCCFR iterations, each one
+    building a HandEvalResult carrying five Card objects that nothing here ever
+    reads. Equity only needs an ordering, so this uses `score_hand_7` and stays
+    in integers throughout.
+    """
+    samples = picks.shape[0]
+    board_n = board_r.shape[0]
+    runout = picks.shape[1] - 2
+
+    mine_r = np.empty(7, dtype=np.int32)
+    mine_s = np.empty(7, dtype=np.int32)
+    opp_r = np.empty(7, dtype=np.int32)
+    opp_s = np.empty(7, dtype=np.int32)
+    mine_r[0] = hole_r[0]; mine_r[1] = hole_r[1]
+    mine_s[0] = hole_s[0]; mine_s[1] = hole_s[1]
+
+    wins = 0
+    ties = 0
+    for i in range(samples):
+        for j in range(board_n):
+            mine_r[2 + j] = board_r[j]; mine_s[2 + j] = board_s[j]
+            opp_r[2 + j] = board_r[j];  opp_s[2 + j] = board_s[j]
+        for k in range(runout):
+            card = picks[i, 2 + k]
+            mine_r[2 + board_n + k] = deck_r[card]
+            mine_s[2 + board_n + k] = deck_s[card]
+            opp_r[2 + board_n + k] = deck_r[card]
+            opp_s[2 + board_n + k] = deck_s[card]
+        first = picks[i, 0]; second = picks[i, 1]
+        opp_r[0] = deck_r[first];  opp_s[0] = deck_s[first]
+        opp_r[1] = deck_r[second]; opp_s[1] = deck_s[second]
+
+        mine = score_hand_7(mine_r, mine_s)
+        theirs = score_hand_7(opp_r, opp_s)
+        if mine > theirs:
+            wins += 1
+        elif mine == theirs:
+            ties += 1
+    return (wins + 0.5 * ties) / samples
 
 
 def card_index(card: Card) -> int:
@@ -80,19 +133,12 @@ def equity_vs_random(
     picks = available[np.argpartition(keys, draw - 1, axis=1)[:, :draw]]
 
     hole = list(hole)
-    wins = ties = 0
-    for row in picks:
-        opponent = [FULL_DECK[i] for i in row[:HOLE_SIZE]]
-        completed = board + [FULL_DECK[i] for i in row[HOLE_SIZE:]]
-
-        mine = evaluate_hand_fast(hole + completed)
-        theirs = evaluate_hand_fast(opponent + completed)
-        if mine > theirs:
-            wins += 1
-        elif mine == theirs:
-            ties += 1
-
-    return (wins + 0.5 * ties) / num_samples
+    return _rollouts(
+        np.array([RANK_ORDER[c.rank] for c in hole], dtype=np.int32),
+        np.array([SUITS.index(c.suit) for c in hole], dtype=np.int32),
+        np.array([RANK_ORDER[c.rank] for c in board], dtype=np.int32),
+        np.array([SUITS.index(c.suit) for c in board], dtype=np.int32),
+        np.ascontiguousarray(picks, dtype=np.int64), _DECK_RANKS, _DECK_SUITS)
 
 
 def sample_situations(

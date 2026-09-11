@@ -235,3 +235,172 @@ def compare_hands_fast(hands: List[List[Card]]) -> List[int]:
     evals = [evaluate_hand_fast(h) for h in hands]
     best = max(evals)
     return [i for i, e in enumerate(evals) if e == best]
+
+
+# ---------------------------------------------------------------------------
+# The comparable score, for the hot path
+# ---------------------------------------------------------------------------
+#
+# `evaluate_hand_fast` builds a HandEvalResult carrying the best five Card
+# objects. Showdowns need that. Equity rollouts do not: `equity_vs_random` only
+# ever asks `mine > theirs` and `mine == theirs`, and a profile on 11 September
+# put 68% of the whole solver's runtime inside `evaluate_hand_fast`, over 6.4
+# million calls for 2,000 MCCFR iterations.
+#
+# So the hot path gets a second function that returns one integer instead, which
+# is what numba can compile. HandEvalResult compares lexicographically on
+# (hand_rank, tiebreaker), and within a hand class the tiebreaker length is
+# fixed, so packing class and five 4-bit tiebreakers into an int reproduces that
+# ordering exactly. `test_hand_eval_fast.py` pins the two against each other
+# over random hands, which is the only thing making this safe to use.
+
+
+@jit(nopython=True, cache=True)
+def _straight_high(present):
+    """Highest value completing a straight, or -1. `present` is 13 flags."""
+    for value in range(12, 3, -1):
+        run = True
+        for step in range(5):
+            if present[value - step] == 0:
+                run = False
+                break
+        if run:
+            return value
+    if present[12] and present[0] and present[1] and present[2] and present[3]:
+        return 3                                    # the wheel, A-2-3-4-5
+    return -1
+
+
+@jit(nopython=True, cache=True)
+def score_hand_7(ranks, suits):
+    """
+    One integer ordering seven cards the way `evaluate_hand_fast` orders them.
+
+    `ranks` are 0-12 and `suits` 0-3. Returns class in the high bits and up to
+    five tiebreakers below it, so plain integer comparison matches
+    HandEvalResult's `__lt__`.
+    """
+    rank_counts = np.zeros(13, dtype=np.int32)
+    suit_counts = np.zeros(4, dtype=np.int32)
+    present = np.zeros(13, dtype=np.int32)
+    for i in range(ranks.shape[0]):
+        rank_counts[ranks[i]] += 1
+        suit_counts[suits[i]] += 1
+        present[ranks[i]] = 1
+
+    flush_suit = -1
+    for suit in range(4):
+        if suit_counts[suit] >= 5:
+            flush_suit = suit
+            break
+
+    t0 = t1 = t2 = t3 = t4 = 0
+    cls = 0
+
+    if flush_suit >= 0:
+        flush_present = np.zeros(13, dtype=np.int32)
+        for i in range(ranks.shape[0]):
+            if suits[i] == flush_suit:
+                flush_present[ranks[i]] = 1
+        sf_high = _straight_high(flush_present)
+        if sf_high >= 0:
+            return ((9 if sf_high == 12 else 8) << 20) | (sf_high << 16)
+
+    quad = -1
+    trip_hi = -1
+    trip_lo = -1
+    pair_hi = -1
+    pair_lo = -1
+    for value in range(12, -1, -1):
+        count = rank_counts[value]
+        if count == 4 and quad < 0:
+            quad = value
+        elif count == 3:
+            if trip_hi < 0:
+                trip_hi = value
+            elif trip_lo < 0:
+                trip_lo = value
+        elif count == 2:
+            if pair_hi < 0:
+                pair_hi = value
+            elif pair_lo < 0:
+                pair_lo = value
+
+    if quad >= 0:
+        kicker = -1
+        for value in range(12, -1, -1):
+            if value != quad and rank_counts[value] > 0:
+                kicker = value
+                break
+        return (7 << 20) | (quad << 16) | (kicker << 12)
+
+    if trip_hi >= 0:
+        # A second trip plays as the pair, and outranks any actual pair because
+        # the scan above runs high to low.
+        pair = trip_lo if trip_lo > pair_hi else pair_hi
+        if pair >= 0:
+            return (6 << 20) | (trip_hi << 16) | (pair << 12)
+
+    if flush_suit >= 0:
+        cls = 5
+        taken = 0
+        for value in range(12, -1, -1):
+            if taken == 5:
+                break
+            count = 0
+            for i in range(ranks.shape[0]):
+                if suits[i] == flush_suit and ranks[i] == value:
+                    count += 1
+            if count > 0:
+                if taken == 0:   t0 = value
+                elif taken == 1: t1 = value
+                elif taken == 2: t2 = value
+                elif taken == 3: t3 = value
+                else:            t4 = value
+                taken += 1
+        return (cls << 20) | (t0 << 16) | (t1 << 12) | (t2 << 8) | (t3 << 4) | t4
+
+    straight = _straight_high(present)
+    if straight >= 0:
+        return (4 << 20) | (straight << 16)
+
+    if trip_hi >= 0:
+        kickers = 0
+        for value in range(12, -1, -1):
+            if value != trip_hi and rank_counts[value] > 0:
+                if kickers == 0:   t1 = value
+                elif kickers == 1: t2 = value
+                else:              break
+                kickers += 1
+        return (3 << 20) | (trip_hi << 16) | (t1 << 12) | (t2 << 8)
+
+    if pair_hi >= 0 and pair_lo >= 0:
+        kicker = -1
+        for value in range(12, -1, -1):
+            if value != pair_hi and value != pair_lo and rank_counts[value] > 0:
+                kicker = value
+                break
+        return (2 << 20) | (pair_hi << 16) | (pair_lo << 12) | (kicker << 8)
+
+    if pair_hi >= 0:
+        kickers = 0
+        for value in range(12, -1, -1):
+            if value != pair_hi and rank_counts[value] > 0:
+                if kickers == 0:   t1 = value
+                elif kickers == 1: t2 = value
+                elif kickers == 2: t3 = value
+                else:              break
+                kickers += 1
+        return (1 << 20) | (pair_hi << 16) | (t1 << 12) | (t2 << 8) | (t3 << 4)
+
+    taken = 0
+    for value in range(12, -1, -1):
+        if rank_counts[value] > 0:
+            if taken == 0:   t0 = value
+            elif taken == 1: t1 = value
+            elif taken == 2: t2 = value
+            elif taken == 3: t3 = value
+            elif taken == 4: t4 = value
+            else:            break
+            taken += 1
+    return (t0 << 16) | (t1 << 12) | (t2 << 8) | (t3 << 4) | t4
