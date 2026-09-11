@@ -93,3 +93,8 @@ analysis_report.txt
 # Claude Code: the train skill is shared, the local permission allowlist is not
 # (it pins process IDs from whichever session happened to grant them).
 .claude/settings.local.json
+
+# Precomputed equity tables. Derived data, 15 MB for the flop alone and ~75 MB
+# with the turn, and `scripts/cfr/build_equity_table.py` rebuilds the flop in
+# 1.6 minutes. Git would carry them forever for no benefit.
+results/cfr/equity_tables/

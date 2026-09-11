@@ -37,7 +37,8 @@ import numpy as np
 from engine.cards import RANKS, Card
 from engine.features import chen_formula, made_hand_strength
 
-from .equity import equity_vs_random, sample_situations
+from .canonical import build_hash, hash_value
+from .equity import card_index, equity_vs_random, sample_situations
 
 #: Board sizes for the streets that have one.
 STREET_BOARD_SIZE = {"flop": 3, "turn": 4, "river": 5}
@@ -126,6 +127,73 @@ def _fit_kmeans_1d(values: np.ndarray, num_buckets: int,
     return np.sort(centroids)
 
 
+#: Board sizes a precomputed table can answer. The river is absent because its
+#: table would be ~139 million entries; a complete board makes equity an exact
+#: enumeration over 990 opponent holdings instead.
+_TABLE_BOARD_SIZES = (3,)
+
+#: Loaded tables by path, shared across every abstraction in a process. A
+#: 1.3-million-entry table must not be re-read per instance, and must never be
+#: pickled into a strategy file.
+_TABLE_CACHE: Dict[str, Tuple[np.ndarray, np.ndarray]] = {}
+
+
+def _load_table(path: str) -> Tuple[np.ndarray, np.ndarray]:
+    """
+    A table stem as an open-addressed hash, built once per process.
+
+    Stored as a hash rather than as the sorted arrays on disk because a binary
+    search over 1.3 million int64 keys is twenty-one cache misses: measured at
+    15.77 us per lookup on random keys against 10.29 us for the 40-sample
+    rollout it replaces, so the obvious structure was slower than not having a
+    table at all. Linear probing at a third load is 1.90 us.
+    """
+    if path not in _TABLE_CACHE:
+        keys = np.load(f"{path}_keys.npy")
+        values = np.load(f"{path}_equity.npy")
+        capacity = 1 << int(np.ceil(np.log2(max(keys.size * 2, 2))))
+        slot_keys = np.full(capacity, -1, dtype=np.int64)
+        slot_values = np.zeros(capacity, dtype=np.float32)
+        build_hash(keys, values, slot_keys, slot_values)
+        _TABLE_CACHE[path] = (slot_keys, slot_values)
+    return _TABLE_CACHE[path]
+
+
+def _table_equity(path: str, hole, board) -> Optional[float]:
+    """
+    Precomputed equity for a situation, or None if the table does not hold it.
+
+    Returning None rather than raising matters: a table built for one street
+    must degrade to sampling on the others rather than taking the whole solver
+    down, and a missing entry is a bug worth noticing in a measurement rather
+    than a crash mid-run.
+    """
+    slot_keys, slot_values = _load_table(path)
+    value = hash_value(
+        slot_keys, slot_values,
+        np.array([card_index(c) for c in hole], dtype=np.int64),
+        np.array([card_index(c) for c in board], dtype=np.int64))
+    return None if value < 0.0 else float(value)
+
+
+def flop_table_arrays(abstraction):
+    """
+    The arrays a compiled flop lookup needs, or None if it cannot be served.
+
+    Returned as plain arrays rather than as a method on the abstraction so the
+    hot path touches no Python objects at all.
+    """
+    if not getattr(abstraction, "equity_table", None):
+        return None
+    if abstraction.strength != "equity":
+        return None
+    centroids = (abstraction._centroids or {}).get("flop")
+    if centroids is None:
+        return None
+    keys, values = _load_table(abstraction.equity_table)
+    return keys, values, np.ascontiguousarray(centroids, dtype=np.float64)
+
+
 #: Postflop strength signals a bucketing can be built on.
 #:
 #: ``equity`` is what the project's proposal specifies: Monte Carlo equity
@@ -160,6 +228,11 @@ class CardAbstraction:
     samples: int = 3_000
     equity_samples: int = 120
     strength: str = "equity"
+    #: Path to a precomputed equity table from
+    #: `scripts/cfr/build_equity_table.py`, or None to sample at lookup time.
+    #: Stored as a path rather than as arrays so that pickling a strategy does
+    #: not carry 15 MB of table with it; the arrays live in a process-wide cache.
+    equity_table: Optional[str] = None
 
     _preflop: Dict[Tuple[str, str, bool], int] = None
     _centroids: Dict[str, np.ndarray] = None
@@ -194,9 +267,16 @@ class CardAbstraction:
         The signal this abstraction buckets postflop situations on.
 
         Fitting and lookup both go through here, so a clustering can never be
-        fitted on one signal and queried with another.
+        fitted on one signal and queried with another. That is also why the
+        precomputed table is consulted *here* rather than at the call sites: a
+        clustering fitted on 40-sample estimates and queried with 1,000-sample
+        ones would have its boundaries in the wrong places.
         """
         if self.strength == "equity":
+            if self.equity_table and len(board) in _TABLE_BOARD_SIZES:
+                value = _table_equity(self.equity_table, hole, board)
+                if value is not None:
+                    return value
             return equity_vs_random(hole, board, self.equity_samples, rng)
         return made_hand_strength(hole, board)
 

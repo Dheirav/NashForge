@@ -36,9 +36,11 @@ BOARD_SIZE = 5
 HOLE_SIZE = 2
 
 #: `FULL_DECK` as two integer arrays, so a rollout never touches a Card object.
+#: Public because `scripts/cfr/build_equity_table.py` drives the same rollout
+#: from packed card indices and must use the identical mapping.
 #: Built once at import: the hot loop indexes these by deck position.
-_DECK_RANKS = np.array([RANK_ORDER[c.rank] for c in FULL_DECK], dtype=np.int32)
-_DECK_SUITS = np.array([SUITS.index(c.suit) for c in FULL_DECK], dtype=np.int32)
+DECK_RANKS = np.array([RANK_ORDER[c.rank] for c in FULL_DECK], dtype=np.int32)
+DECK_SUITS = np.array([SUITS.index(c.suit) for c in FULL_DECK], dtype=np.int32)
 
 
 @jit(nopython=True, cache=True)
@@ -159,7 +161,7 @@ def equity_vs_random(
         np.array([RANK_ORDER[c.rank] for c in board], dtype=np.int32),
         np.array([SUITS.index(c.suit) for c in board], dtype=np.int32),
         np.ascontiguousarray(available, dtype=np.int64), num_samples, draw,
-        seed, _DECK_RANKS, _DECK_SUITS)
+        seed, DECK_RANKS, DECK_SUITS)
 
 
 def sample_situations(

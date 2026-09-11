@@ -31,7 +31,8 @@ import numpy as np
 
 from abstraction.betting import (ALL_IN, CHECK_CALL, FOLD, RAISE_HALF,
                                  RAISE_POT, RAISE_TWO, legal_actions)
-from abstraction.buckets import CardAbstraction
+from abstraction.buckets import CardAbstraction, flop_table_arrays
+from abstraction.canonical import hash_value, nearest_centroid
 from abstraction.equity import FULL_DECK
 from engine.hand_eval_fast import evaluate_hand_fast
 
@@ -86,6 +87,11 @@ def _street_actions(history: str) -> str:
     return history.split("/")[-1]
 
 
+def _flop_table_for(abstraction):
+    """The (keys, equity, flop centroids) a compiled lookup needs, or None."""
+    return flop_table_arrays(abstraction)
+
+
 class NoLimitHoldem(Game):
     """
     Heads-up no-limit Hold'em over a card abstraction.
@@ -117,6 +123,13 @@ class NoLimitHoldem(Game):
         self.equity_samples = equity_samples
         self.bucket_cache_limit = bucket_cache_limit
         self._bucket_cache: dict = {}
+        # A precomputed flop table, if the abstraction carries one. Held here
+        # rather than reached through the abstraction on every lookup, with
+        # reusable buffers, because the cost being removed is per-call overhead
+        # and reintroducing it in the fast path would defeat the point.
+        self._flop_table = _flop_table_for(abstraction)
+        self._hole_buf = np.empty(2, dtype=np.int64)
+        self._board_buf = np.empty(3, dtype=np.int64)
 
     # ---- structure -------------------------------------------------------
 
@@ -396,6 +409,20 @@ class NoLimitHoldem(Game):
         """
         key = (tuple(int(c) for c in hole), tuple(int(c) for c in board))
         cached = self._bucket_cache.get(key)
+        if cached is None and self._flop_table is not None and len(board) == 3:
+            keys, values, centroids = self._flop_table
+            self._hole_buf[0] = hole[0]
+            self._hole_buf[1] = hole[1]
+            self._board_buf[0] = board[0]
+            self._board_buf[1] = board[1]
+            self._board_buf[2] = board[2]
+            value = hash_value(keys, values, self._hole_buf, self._board_buf)
+            if value >= 0.0:
+                cached = int(nearest_centroid(centroids, value))
+                if len(self._bucket_cache) >= self.bucket_cache_limit:
+                    self._bucket_cache.clear()
+                self._bucket_cache[key] = cached
+                return cached
         if cached is None:
             cards = [FULL_DECK[c] for c in key[0]]
             community = [FULL_DECK[c] for c in key[1]]
