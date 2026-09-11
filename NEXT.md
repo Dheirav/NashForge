@@ -4,7 +4,7 @@ One page, kept current. [`BACKLOG.md`](BACKLOG.md) holds the reasoning and every
 [`docs/training-plan.md`](docs/training-plan.md) holds the full phase plan and its results. This
 file is only the next thing to do.
 
-**Last updated:** 10 September 2026 · `main` at `9912610` · 285 tests (collection alone ~6 min)
+**Last updated:** 11 September 2026 · `main` at `9912610` · 285 tests (collection alone ~6 min)
 
 ---
 
@@ -90,44 +90,55 @@ buckets, against an opponent with an unrestricted betting tree. The rising miss 
 message from another direction, 8.7 to 10.4 to 11.9 percent, because deeper stacks and a better
 solver reach more nodes the abstraction cannot express.
 
-**1. Card buckets: measured 10 September, and six is right for a short budget.**
-Three arms at 6, 20 and 50 buckets, wall-clock budgets, three seeds, played head to head
-(`results/cfr/bucket_sweep.json`, `scripts/cfr/bucket_sweep.py`). Chips per hand to the coarser
-arm:
+**1. Card buckets: settled 11 September, and six is right at every budget tested.**
+Six against twenty, wall-clock budgets over a 128-fold range, three seeds, played head to head
+(`results/cfr/bucket_sweep_long.json`, `scripts/cfr/bucket_sweep.py`). Chips per hand to six:
 
-| budget | 6 vs 20 | 6 vs 50 | 20 vs 50 |
-|---|---|---|---|
-| 40s | +2.827 ± 0.352 | +3.762 ± 0.393 | +0.392 ± 0.365 |
-| 160s | +2.098 ± 0.165 | +4.567 ± 0.642 | +2.368 ± 1.139 |
-| 640s | +1.719 ± 1.548 | +3.149 ± 0.382 | +1.226 ± 0.239 |
-| 1280s | +0.751 ± 0.471 | +2.895 ± 0.217 | +1.909 ± 0.484 |
+| budget | 6 vs 20 | iterations, 6 / 20 |
+|---|---|---|
+| 40s | +3.307 ± 1.159 | 1,567 / 1,683 |
+| 160s | +2.499 ± 0.473 | 5,242 / 5,900 |
+| 640s | +1.372 ± 0.536 | 18,092 / 20,433 |
+| 1280s | +1.423 ± 0.404 | 34,775 / 38,133 |
+| 2560s | +0.497 ± 0.317 | 66,183 / 75,050 |
+| 5120s | **+0.624 ± 0.259** | 134,500 / 145,442 |
 
-The ordering is 6 > 20 > 50 at every rung, and **there is no crossing anywhere in the measured
-range**. The prediction written into the script before the run, that the fine arms would lose
-early and cross later, was wrong.
+**The gap declines and then plateaus around +0.5 to +0.6, still separated from zero.** The earlier
+three-arm ladder stopped at 1280s with the gap falling by a factor of four, which read as an
+approaching crossing. It is not one. At big blind 2 the residual is about 31 BB/100, so it is a
+real edge rather than a rounding artefact. Fifty buckets was dropped after the first sweep: it lost
+to twenty at every rung with no closing trend.
 
-**The shape says the question moved rather than closed.** The 6 versus 20 gap falls monotonically
-by a factor of nearly four, +2.827 to +0.751, and at the top rung it is barely separated. Against
-50 buckets there is no such trend and 20 wins at every budget, so fifty is simply too fine here.
+**Twenty buckets was not short of time.** It is cheaper per iteration at every rung and bought 7 to
+13 percent more traversals at equal wall-clock, so the budget axis favoured the finer arm and it
+still lost. Its disadvantage is the partition, not the compute. The docstring's worry that
+wall-clock would unfairly penalise a finer abstraction was backwards, and is corrected there.
 
-**Read the scope before quoting this.** The top rung is 1280 seconds, about 33,000 iterations. The
-shipped solver has **250,000**, seven and a half times beyond anything measured, which is exactly
-where the trend suggests twenty might overtake six. Do not raise the bucket count on this
-evidence, and do not conclude six is right at production budget either.
+**Scope.** The top rung is 134,500 iterations against the shipped solver's 250,000, so this is 55
+percent of production budget, not beyond it. The plateau across the last three rungs carries the
+conclusion rather than arrival at production scale. Two of eighteen matchups trained under a load
+imbalance, both in seed 0's top rungs, worst 1.4.
 
-**2. Why the follow-up is blocked, and what unblocks it.** The obvious next run is 6 against 20
-alone at 2560s and beyond. Two arms halve the memory, but the ladder still cannot reach the
-production budget: 250,000 iterations is roughly 8,000 seconds per arm, and the solver grows about
-39 MB per 3,000 iterations at 6 buckets and 49 MB at 50, which puts a single arm past 3 GB before
-anything else on the machine.
+**So the card abstraction is not the lever, and the raise cap is the only untested dimension left.**
 
-That growth is **not** the checkpointing added on 9 September, which was measured and accounts for
-about 14 MB of 96 over 8,000 iterations. It is the solver, the information set count is flat long
-before the memory stops climbing, and the cause is still unknown. Diagnosing it is now on the
-critical path rather than a tidy-up: it is what decides whether the production-budget question can
-be answered on this machine at all.
+**2. The memory growth: found and fixed, 11 September.** `games/nolimit.py` memoised
+`bucket_for` in `_bucket_cache` with no ceiling. Keyed on (hole, board) it spans roughly
+1,326 × 2.1 million, so it never saturates: 2,800,227 entries and 491 MB by 60,000 iterations,
+which is what put a 1280-second ceiling on the first sweep.
 
-**3. Raise cap 2, if anything external is to improve.** This is the untested lever and it is the
+Capping it at `BUCKET_CACHE_LIMIT = 500_000` costs **5.2 percent** of iteration speed and removes
+**90 percent** of the growth (18.50 to 19.47 ms/it; +721.1 MB to +72.6 MB over 60,000 iterations).
+Clearing is safe rather than merely cheap: `bucket_for` seeds its generator from `hash(key)`, so it
+is a pure function of hole and board and the memo only ever saved recomputation.
+`test_nolimit.py` pins that property and pins that the cap binds.
+
+Three diagnostics were needed because the first two were blind. An object-count histogram showed
+nothing growing, because `gc.get_objects()` returns only GC-tracked containers and a dict of
+untracked string keys and numeric values is one object whose count never moves. `malloc_trim`
+recovered nothing, ruling out freed-but-unreturned pages. Measuring container **lengths** rather
+than counting objects found it immediately.
+
+**3. Raise cap 2, if anything external is to improve.****3. Raise cap 2, if anything external is to improve.** This is the untested lever and it is the
 one the evidence now points at. It is also expensive: lifting the cap multiplies the betting tree,
 and `check_raise_cap.py` already found that lifting it *widened* the internal gap, so this is a
 question rather than a plan. Measure the tree size first and decide from that, because a run that

@@ -29,12 +29,14 @@ may also cost more per iteration to read. Wall-clock charges both together, and
 faces. Budgeting by iterations would waive whichever part of the cost is
 per-iteration and hand the finer arm more CPU for the same nominal budget.
 
-**Do not assume the per-iteration part is even positive.** A single measurement
-on 10 September, 3,000 iterations at `equity_samples=40`, read 32.4 ms/it at 6
-buckets and 26.0 ms/it at 50, which is the wrong way round and was taken on a
-shared machine without replication. That is why every rung records
-`{left,right}_ms_per_iteration` per arm across every seed: the sweep answers this
-as a side effect rather than leaving it as an assumption in a docstring.
+**The per-iteration part is negative here, which was worth measuring rather than
+assuming.** Across six rungs and three seeds on 11 September, 20 buckets ran
+cheaper per iteration than 6 at every rung and bought 7 to 13 percent MORE
+traversals at equal wall-clock. So the budget axis favours the finer arm, and a
+finer arm that still loses is losing on the partition rather than on compute.
+This is why every rung records `{left,right}_ms_per_iteration` per arm across
+every seed: the sweep answers it as a side effect instead of leaving it as an
+assumption in a docstring.
 
 **This makes the axis sensitive to the machine, which is a real hazard here.**
 This project already withdrew a wall-clock axis once: an identical 8M-hand run
@@ -62,12 +64,22 @@ takes an abstraction for exactly this reason. Nothing about the *game* is
 abstracted: cards are dealt for real and showdowns settled on real hands, so
 every arm plays the same poker and only its view of it differs.
 
-What to expect, written down before the run
--------------------------------------------
-If bucket count behaves the way the strength signal did, the fine arms lose at
-the short budgets and cross above the coarse ones later. **If 6 buckets wins at
-every budget, that is a real finding**: it would mean the card abstraction is not
-the constraint, and the next effort belongs at the raise cap instead.
+What was expected, and what happened
+------------------------------------
+Written before the first run: if bucket count behaves the way the strength signal
+did, the fine arms lose at the short budgets and cross above the coarse ones
+later, and **if 6 buckets wins at every budget, that is a real finding** pointing
+the next effort at the raise cap instead.
+
+It won at every budget. Six against twenty over a 128-fold range of budgets,
+40s to 5120s, three seeds: the gap declines from +3.307 to about +0.5 and then
+plateaus, separated from zero at the top rung (+0.624 +/- 0.259 chips/hand, about
+31 BB/100). Fifty buckets lost to twenty at every rung with no closing trend and
+was dropped after the first sweep. The card abstraction is not the constraint.
+
+The top rung is 134,500 iterations against the shipped solver's 250,000, so this
+is 55 percent of production budget. The plateau across the last three rungs is
+what carries the conclusion, not arrival at production scale.
 
 Usage
 -----
