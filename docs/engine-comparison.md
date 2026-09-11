@@ -109,16 +109,37 @@ The mechanism is in how LBR is given its actions. From Lisý and Bowling:
 Modicum's LBR opponent bet `0.33 × 2^x` times the pot for x in 0 to 10 on the
 flop, which is eleven sizes its blueprint did not contain.
 
-**Our LBR was confined to the same six actions as the strategy it was
-measuring.** `head_to_head.py` already records the symptom in its own docstring:
-LBR "is confined to the same abstraction as the strategy it measures, so it
-evaluates each on its own terms and went slack at every budget above the
-shallowest". That is the documented failure mode, not an inherent limitation.
+**That is NOT our problem, and this section was wrong until 11 September.**
 
-This matters more than it sounds because it is a **measurement** rather than a
-training run. An LBR that bets off-abstraction would give this project the
-no-limit exploitability number it has never had, at a cost of hours rather than
-days, and it would do so without changing a single agent.
+`cfr/lbr.py` already bets off-abstraction. `DEFAULT_BET_SIZES` is eleven
+fractions from 0.25 to 3.5 pot, "deliberately finer than the abstraction's
+0.5 / 1.0 / 2.0, and extending past both ends" — the same construction Modicum
+uses. The phrase in `head_to_head.py`'s docstring, that LBR "is confined to the
+same abstraction", means the *card* abstraction, which it must share to model
+the opponent at all. I read it as the action abstraction and wrote a fix plan
+around a cause that did not exist.
+
+Measured that evening, 1,500 hands each:
+
+    [4]   100bb   -0.418 chips/hand   ci95 [-2.18, +1.34]   slack
+    [4]   200bb   -2.647 chips/hand   ci95 [-5.48, +0.19]   slack
+    [4,2] 100bb   -0.352 chips/hand   ci95 [-2.10, +1.39]   slack
+
+All three negative and straddling zero. A negative LBR value is not negative
+exploitability, which cannot exist: it means this greedy exploiter lost money,
+so the bound proves nothing. Deeper stacks, which should give an exploiter more
+room, made it worse rather than better, so "our game is too shallow" does not
+explain it either.
+
+**What is known:** our LBR cannot beat our own solvers, and those solvers lose
+about a thousand mbb/hand to Slumbot, so they are certainly exploitable. The
+failure is in the exploiter, not the bound's logic.
+
+**What is not known is why**, and two explanations offered on the spot did not
+survive contact with the data. The published results come from a different
+implementation against bots five orders of magnitude larger. Reconciling that is
+real work, and the honest status remains what `CODEBASE_AUDIT.md` already said:
+no-limit has no exploitability figure here.
 
 It also gives us a second reason to care about it. Lisý and Bowling found that
 Act1 and Slumbot were statistically indistinguishable head to head, within 20

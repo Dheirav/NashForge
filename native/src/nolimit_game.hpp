@@ -42,6 +42,11 @@ struct Abstraction {
     }
 };
 
+//: Entries the hole-and-board bucket memo keeps before clearing. Matches
+//: `games.nolimit.BUCKET_CACHE_LIMIT`; see the note at the clear site.
+constexpr size_t BUCKET_CACHE_LIMIT = 500000;
+
+
 class NoLimitGame {
 public:
     static constexpr int num_players = 2;
@@ -205,6 +210,20 @@ private:
         const int street_index = s.bet.board_n - 3;
         const int bucket = Abstraction::nearest(
             abstraction_.centroids[static_cast<size_t>(street_index)], value);
+        // Cleared wholesale at the ceiling, as games/nolimit.py does.
+        //
+        // This was omitted when the game was ported and it cost a run: the
+        // [4,2] taper at 6.5M iterations reached 4,960 MB of resident memory on
+        // 11 September and spent its time swapping at 50% CPU rather than
+        // solving. The Python had the same unbounded memo earlier that day,
+        // reaching 2.8 million entries and 491 MB with the information set count
+        // flat -- the memo is keyed on (hole, board), a space of roughly 1,326 x
+        // 2.1 million, so it never saturates.
+        //
+        // Safe because `bucket_for` is a pure function of the cards: the seed is
+        // derived from them, so dropping the memo costs recomputation, never a
+        // different answer.
+        if (bucket_cache_.size() >= BUCKET_CACHE_LIMIT) bucket_cache_.clear();
         bucket_cache_.emplace(key, bucket);
         return bucket;
     }

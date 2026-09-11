@@ -138,7 +138,27 @@ def _train_native(args, abstraction, projected):
         preflop, flop, turn, river, args.equity_samples, args.stack,
         args.big_blind // 2, args.big_blind, schedule, args.seed)
     start = time.perf_counter()
-    solver.train(args.iterations)
+
+    # Trained in chunks so the run reports progress.
+    #
+    # The native path printed nothing until it finished, which cost a run: the
+    # [4,2] taper on 11 September spent 66 minutes swapping at 50% CPU and there
+    # was no way to see it was in trouble, or how far along it was. The Python
+    # path has had a progress callback since the 500,000-iteration run that was
+    # killed at six hours for the same reason.
+    step = max(1, args.iterations // 50)
+    done = 0
+    while done < args.iterations:
+        chunk = min(step, args.iterations - done)
+        solver.train(chunk)
+        done += chunk
+        taken = time.perf_counter() - start
+        rss = _resident_mb()
+        # ETA from the measured rate, never estimated up front.
+        eta = (args.iterations - done) * taken / done / 60
+        print(f"  {done:>10,}/{args.iterations:,}  {taken / done * 1000:6.3f} ms/it  "
+              f"{solver.information_sets():>9,} infosets  {rss:6.0f} MB  "
+              f"eta {eta:6.1f} min", flush=True)
     elapsed = time.perf_counter() - start
     print(f"  {elapsed:.1f}s ({elapsed / args.iterations * 1000:.3f} ms/iteration)")
     print(f"  information sets reached: {solver.information_sets():,} "
