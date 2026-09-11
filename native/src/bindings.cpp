@@ -5,6 +5,9 @@
 #include "hand_eval.hpp"
 #include "equity.hpp"
 #include "nolimit.hpp"
+#include "mccfr.hpp"
+#include "kuhn.hpp"
+#include <nanobind/stl/map.h>
 #include <nanobind/stl/string.h>
 #include <nanobind/stl/pair.h>
 
@@ -71,4 +74,15 @@ NB_MODULE(pokerbot_native, m) {
        "Drive the betting game through a sequence. Returns (pot, stacks, history, "
        "legal-at-each-step); pot is -1 if the sequence ran past a terminal node, "
        "-2 at a chance node, -3 if an action was not legal.");
+
+    // --- MCCFR, validated on Kuhn -------------------------------------------
+    m.def("solve_kuhn", [](int64_t iterations, uint64_t seed) {
+        MCCFR<KuhnPoker> solver(KuhnPoker{}, UpdateRule::vanilla(), seed);
+        solver.train(iterations);
+        std::map<std::string, std::vector<double>> out;
+        for (const auto& [key, node] : solver.nodes())
+            out[key] = node.average_strategy();
+        return out;
+    }, nb::arg("iterations"), nb::arg("seed"),
+       "Solve Kuhn poker. The game value to player 0 is -1/18 at equilibrium.");
 }

@@ -136,3 +136,40 @@ def test_the_cpp_betting_game_agrees_over_the_enumerated_tree():
                 assert expected[3] == [list(step) for step in got[3]], (
                     f"schedule={python_schedule} actions={actions}: legal actions differ")
     assert compared > 1000, f"only compared {compared} sequences"
+
+
+def test_the_cpp_solver_converges_to_kuhns_analytic_value():
+    """
+    Kuhn poker's value to the first player is exactly -1/18 under optimal play.
+
+    This is the acceptance test for the ported MCCFR, and it is stronger than
+    comparing against our own Python: that would show the translation was
+    faithful, while this shows regret matching, external sampling and strategy
+    averaging are each correct. It is the same anchor `tests/test_mccfr.py`
+    uses for the Python solver.
+    """
+    import itertools
+
+    def game_value(strategy):
+        def probability(key, action):
+            entry = strategy.get(key)
+            return entry[action] if entry else 0.5
+
+        total = 0.0
+        for mine, theirs in itertools.permutations(range(3), 2):
+            showdown = 1.0 if mine > theirs else -1.0
+            value = probability(f"{mine}|", 0) * (
+                probability(f"{theirs}|p", 0) * showdown
+                + probability(f"{theirs}|p", 1) * (
+                    probability(f"{mine}|pb", 0) * -1.0
+                    + probability(f"{mine}|pb", 1) * 2.0 * showdown))
+            value += probability(f"{mine}|", 1) * (
+                probability(f"{theirs}|b", 0) * 1.0
+                + probability(f"{theirs}|b", 1) * 2.0 * showdown)
+            total += value / 6.0
+        return total
+
+    values = [game_value(native.solve_kuhn(200_000, seed)) for seed in range(3)]
+    mean = sum(values) / len(values)
+    assert abs(mean - (-1 / 18)) < 0.002, (
+        f"converged to {mean:+.5f}, expected {-1/18:+.5f}; seeds {values}")
