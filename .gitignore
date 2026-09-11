@@ -98,3 +98,8 @@ analysis_report.txt
 # with the turn, and `scripts/cfr/build_equity_table.py` rebuilds the flop in
 # 1.6 minutes. Git would carry them forever for no benefit.
 results/cfr/equity_tables/
+
+# Native build artifacts. `native/build.sh` regenerates them; the sources are
+# tracked, the compiled module is not.
+native/build/
+*.so
