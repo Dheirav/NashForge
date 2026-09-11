@@ -13,33 +13,43 @@ file is only the next thing to do.
 | | | |
 |---|---|---|
 | CFR | measured | Validated against Kuhn's −1/18 and exact Leduc exploitability. Produced the abstraction crossover, +0.916 ± 0.118 chips/hand at the 2560s budget |
-| Evolutionary search | measured | Loses to the solver by 200.9 BB/100. Fifty generations are worth +50.0 ± 20 — small, separated, and invisible against a weaker opponent |
+| Evolutionary search | measured | Loses to the solver by 211.8 BB/100. Fifty generations are worth +43.9 ± 20 — small, separated, and invisible against a weaker opponent |
 | PPO | measured | Loses to the solver by about 75 BB/100 at every rung. Flat: more training does not close it |
 
 All three are measured, and **Phase 4 — the comparison the project's title promises — is done**
-(`results/comparison/phase4_v2panel.json`). One panel, 40,000 hands, a hands axis, in BB/100:
+(`results/comparison/phase4_native.json`). One panel, 40,000 hands, a hands axis, in BB/100:
 
 | family | hands | vs random | vs always-call | vs CFR |
 |---|---|---|---|---|
-| CFR (the solver, 250k) | — | +245.9 | +603.4 | — |
-| evolution, 50 generations | 36,000,000 | +202.7 | −0.2 | **−200.9** |
-| PPO | 500,000 | +191.2 | +372.6 | **−79.7** |
-| PPO | 2,000,000 | +137.2 | +373.2 | **−73.5** |
-| PPO | 8,000,000 | +226.8 | +329.1 | **−72.0** |
+| CFR (the solver, 250k) | — | +258.7 | +647.3 | — |
+| evolution, 50 generations | 36,000,000 | +202.7 | −0.2 | **−211.8** |
+| PPO | 500,000 | +191.2 | +372.6 | **−84.6** |
+| PPO | 2,000,000 | +137.2 | +373.2 | **−72.5** |
+| PPO | 8,000,000 | +226.8 | +329.1 | **−74.9** |
 
-Every row on one panel, 8 September (`results/comparison/phase4_v2panel.json`). The CFR agent is
-now the 250,000-iteration solver trained on the corrected game, not the 4,000-iteration one — see
-below for what that changed.
+Every row on one panel, 11 September, measured against a solver trained by the **C++ core**
+(`results/comparison/phase4_native.json`). CFR lookup miss rate 0.0% throughout.
+
+**This table is a re-measurement and every conclusion survived it.** The native solver bucketing
+is seeded from the cards rather than from Python's tuple hash, so it is a genuinely independent
+implementation with different draws, in another language. Against the previous panel the same
+figures were +245.9 / +603.4 for the solver, −200.9 for evolution and −79.7 / −73.5 / −72.0 for
+PPO. **Every one moved by less than its own interval**, and the columns that structurally cannot
+move — PPO and evolution against random and always-call, which never touch the solver — are
+identical to the decimal. See `docs/retrain-plan.md`.
 
 **Both learned families lose to the solver.** PPO by about 75 BB/100, evolutionary search by
 about 200. Neither ever beat it: the earlier reading came from a panel whose CFR agent had
 **4,000 iterations — about two minutes of training**.
 
 **Evolutionary search still spent 36,000,000 hands to PPO's 500,000** — seventy-two times as many
-— and is 121 BB/100 further behind. That comparison survives the panel change and is the firm
-result.
+— and is 127 BB/100 further behind. That comparison survives both the panel change and the
+re-measurement on an independent solver, and is the firm result.
 
 ### Three claims the panel upgrade overturned
+
+Figures in this section are the **v2 (Python-trained) panel's**, kept as the record of what that
+upgrade changed. The live table above is the native panel's re-measurement.
 
 | claim | measured against the 4k panel | against the 250k panel |
 |---|---|---|
@@ -60,7 +70,7 @@ data doing it**.
 **On evolution's fitness.** The finding that its ranking signal cannot be selected on stands —
 repeatability is r = +0.12 at the real budget, and shared cards do not help. But "fifty
 generations were largely drift" was too strong: selection on that weak signal still produced
-**+50.0 ± 20 BB/100**, measurable once the opponent stopped drowning it out. A noisy ranking and a
+**+43.9 ± 20 BB/100**, measurable once the opponent stopped drowning it out. A noisy ranking and a
 real improvement are compatible; the earlier phrasing denied the second.
 
 ---

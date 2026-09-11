@@ -36,17 +36,23 @@ to "which abstraction" is not an abstraction, it is a budget.
 
 | family | hands | vs random | vs always-call | **vs CFR agent** |
 |---|---|---|---|---|
-| CFR (the solver, 250k) | — | +245.9 | +603.4 | — |
-| evolution, 50 generations | 36,000,000 | +202.7 | −0.2 | **−200.9** |
-| PPO | 500,000 | +191.2 | +372.6 | **−79.7** |
-| PPO | 2,000,000 | +137.2 | +373.2 | **−73.5** |
-| PPO | 8,000,000 | +226.8 | +329.1 | **−72.0** |
+| CFR (the solver, 250k) | — | +258.7 | +647.3 | — |
+| evolution, 50 generations | 36,000,000 | +202.7 | −0.2 | **−211.8** |
+| PPO | 500,000 | +191.2 | +372.6 | **−84.6** |
+| PPO | 2,000,000 | +137.2 | +373.2 | **−72.5** |
+| PPO | 8,000,000 | +226.8 | +329.1 | **−74.9** |
+
+**These figures were re-measured on 11 September against a solver written independently in C++**,
+with bucketing seeded from the cards rather than from Python's tuple hash. Every number moved by
+less than its own confidence interval, and the columns that structurally cannot move are identical
+to the decimal. A result that survives a reimplementation in another language is on firmer ground
+than one measured twice with the same code.
 
 **Both learned families lose to the solver**, PPO by about 75 BB/100 and evolutionary search by
 about 200. Neither beats it at any budget.
 
 **Evolutionary search spent 36,000,000 hands to PPO's 500,000 — seventy-two times as many — and
-is 121 BB/100 further behind.** That is the firm comparison: both families moved together when
+is 127 BB/100 further behind.** That is the firm comparison: both families moved together when
 the panel changed, so it does not depend on which solver holds the seat.
 
 The axis is **hands**, not wall-clock. An earlier version of this sheet used wall-clock and said
@@ -63,9 +69,9 @@ seed-to-seed spread is three to ten times tighter than the baselines'.
 ## Result 3 — what each method actually learned
 
 **Evolutionary search learned to exploit randomness, and a little else.** +202.7 BB/100 against a
-random opponent, nothing against a station that never folds, and −200.9 against the solver after
+random opponent, nothing against a station that never folds, and −211.8 against the solver after
 fifty generations. Its gain over an untrained genome from the same distribution is
-**+50.0 ± 20 BB/100** — small, but separated from zero.
+**+43.9 ± 20 BB/100** — small, but separated from zero.
 
 That last figure was previously reported as +33.8 ± 37, "no change". It was measured against a
 solver with two minutes of training, whose exploitation of a weak opponent was large enough to
@@ -75,7 +81,7 @@ bury the difference. A better opponent made a real effect visible rather than hi
 about −75 after eight million hands, so the training is doing something substantial. It is not
 enough to reach parity with a converged solver.
 
-**PPO's ladder is flat.** −79.7 at 500,000 hands, −73.5 at 2,000,000, −72.0 at 8,000,000. Sixteen
+**PPO's ladder is flat.** −84.6 at 500,000 hands, −72.5 at 2,000,000, −74.9 at 8,000,000. Sixteen
 times the training buys roughly 8 BB/100, well inside the seed spread. An earlier version of this
 sheet said more training helped; that was an artefact of measuring against an under-trained
 opponent.
