@@ -81,6 +81,15 @@ The top rung is 134,500 iterations against the shipped solver's 250,000, so this
 is 55 percent of production budget. The plateau across the last three rungs is
 what carries the conclusion, not arrival at production scale.
 
+**And the result is conditional on the equity estimator, which was measured
+afterwards and is noisier than the partition it feeds.** At `equity_samples=40`
+the estimate's standard deviation is 0.0667 while adjacent bucket centroids sit
+0.101 to 0.170 apart, so 42 percent of situations change bucket on a re-roll.
+Fifty buckets would space centroids about 0.02 apart, three times inside that
+noise, which means assignment at fifty was close to random. This sweep therefore
+answers how many buckets the estimator can resolve, not how many are worth
+having. Re-run it once `equity_samples` is raised.
+
 Usage
 -----
     python scripts/cfr/bucket_sweep.py

@@ -193,7 +193,7 @@ instrument is validated before any result is quoted.
   four defects fixed and three valuation models, still could not beat a converged strategy. That
   investigation was **closed with no usable bound** — no-limit has no exploitability figure here,
   and the report says so rather than substituting a flattering one.
-- **285 automated regression tests.**
+- **293 automated regression tests.**
 
 ### Seven measurement failures, all reported
 
@@ -256,7 +256,7 @@ measurements score — the same mask, the same solver tree, the same settle.
 ## Reproducing the numbers
 
 ```bash
-venv/bin/python -m pytest -q                          # 285 tests; collection alone ~6 min
+venv/bin/python -m pytest -q                          # 293 tests, ~6m09s
 venv/bin/python scripts/endpoint_test_ppo.py --seed 0 1 2   # Result 3
 venv/bin/python scripts/phase4_comparison.py               # Result 2
 venv/bin/python scripts/make_figures.py                    # every figure

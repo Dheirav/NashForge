@@ -4,7 +4,7 @@ One page, kept current. [`BACKLOG.md`](BACKLOG.md) holds the reasoning and every
 [`docs/training-plan.md`](docs/training-plan.md) holds the full phase plan and its results. This
 file is only the next thing to do.
 
-**Last updated:** 11 September 2026 · `main` at `9912610` · 285 tests (collection alone ~6 min)
+**Last updated:** 11 September 2026 · `main` at `9912610` · 293 tests (~6m09s, collection ~3m24s)
 
 ---
 
@@ -120,6 +120,46 @@ conclusion rather than arrival at production scale. Two of eighteen matchups tra
 imbalance, both in seed 0's top rungs, worst 1.4.
 
 **So the card abstraction is not the lever, and the raise cap is the only untested dimension left.**
+
+**1b. The card abstraction is noise-limited, and this qualifies 1. Measured 11 September.**
+
+| | |
+|---|---|
+| equity estimate sd at 40 samples | **0.0667** |
+| distance between adjacent bucket centroids | 0.101 to 0.170 |
+| situations that change bucket on a re-roll at the same 40 samples | **42%** |
+
+At 200 samples the sd falls to 0.0307 and at 1,000 to 0.0134.
+
+**The noise in the estimate is about half the gap between adjacent buckets.** So
+a large fraction of hands are placed by Monte Carlo error rather than by hand
+strength, and that is a property of the estimator, not of the partition.
+
+**Read the bucket sweep in that light.** Fifty buckets spaces centroids roughly
+0.02 apart against noise of 0.067, more than three bucket widths, so assignment
+at fifty was close to random. The sweep therefore measured **how many buckets our
+equity estimator can resolve**, not how many buckets are worth having. Six won
+because six is near the limit of what a 0.067 error can distinguish. Do not
+quote it as "six buckets is correct" without that condition.
+
+**What to do about it.** The 4.3x speedup means 200 samples now costs about what
+40 cost before, so the precision is affordable. Whether it produces a better
+solver is empirical and has the same shape as everything else here: train at 40
+and at 200 on equal wall-clock and play them off. It changes the abstraction, so
+it bundles with a retrain rather than going in quietly, and it must not be
+bundled with the taper or a win will not be attributable.
+
+**1c. Speed, 11 September: 32.4 -> 7.47 ms/iteration, 4.3x.** Two changes, both
+committed and verified answer-for-answer. `score_hand_7` replaced an uncompiled
+evaluator that was 68% of runtime across 6.4 million calls per 2,000 iterations;
+the rollout's sampling moved inside the compiled loop. Four other routes were
+tried and reverted, recorded in `4dfd175` so they are not tried again: suit
+isomorphism, caching `_street_actions`, scoring showdowns, and dropping
+`equity_samples`. The last of those turned out to point the wrong way entirely,
+which is finding 1b.
+
+The 250,000-iteration solver is now about 50 minutes rather than 3h30m, and a
+5,120-second budget buys roughly 580,000 iterations rather than 134,500.
 
 **2. The memory growth: found and fixed, 11 September.** `games/nolimit.py` memoised
 `bucket_for` in `_bucket_cache` with no ceiling. Keyed on (hole, board) it spans roughly
