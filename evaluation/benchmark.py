@@ -52,7 +52,7 @@ from typing import Callable, Dict, Hashable, List, Optional, Sequence
 
 import numpy as np
 
-from abstraction.betting import ALL_IN, CHECK_CALL, FOLD
+from abstraction.betting import ALL_IN, CHECK_CALL, FOLD, raise_sizes_at
 from abstraction.betting import legal_actions as solver_legal_actions
 from engine import Action, PokerGame, get_abstract_action_mask
 from training.fitness import abstract_action_to_engine_action, finish_hand
@@ -221,8 +221,14 @@ def _constrain(mask: np.ndarray, to_call: int, raises_this_street: int,
     mask = mask.copy()
     if to_call <= 0:
         mask[FOLD] = 0.0                       # dominated, and off-tree
-    if raises_this_street >= raise_cap:
-        for action in RAISE_ACTIONS:
+    # Which raise sizes survive depends on how deep the betting already is, not
+    # merely on whether a cap has been hit: a tapered schedule keeps the large
+    # sizes and drops the small ones as depth grows. `raise_sizes_at` is the
+    # same function `abstraction.betting.legal_actions` uses, so this narrowing
+    # cannot drift from the tree the solver was trained on.
+    allowed = raise_sizes_at(raise_cap, raises_this_street)
+    for action in RAISE_ACTIONS:
+        if action not in allowed:
             mask[action] = 0.0
     if not mask.any():                         # never strand the actor
         mask[CHECK_CALL] = 1.0

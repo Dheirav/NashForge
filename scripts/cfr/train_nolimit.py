@@ -46,7 +46,13 @@ def parse_args():
                                      formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--iterations", type=int, default=3000)
     parser.add_argument("--buckets", type=int, default=6)
-    parser.add_argument("--raise-cap", type=int, default=1)
+    #: An int is the uniform schedule (N raises, all four sizes). Two or more
+    #: values taper: `--raise-cap 4 1` allows four sizes for the opening bet and
+    #: only all-in for the raise, which buys a re-raise for 347,136 information
+    #: sets where carrying all four sizes to depth 2 costs 7,560,240.
+    parser.add_argument("--raise-cap", type=int, nargs="+", default=[1],
+                        help="uniform depth, or a tapered schedule of sizes "
+                             "per raise depth (e.g. --raise-cap 4 1)")
     parser.add_argument("--stack", type=int, default=200)
     parser.add_argument("--big-blind", type=int, default=2)
     parser.add_argument("--abstraction-samples", type=int, default=800)
@@ -83,6 +89,11 @@ def _write(path, strategy, abstraction, args, results, iterations, seconds):
 
 def main():
     args = parse_args()
+    # One value is the int the rest of the codebase has always taken; more than
+    # one is a taper. Normalised here so `vars(args)` in the output JSON records
+    # which game produced the strategy.
+    args.raise_cap = (args.raise_cap[0] if len(args.raise_cap) == 1
+                      else tuple(args.raise_cap))
     rng = np.random.default_rng(args.seed)
 
     projected = measure({street: args.buckets for street in STREETS},

@@ -40,7 +40,7 @@ from typing import List, Optional, Tuple
 
 import numpy as np
 
-from abstraction.betting import ALL_IN, CHECK_CALL, FOLD
+from abstraction.betting import ALL_IN, CHECK_CALL, FOLD, raise_sizes_at
 from abstraction.translation import translate
 from engine.cards import Card
 from slumbot.api import BIG_BLIND, SMALL_BLIND, STARTING_STACK, HandState
@@ -225,8 +225,9 @@ def legal_mask(node: Node, raise_cap: int = 1) -> np.ndarray:
     mask = np.ones(6, dtype=np.float64)
     if node.to_call <= 0:
         mask[FOLD] = 0.0
-    if node.raises_this_street >= raise_cap:
-        for action in (2, 3, 4, ALL_IN):
+    allowed = raise_sizes_at(raise_cap, node.raises_this_street)
+    for action in (2, 3, 4, ALL_IN):
+        if action not in allowed:
             mask[action] = 0.0
     if not mask.any():
         mask[CHECK_CALL] = 1.0

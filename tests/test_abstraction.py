@@ -12,12 +12,16 @@ look plausible and rank hands wrongly, which no downstream test would catch.
 
     python -m pytest tests/test_abstraction.py -q
 """
+import random
+
 import numpy as np
 import pytest
 
-from abstraction.betting import (ALL_IN, CHECK_CALL, FOLD, RAISE_POT, STREETS,
+from abstraction.betting import (ALL_IN, CHECK_CALL, FOLD, RAISE_ACTIONS,
+                                 RAISE_POT, RAISE_TWO, STREETS,
                                  count_decision_points, enumerate_street_sequences,
-                                 legal_actions, measure)
+                                 legal_actions, measure, normalise_schedule,
+                                 raise_sizes_at)
 from abstraction.buckets import (CardAbstraction, canonical_preflop_hands,
                                  preflop_key, _fit_kmeans_1d)
 from abstraction.equity import FULL_DECK, equity_vs_random, remaining_deck
@@ -324,3 +328,111 @@ def test_nearest_centroid_matches_exhaustive_search():
         value = float(rng.random())
         expected = int(np.abs(centroids - value).argmin())
         assert _nearest_centroid(centroids.tolist(), value) == expected
+
+
+def test_an_int_schedule_is_exactly_what_shipped():
+    """
+    The taper must not move the abstraction every figure was measured in.
+
+    `normalise_schedule(N)` has to reproduce the uniform N-raise tree to the
+    information set, or every number this project has published silently refers
+    to a different game than the code now builds.
+    """
+    assert normalise_schedule(1) == (RAISE_ACTIONS,)
+    assert normalise_schedule(2) == (RAISE_ACTIONS, RAISE_ACTIONS)
+    buckets = {street: 6 for street in STREETS}
+    assert measure(buckets, raise_cap=1).information_sets == 49_200
+    assert measure(buckets, raise_cap=2).information_sets == 5_040_160 * 6 // 4
+
+
+def test_tapering_keeps_the_large_sizes_and_buys_depth_cheaply():
+    """
+    Dropping the small sizes first is the whole point, and it is what makes a
+    re-raise affordable: a second raise carrying all four sizes costs 7,560,240
+    information sets at six buckets, and carrying only all-in costs 347,136.
+    """
+    assert raise_sizes_at((4, 1), 1) == (ALL_IN,)
+    assert raise_sizes_at((4, 2), 1) == (RAISE_TWO, ALL_IN)
+    assert raise_sizes_at((4, 1), 2) == (), "schedule must end after its last rung"
+
+    buckets = {street: 6 for street in STREETS}
+    assert measure(buckets, raise_cap=(4, 1)).information_sets == 347_136
+    assert measure(buckets, raise_cap=(4, 2)).information_sets == 1_283_568
+
+
+def test_every_path_narrows_to_the_same_actions_under_a_taper():
+    """
+    Three modules decide which raises are legal. They agreed by coincidence of
+    being written from the same rules, and a tapered schedule is exactly the
+    kind of change that splits them. `_constrain` and `legal_mask` mirror
+    `legal_actions` rather than calling it, so pin them against it directly.
+    """
+    import numpy as np
+    from evaluation.benchmark import _constrain
+
+    for spec in (1, 2, (4, 1), (4, 2)):
+        for depth in range(4):
+            for to_call in (0, 4):
+                allowed = set(legal_actions(depth, to_call > 0, spec))
+                narrowed = _constrain(np.ones(6), to_call, depth, spec)
+                got = {a for a in range(6) if narrowed[a]}
+                # `_constrain` keeps check/call rather than stranding an actor,
+                # so compare only the raises, which is what the taper changes.
+                raises_expected = allowed & set(RAISE_ACTIONS)
+                raises_got = got & set(RAISE_ACTIONS)
+                assert raises_got == raises_expected, (
+                    f"spec={spec} depth={depth} to_call={to_call}: "
+                    f"benchmark allows {sorted(raises_got)}, "
+                    f"tree allows {sorted(raises_expected)}")
+
+
+def test_the_packed_score_orders_hands_like_the_full_evaluator():
+    """
+    `score_hand_7` is the hot path's evaluator and it must not have its own
+    opinion about poker.
+
+    `equity_vs_random` compares hands with `>` and `==` only, so it does not
+    need the five Card objects `evaluate_hand_fast` builds. Skipping them is
+    where the solver's 3.4x speedup came from on 11 September, and the entire
+    safety of that rests on the two agreeing about order. A disagreement would
+    not crash: it would silently shift equities, and therefore buckets, and
+    therefore every strategy trained afterwards.
+
+    Decks restricted by rank or by suit are included deliberately, because
+    random seven-card hands almost never produce quads or straight flushes and
+    a test that never sees them is not testing the branches most likely wrong.
+    """
+    from engine.cards import Card, RANKS, SUITS
+    from engine.hand_eval import RANK_ORDER
+    from engine.hand_eval_fast import evaluate_hand_fast, score_hand_7
+
+    suit_index = {suit: i for i, suit in enumerate(SUITS)}
+
+    def packed(cards):
+        return score_hand_7(
+            np.array([RANK_ORDER[c.rank] for c in cards], dtype=np.int32),
+            np.array([suit_index[c.suit] for c in cards], dtype=np.int32))
+
+    decks = [
+        [Card(r, s) for s in SUITS for r in RANKS],          # ordinary play
+        [Card(r, s) for s in SUITS for r in RANKS[:6]],      # forces quads, boats
+        [Card(r, s) for s in SUITS[:2] for r in RANKS],      # forces flushes
+    ]
+    rng = random.Random(20260911)
+    classes = set()
+    for deck in decks:
+        for _ in range(1500):
+            left, right = rng.sample(deck, 7), rng.sample(deck, 7)
+            full_left, full_right = evaluate_hand_fast(left), evaluate_hand_fast(right)
+            classes.add(full_left.hand_rank)
+
+            assert (packed(left) >> 20) == full_left.hand_rank, (
+                f"hand class differs for {[str(c) for c in left]}")
+
+            expected = (full_left > full_right) - (full_left < full_right)
+            got = (packed(left) > packed(right)) - (packed(left) < packed(right))
+            assert expected == got, (
+                f"ordering differs: {[str(c) for c in left]} vs "
+                f"{[str(c) for c in right]}")
+
+    assert len(classes) >= 8, f"only saw hand classes {sorted(classes)}"

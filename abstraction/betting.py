@@ -21,6 +21,7 @@ multiplied by the buckets available on each street.
 from __future__ import annotations
 
 from dataclasses import dataclass
+from functools import lru_cache
 from typing import Dict, List, Sequence, Tuple
 
 #: The existing six-action abstraction, in the project's established order.
@@ -31,18 +32,66 @@ RAISE_ACTIONS = (RAISE_HALF, RAISE_POT, RAISE_TWO, ALL_IN)
 STREETS = ("preflop", "flop", "turn", "river")
 
 
-def legal_actions(raises_so_far: int, facing_bet: bool, raise_cap: int,
+@lru_cache(maxsize=None)
+def normalise_schedule(spec: int | Tuple[int, ...]) -> Tuple[Tuple[int, ...], ...]:
+    """
+    A raise schedule: which raise sizes are available at each raise depth.
+
+    An **int** N is the uniform schedule this project has always used, all four
+    sizes available for N raises, so ``normalise_schedule(1)`` reproduces the
+    shipped abstraction exactly.
+
+    A **tuple** tapers, which is how a deeper betting tree becomes affordable.
+    ``(4, 1)`` means four sizes for the opening bet and one for the raise, and
+    the one kept is the *largest*, because :data:`RAISE_ACTIONS` runs from
+    half-pot up to all-in and the deep options are the ones worth keeping. This
+    is the shape Slumbot uses: eleven sizes for an initial bet, eight for a
+    raise, three for a three-bet, one thereafter, with no cap on depth. Tapering
+    is what buys the depth. Measured on this abstraction at six buckets, a
+    second raise costs 7,560,240 information sets if it carries all four sizes
+    and 347,136 if it carries only all-in, a 22-fold difference for a tree that
+    contains a re-raise either way.
+
+    Cached because this sits on the hot path of every traversal.
+    """
+    if isinstance(spec, int):
+        return tuple(RAISE_ACTIONS for _ in range(spec))
+    sizes = len(RAISE_ACTIONS)
+    return tuple(RAISE_ACTIONS[sizes - max(0, min(int(n), sizes)):] for n in spec)
+
+
+def raise_sizes_at(spec: int | Tuple[int, ...], depth: int) -> Tuple[int, ...]:
+    """Raise sizes legal at ``depth`` raises in, empty once the schedule ends."""
+    schedule = normalise_schedule(spec)
+    return schedule[depth] if depth < len(schedule) else ()
+
+
+def max_raises(spec: int | Tuple[int, ...]) -> int:
+    """How deep the schedule goes. Equals ``spec`` when ``spec`` is an int."""
+    return len(normalise_schedule(spec))
+
+
+def legal_actions(raises_so_far: int, facing_bet: bool,
+                  raise_cap: int | Tuple[int, ...],
                   last_action: int | None = None) -> Tuple[int, ...]:
     """
     Actions available given the state of the current street's betting.
 
     Folding with nothing to call is legal in poker but strictly dominated, so it
     is left out of the tree — it would double the branching factor to no
-    purpose. Once the cap is reached only folding or calling remains.
+    purpose. Once the schedule is exhausted only folding or calling remains.
 
     An all-in cannot be raised: a player facing one may only fold or call, since
     there are no chips left to raise with. Treating all-in as an ordinary raise
     inflates the tree with lines that cannot occur.
+
+    ``raise_cap`` is an int for the uniform schedule or a tuple to taper; see
+    :func:`normalise_schedule`. Every other module reaches the betting rules
+    through this function, so a schedule given here reaches the traversal game,
+    the solver's action lists and the tree enumeration without further change.
+    The two mask builders that mirror these rules rather than calling them,
+    ``evaluation.benchmark._constrain`` and ``slumbot.bridge.legal_mask``, use
+    :func:`raise_sizes_at` for the same reason.
     """
     if last_action == ALL_IN:
         return (FOLD, CHECK_CALL)
@@ -51,8 +100,7 @@ def legal_actions(raises_so_far: int, facing_bet: bool, raise_cap: int,
     if facing_bet:
         actions.append(FOLD)
     actions.append(CHECK_CALL)
-    if raises_so_far < raise_cap:
-        actions.extend(RAISE_ACTIONS)
+    actions.extend(raise_sizes_at(raise_cap, raises_so_far))
     return tuple(actions)
 
 
