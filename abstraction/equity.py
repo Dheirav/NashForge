@@ -42,7 +42,8 @@ _DECK_SUITS = np.array([SUITS.index(c.suit) for c in FULL_DECK], dtype=np.int32)
 
 
 @jit(nopython=True, cache=True)
-def _rollouts(hole_r, hole_s, board_r, board_s, picks, deck_r, deck_s):
+def _rollouts(hole_r, hole_s, board_r, board_s, available, samples, draw,
+              seed, deck_r, deck_s):
     """
     Every sampled showdown, compiled.
 
@@ -52,9 +53,17 @@ def _rollouts(hole_r, hole_s, board_r, board_s, picks, deck_r, deck_s):
     reads. Equity only needs an ordering, so this uses `score_hand_7` and stays
     in integers throughout.
     """
-    samples = picks.shape[0]
     board_n = board_r.shape[0]
-    runout = picks.shape[1] - 2
+    runout = draw - 2
+
+    # Sampling lives here rather than in numpy. Drawing `draw` cards used to
+    # cost a (samples x 45) matrix of randoms plus an argpartition per estimate,
+    # which the 11 September profile put at 3.43s of argpartition alone across
+    # 176,106 calls. A partial Fisher-Yates draws the same number of cards
+    # without replacement while touching `draw` entries instead of 45.
+    np.random.seed(seed)
+    pool = available.copy()
+    pool_n = pool.shape[0]
 
     mine_r = np.empty(7, dtype=np.int32)
     mine_s = np.empty(7, dtype=np.int32)
@@ -66,16 +75,25 @@ def _rollouts(hole_r, hole_s, board_r, board_s, picks, deck_r, deck_s):
     wins = 0
     ties = 0
     for i in range(samples):
+        # Partial shuffle: after this the first `draw` entries of `pool` are a
+        # uniform draw without replacement, and the pool stays valid for the
+        # next sample because the swaps only permute it.
+        for k in range(draw):
+            j = k + np.int64(np.random.random() * (pool_n - k))
+            if j >= pool_n:
+                j = pool_n - 1
+            tmp = pool[k]; pool[k] = pool[j]; pool[j] = tmp
+
         for j in range(board_n):
             mine_r[2 + j] = board_r[j]; mine_s[2 + j] = board_s[j]
             opp_r[2 + j] = board_r[j];  opp_s[2 + j] = board_s[j]
         for k in range(runout):
-            card = picks[i, 2 + k]
+            card = pool[2 + k]
             mine_r[2 + board_n + k] = deck_r[card]
             mine_s[2 + board_n + k] = deck_s[card]
             opp_r[2 + board_n + k] = deck_r[card]
             opp_s[2 + board_n + k] = deck_s[card]
-        first = picks[i, 0]; second = picks[i, 1]
+        first = pool[0]; second = pool[1]
         opp_r[0] = deck_r[first];  opp_s[0] = deck_s[first]
         opp_r[1] = deck_r[second]; opp_s[1] = deck_s[second]
 
@@ -129,8 +147,10 @@ def equity_vs_random(
     # more than the two hand evaluations the sample exists for. Partitioning a
     # matrix of random keys gives the same uniform draw without replacement for
     # all samples at once.
-    keys = rng.random((num_samples, available.size))
-    picks = available[np.argpartition(keys, draw - 1, axis=1)[:, :draw]]
+    # One draw from the caller's generator instead of a whole matrix. Fitting
+    # reuses a single generator across situations, so consuming exactly one
+    # value per call keeps that stream deterministic and ordered.
+    seed = int(rng.integers(0, 2 ** 31 - 1))
 
     hole = list(hole)
     return _rollouts(
@@ -138,7 +158,8 @@ def equity_vs_random(
         np.array([SUITS.index(c.suit) for c in hole], dtype=np.int32),
         np.array([RANK_ORDER[c.rank] for c in board], dtype=np.int32),
         np.array([SUITS.index(c.suit) for c in board], dtype=np.int32),
-        np.ascontiguousarray(picks, dtype=np.int64), _DECK_RANKS, _DECK_SUITS)
+        np.ascontiguousarray(available, dtype=np.int64), num_samples, draw,
+        seed, _DECK_RANKS, _DECK_SUITS)
 
 
 def sample_situations(
