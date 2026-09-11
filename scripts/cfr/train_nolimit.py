@@ -34,7 +34,8 @@ sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..",
 import numpy as np  # noqa: E402
 
 from abstraction.betting import STREETS, measure  # noqa: E402
-from abstraction.buckets import CardAbstraction  # noqa: E402
+from abstraction.buckets import CardAbstraction, preflop_key
+from abstraction.equity import FULL_DECK  # noqa: E402
 from cfr import MCCFRSolver, VANILLA  # noqa: E402
 from cfr.play import (always_call_policy, play_hands, strategy_policy,
                       uniform_policy)  # noqa: E402
@@ -60,6 +61,12 @@ def parse_args():
     parser.add_argument("--eval-hands", type=int, default=2000)
     parser.add_argument("--seed", type=int, default=0)
     parser.add_argument("--output", help="write the strategy and summary here")
+    #: The C++ core, roughly 32x faster and answer-changing: bucketing is seeded
+    #: from the cards rather than from Python's tuple hash. Default, with
+    #: --no-native to fall back to the Python solver, which stays as the
+    #: reference `tests/test_native.py` pins the port against.
+    parser.add_argument("--native", action=argparse.BooleanOptionalAction,
+                        default=True, help="use the C++ solver core")
     return parser.parse_args()
 
 
@@ -85,6 +92,69 @@ def _write(path, strategy, abstraction, args, results, iterations, seconds):
                    "information_sets_reached": len(strategy),
                    "iterations_completed": iterations,
                    "seconds": seconds}, handle, indent=2)
+
+
+def _native_tables(abstraction):
+    """
+    The fitted abstraction as flat tables the C++ solver takes.
+
+    Handed over rather than refitted on the other side: k-means over sampled
+    equities happens once and is cheap, and refitting in C++ would be a second
+    clustering that could silently disagree with this one.
+    """
+    preflop = [0] * (52 * 52)
+    for first in range(52):
+        for second in range(52):
+            if first != second:
+                preflop[first * 52 + second] = abstraction._preflop[
+                    preflop_key([FULL_DECK[first], FULL_DECK[second]])]
+    return (preflop,
+            list(abstraction._centroid_list["flop"]),
+            list(abstraction._centroid_list["turn"]),
+            list(abstraction._centroid_list["river"]))
+
+
+def _train_native(args, abstraction, projected):
+    """
+    Train with the C++ core, then write the same pickle the Python path writes.
+
+    Everything downstream -- `evaluation.benchmark`, the Slumbot bridge, the GUI
+    -- reads that file and must not be able to tell which solver produced it.
+
+    The native path CHANGES ANSWERS: bucketing is seeded from the cards rather
+    than from Python's tuple hash, so a hand near a boundary can fall either
+    side. The two were measured playing indistinguishably, 16.2 and 23.1 BB/100
+    apart against random and always-call, but strategies from the two paths are
+    not comparable with each other. See docs/retrain-plan.md.
+    """
+    import pokerbot_native
+
+    schedule = ([4] * args.raise_cap if isinstance(args.raise_cap, int)
+                else list(args.raise_cap))
+    preflop, flop, turn, river = _native_tables(abstraction)
+
+    print(f"\nTraining MCCFR (native) for {args.iterations:,} iterations...")
+    solver = pokerbot_native.NoLimitSolver(
+        preflop, flop, turn, river, args.equity_samples, args.stack,
+        args.big_blind // 2, args.big_blind, schedule, args.seed)
+    start = time.perf_counter()
+    solver.train(args.iterations)
+    elapsed = time.perf_counter() - start
+    print(f"  {elapsed:.1f}s ({elapsed / args.iterations * 1000:.3f} ms/iteration)")
+    print(f"  information sets reached: {solver.information_sets():,} "
+          f"of {projected.information_sets:,} in the abstraction")
+
+    strategy = {key: np.asarray(value, dtype=np.float64)
+                for key, value in solver.average_strategy().items()}
+
+    # Scored and written exactly as the Python path does, through the same
+    # Python game, so the file is indistinguishable downstream and the printed
+    # baselines are comparable with every previous run's.
+    game = NoLimitHoldem(abstraction, starting_stack=args.stack,
+                         big_blind=args.big_blind, raise_cap=args.raise_cap,
+                         equity_samples=args.equity_samples)
+    _report_and_write(args, game, abstraction, strategy,
+                      solver.information_sets(), elapsed)
 
 
 def main():
@@ -114,6 +184,9 @@ def main():
     game = NoLimitHoldem(abstraction, starting_stack=args.stack,
                          big_blind=args.big_blind, raise_cap=args.raise_cap,
                          equity_samples=args.equity_samples)
+
+    if args.native:
+        return _train_native(args, abstraction, projected)
 
     print(f"\nTraining MCCFR for {args.iterations:,} iterations...")
     solver = MCCFRSolver(game, rule=VANILLA, seed=args.seed)
@@ -150,6 +223,11 @@ def main():
           f"of {projected.information_sets:,} in the abstraction")
 
     strategy = solver.average_strategy()
+    _report_and_write(args, game, abstraction, strategy, len(solver.nodes), elapsed)
+
+
+def _report_and_write(args, game, abstraction, strategy, information_sets, elapsed):
+    """Score against the baselines and write the pickle, for either solver."""
     trained = strategy_policy(strategy)
 
     print(f"\nHead-to-head over {args.eval_hands:,} hands, seats alternating.")
@@ -181,7 +259,7 @@ def main():
                          "args": vars(args), "results": results}, handle)
         with open(os.path.splitext(args.output)[0] + ".json", "w") as handle:
             json.dump({"args": vars(args), "results": results,
-                       "information_sets_reached": len(solver.nodes),
+                       "information_sets_reached": information_sets,
                        "seconds": elapsed}, handle, indent=2)
         print(f"\nWrote {args.output}")
 

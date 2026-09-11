@@ -36,6 +36,7 @@ total=${#commands[@]}
 [ "$total" -gt 0 ] || { echo "no commands on stdin" >&2; exit 2; }
 
 started=$(date +%s)
+last_reported=0
 echo "running $total commands, $jobs at a time, logs in $log_dir"
 
 declare -a status
@@ -60,11 +61,21 @@ for i in "${!commands[@]}"; do
     sleep 1
     done_now=$(ls "$log_dir"/*.status 2>/dev/null | wc -l)
     elapsed=$(( $(date +%s) - started ))
-    if [ "$done_now" -gt 0 ]; then
-      # ETA from the measured rate, never guessed up front.
-      eta=$(( elapsed * (total - done_now) / done_now ))
-      printf '\r  %d/%d done, %ds elapsed, eta %dm%02ds   ' \
-             "$done_now" "$total" "$elapsed" $((eta/60)) $((eta%60))
+    if [ "$done_now" -gt 0 ] && [ "$done_now" != "$last_reported" ]; then
+      # ETA from the measured rate, and divided by the number of workers:
+      # elapsed*(remaining/done) is the SERIAL estimate, which overstated a
+      # 6-job 2-worker run by 105 minutes against an actual 60 on 11 September.
+      eta=$(( elapsed * (total - done_now) / done_now / jobs ))
+      # Only when stdout is a terminal. Carriage returns into a log file leave
+      # one enormous line, which is what that run produced.
+      if [ -t 1 ]; then
+        printf '\r  %d/%d done, %ds elapsed, eta %dm%02ds   ' \
+               "$done_now" "$total" "$elapsed" $((eta/60)) $((eta%60))
+      else
+        printf '  %d/%d done, %ds elapsed, eta %dm%02ds\n' \
+               "$done_now" "$total" "$elapsed" $((eta/60)) $((eta%60))
+      fi
+      last_reported=$done_now
     fi
   done
   run_one "$i" &
@@ -78,6 +89,6 @@ for i in "${!commands[@]}"; do
   [ "$s" = "ok" ] || { failed=$((failed+1)); echo ""; echo "  job $i $s: ${commands[$i]}"; echo "    log: $log_dir/job-$i.log"; }
 done
 elapsed=$(( $(date +%s) - started ))
-printf '\r  %d/%d done in %dm%02ds, %d failed%s\n' \
-       "$total" "$total" $((elapsed/60)) $((elapsed%60)) "$failed" "$(printf '%*s' 20 '')"
+printf '%s  %d/%d done in %dm%02ds, %d failed\n' \
+       "$([ -t 1 ] && printf '\r')" "$total" "$total" $((elapsed/60)) $((elapsed%60)) "$failed"
 exit $(( failed > 0 ))

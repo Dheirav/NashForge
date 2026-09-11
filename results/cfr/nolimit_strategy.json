@@ -9,30 +9,31 @@
     "equity_samples": 40,
     "eval_hands": 20000,
     "seed": 0,
-    "output": "results/cfr/nolimit_strategy_v2_250k.pkl"
+    "output": "results/cfr/nolimit_strategy.pkl",
+    "native": true
   },
   "results": {
     "uniform random": {
-      "chips_per_hand": 4.77205,
-      "stderr": 0.20590857948864186,
+      "chips_per_hand": 5.1251,
+      "stderr": 0.21168842516530617,
       "ci95": [
-        4.3684691842022625,
-        5.175630815797738
+        4.7101906866759995,
+        5.540009313324
       ],
-      "bb_per_100": 238.60250000000002,
+      "bb_per_100": 256.255,
       "separated_from_zero": true
     },
     "always call": {
-      "chips_per_hand": 5.65435,
-      "stderr": 0.1987906051329123,
+      "chips_per_hand": 13.444475,
+      "stderr": 0.2539311777349722,
       "ci95": [
-        5.264720413939492,
-        6.043979586060508
+        12.946769891639455,
+        13.942180108360546
       ],
-      "bb_per_100": 282.7175,
+      "bb_per_100": 672.22375,
       "separated_from_zero": true
     }
   },
-  "information_sets_reached": 23470,
-  "seconds": 17256.84672962292
+  "information_sets_reached": 23454,
+  "seconds": 108.84362916700775
 }
