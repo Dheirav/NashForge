@@ -110,7 +110,7 @@ def _rollouts(hole_r, hole_s, board_r, board_s, available, samples, draw,
 
 def card_index(card: Card) -> int:
     """Position of ``card`` in :data:`FULL_DECK`."""
-    return _CARD_INDEX[(card.rank, card.suit)]
+    return card.index
 
 
 def remaining_deck(known: Sequence[Card]) -> np.ndarray:

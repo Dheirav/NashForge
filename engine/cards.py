@@ -10,6 +10,12 @@ class Card:
         assert suit in SUITS, f"Invalid suit: {suit}"
         self.rank = rank
         self.suit = suit
+        #: Position in the standard deck, suit * 13 + rank. Computed once here
+        #: rather than looked up per use: the 52 cards are built at import and
+        #: shared by every deck, so this costs 52 multiplications in total and
+        #: turns `card_index(card)` from a tuple build plus a dict lookup into
+        #: an attribute read, on a path that runs several times per decision.
+        self.index = SUITS.index(suit) * 13 + RANKS.index(rank)
 
     def __repr__(self):
         return f"{self.rank}{self.suit}"

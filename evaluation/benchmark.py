@@ -53,6 +53,7 @@ from typing import Callable, Dict, Hashable, List, Optional, Sequence
 import numpy as np
 
 from abstraction.betting import ALL_IN, CHECK_CALL, FOLD, raise_sizes_at
+from abstraction.equity import card_index
 from abstraction.betting import legal_actions as solver_legal_actions
 from engine import Action, PokerGame, get_abstract_action_mask
 from training.fitness import abstract_action_to_engine_action, finish_hand
@@ -162,10 +163,30 @@ def cfr_agent(strategy: Dict[Hashable, np.ndarray], abstraction,
     was a guess. The GUI shows the policy, and re-deriving it alongside the
     agent is how the shown numbers and the played ones drift apart.
     """
+    # Buckets memoised on the cards, and seeded from them.
+    #
+    # Two problems, one fix. The lookup was recomputing a Monte Carlo equity
+    # estimate on every decision of a street for cards that had not changed, and
+    # it passed the agent's own advancing generator, so the SAME hole and board
+    # could bucket differently from one decision to the next. Training seeds each
+    # situation from its own key and therefore gives it one fixed bucket, so the
+    # agent being scored was bucketing inconsistently with the way the strategy
+    # it plays was fitted, and adding noise to every measurement.
+    buckets: dict = {}
+
+    def bucket_for(hole, board):
+        key = (tuple(c.index for c in hole), tuple(c.index for c in board))
+        found = buckets.get(key)
+        if found is None:
+            found = abstraction.bucket(
+                hole, board, np.random.default_rng(hash(key) % (2 ** 32)))
+            buckets[key] = found
+        return found
+
     def act(game, player_id, mask, history):
         hole = game.players[player_id].hole_cards
         board = game.state.community_cards
-        bucket = abstraction.bucket(hole, board, rng)
+        bucket = bucket_for(hole, board)
 
         probabilities = strategy.get(f"{bucket}|{history}")
         legal = np.flatnonzero(mask)
@@ -191,18 +212,31 @@ def cfr_agent(strategy: Dict[Hashable, np.ndarray], abstraction,
             # quietly.
             return guess()
 
-        weights = np.zeros(NUM_ACTIONS, dtype=np.float64)
-        for action, probability in zip(actions, np.asarray(probabilities, dtype=np.float64)):
-            weights[action] = probability
-        weights *= mask
+        # Plain lists rather than numpy: six elements, where numpy's per-call
+        # overhead dwarfs the arithmetic. `_nearest_centroid` uses bisect for
+        # the same reason and says so.
+        weights = [0.0] * NUM_ACTIONS
+        for action, probability in zip(actions, probabilities):
+            weights[action] = float(probability) * float(mask[action])
 
-        total = weights.sum()
+        total = 0.0
+        for value in weights:
+            total += value
         if total <= 0.0:
             return guess()
-        distribution = weights / total
+
         if probe is not None:
-            probe[:] = [distribution]
-        return int(rng.choice(NUM_ACTIONS, p=distribution))
+            probe[:] = [np.asarray(weights, dtype=np.float64) / total]
+        # Inverse-CDF sampling from one uniform draw. `rng.choice(n, p=...)`
+        # validates and normalises the distribution on every call, which is most
+        # of its cost at this size.
+        draw = rng.random() * total
+        cumulative = 0.0
+        for action, value in enumerate(weights):
+            cumulative += value
+            if draw < cumulative:
+                return action
+        return NUM_ACTIONS - 1
     return act
 
 
