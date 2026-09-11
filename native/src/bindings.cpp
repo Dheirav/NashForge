@@ -7,6 +7,7 @@
 #include "nolimit.hpp"
 #include "mccfr.hpp"
 #include "kuhn.hpp"
+#include "nolimit_game.hpp"
 #include <nanobind/stl/map.h>
 #include <nanobind/stl/string.h>
 #include <nanobind/stl/pair.h>
@@ -85,4 +86,45 @@ NB_MODULE(pokerbot_native, m) {
         return out;
     }, nb::arg("iterations"), nb::arg("seed"),
        "Solve Kuhn poker. The game value to player 0 is -1/18 at equilibrium.");
+
+    // --- the no-limit solver -----------------------------------------------
+    //
+    // The fitted abstraction is handed over rather than refitted here. k-means
+    // over sampled equities is cheap and happens once, and refitting in C++
+    // would be a second clustering that could silently disagree with the one
+    // every existing strategy was built against.
+    nb::class_<MCCFR<NoLimitGame>>(m, "NoLimitSolver")
+        .def("__init__", [](MCCFR<NoLimitGame>* self,
+                            const std::vector<int>& preflop,
+                            const std::vector<double>& flop,
+                            const std::vector<double>& turn,
+                            const std::vector<double>& river,
+                            int equity_samples, int starting_stack,
+                            int small_blind, int big_blind,
+                            const std::vector<int>& schedule, uint64_t seed) {
+            Abstraction abstraction;
+            abstraction.preflop.assign(preflop.begin(), preflop.end());
+            abstraction.centroids = {flop, turn, river};
+            abstraction.equity_samples = equity_samples;
+            RaiseSchedule sched;
+            for (int n : schedule) sched.sizes.push_back(n);
+            new (self) MCCFR<NoLimitGame>(
+                NoLimitGame(std::move(abstraction), starting_stack, small_blind,
+                            big_blind, std::move(sched)),
+                UpdateRule::vanilla(), seed);
+        }, nb::arg("preflop"), nb::arg("flop"), nb::arg("turn"), nb::arg("river"),
+           nb::arg("equity_samples"), nb::arg("starting_stack"),
+           nb::arg("small_blind"), nb::arg("big_blind"), nb::arg("schedule"),
+           nb::arg("seed"))
+        .def("train", &MCCFR<NoLimitGame>::train, nb::arg("iterations"),
+             nb::call_guard<nb::gil_scoped_release>(),
+             "Run `iterations` passes, each traversing once per player.")
+        .def("iterations", &MCCFR<NoLimitGame>::iterations)
+        .def("information_sets", [](const MCCFR<NoLimitGame>& s) { return s.nodes().size(); })
+        .def("average_strategy", [](const MCCFR<NoLimitGame>& solver) {
+            std::map<std::string, std::vector<double>> out;
+            for (const auto& [key, node] : solver.nodes())
+                out[key] = node.average_strategy();
+            return out;
+        }, "Information-set key -> action probabilities, as the Python returns.");
 }

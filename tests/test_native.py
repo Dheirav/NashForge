@@ -173,3 +173,50 @@ def test_the_cpp_solver_converges_to_kuhns_analytic_value():
     mean = sum(values) / len(values)
     assert abs(mean - (-1 / 18)) < 0.002, (
         f"converged to {mean:+.5f}, expected {-1/18:+.5f}; seeds {values}")
+
+
+def test_the_cpp_no_limit_solver_produces_a_usable_strategy():
+    """
+    The solver runs end to end and returns something the Python can play.
+
+    Deliberately small: the acceptance test that matters is the one run by hand
+    on 11 September, where C++ and Python solvers at 40,000 iterations were
+    scored by the same harness and agreed to 16 and 23 BB/100 against random and
+    always-call, well inside the measurement interval. That takes six minutes
+    because of the Python arm, so it does not belong in the suite. This checks
+    the wiring: keys are well formed, distributions are distributions.
+    """
+    from abstraction.buckets import CardAbstraction, preflop_key
+    from abstraction.equity import FULL_DECK
+
+    abstraction = CardAbstraction(preflop_buckets=4, postflop_buckets=4,
+                                  samples=60, equity_samples=8)
+    abstraction.fit(np.random.default_rng(0))
+
+    preflop = [0] * (52 * 52)
+    for first in range(52):
+        for second in range(52):
+            if first != second:
+                preflop[first * 52 + second] = abstraction._preflop[
+                    preflop_key([FULL_DECK[first], FULL_DECK[second]])]
+
+    solver = native.NoLimitSolver(
+        preflop,
+        list(abstraction._centroid_list["flop"]),
+        list(abstraction._centroid_list["turn"]),
+        list(abstraction._centroid_list["river"]),
+        8, 200, 1, 2, [4], 0)
+    solver.train(300)
+
+    strategy = solver.average_strategy()
+    assert strategy, "solver produced no information sets"
+    assert solver.iterations() == 300
+
+    for key, probabilities in strategy.items():
+        assert "|" in key, f"malformed information-set key {key!r}"
+        bucket, history = key.split("|", 1)
+        assert bucket.isdigit(), f"bucket is not a number in {key!r}"
+        assert set(history) <= set("012345/"), f"unexpected history in {key!r}"
+        assert 2 <= len(probabilities) <= 6, f"{key!r} has {len(probabilities)} actions"
+        assert abs(sum(probabilities) - 1.0) < 1e-9, f"{key!r} is not a distribution"
+        assert all(p >= 0.0 for p in probabilities), f"{key!r} has a negative probability"
