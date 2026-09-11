@@ -24,7 +24,7 @@ import numpy as np
 
 from engine.cards import RANKS, SUITS, Card
 from engine.hand_eval import RANK_ORDER
-from engine.hand_eval_fast import evaluate_hand_fast, jit, score_hand_7
+from engine.hand_eval_fast import evaluate_hand_fast, jit, score_hand_7_fast
 
 #: The 52 distinct cards, in a fixed order, built once.
 FULL_DECK: List[Card] = [Card(rank, suit) for suit in SUITS for rank in RANKS]
@@ -99,8 +99,8 @@ def _rollouts(hole_r, hole_s, board_r, board_s, available, samples, draw,
         opp_r[0] = deck_r[first];  opp_s[0] = deck_s[first]
         opp_r[1] = deck_r[second]; opp_s[1] = deck_s[second]
 
-        mine = score_hand_7(mine_r, mine_s)
-        theirs = score_hand_7(opp_r, opp_s)
+        mine = score_hand_7_fast(mine_r, mine_s)
+        theirs = score_hand_7_fast(opp_r, opp_s)
         if mine > theirs:
             wins += 1
         elif mine == theirs:

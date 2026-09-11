@@ -436,3 +436,41 @@ def test_the_packed_score_orders_hands_like_the_full_evaluator():
                 f"{[str(c) for c in right]}")
 
     assert len(classes) >= 8, f"only saw hand classes {sorted(classes)}"
+
+
+def test_the_table_evaluator_matches_the_reference_one():
+    """
+    `score_hand_7_fast` replaces two scans with table reads and must not have
+    its own opinion about poker.
+
+    It is what `_rollouts` calls, so a disagreement would not crash: it would
+    shift every equity estimate, every bucket, and every strategy trained after
+    it. `score_hand_7` stays as the reference the fast one is pinned against,
+    the same relationship `score_hand_7` itself has with `evaluate_hand_fast`.
+
+    Restricted decks are included because random seven-card hands almost never
+    make quads or straight flushes, and those branches are the ones most likely
+    to be wrong.
+    """
+    from engine.cards import Card, RANKS, SUITS
+    from engine.hand_eval import RANK_ORDER
+    from engine.hand_eval_fast import score_hand_7, score_hand_7_fast
+
+    suit_index = {suit: i for i, suit in enumerate(SUITS)}
+    decks = [
+        [Card(r, s) for s in SUITS for r in RANKS],
+        [Card(r, s) for s in SUITS for r in RANKS[:6]],
+        [Card(r, s) for s in SUITS[:2] for r in RANKS],
+    ]
+    rng = random.Random(20260911)
+    classes = set()
+    for deck in decks:
+        for _ in range(2000):
+            cards = rng.sample(deck, 7)
+            ranks = np.array([RANK_ORDER[c.rank] for c in cards], dtype=np.int32)
+            suits = np.array([suit_index[c.suit] for c in cards], dtype=np.int32)
+            reference = score_hand_7(ranks, suits)
+            assert score_hand_7_fast(ranks, suits) == reference, (
+                f"table evaluator differs on {[str(c) for c in cards]}")
+            classes.add(reference >> 20)
+    assert len(classes) >= 8, f"only saw hand classes {sorted(classes)}"
