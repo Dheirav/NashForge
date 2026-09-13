@@ -146,3 +146,70 @@ def test_a_companion_too_far_in_depth_is_not_asked():
     player.companions = [rung(100)]
     assert player.companion_for(60).depth_bb == 100
     assert player.companion_for(40) is None
+
+
+def test_the_companion_s_shove_with_a_middling_hand_becomes_a_call(player_with_companion):
+    # 13 September, hand 3 against mr_hide: T9 on A-T-4 facing a bet after a
+    # three-bet. The companion's only raises are huge; a shove here is taken as
+    # "raise" and softened to a call unless the hand is in the top bucket.
+    state = {"hand_number": 3, "phase": "flop", "board": ["Ah", "Tc", "4s"],
+             "your_hole_cards": ["Ts", "9h"], "pot": 1627, "your_stack": 7175,
+             "opponent_stacks": [11725], "to_call": 577, "min_raise": 1154, "max_raise": 7175,
+             "action_history": blinds() + [entry(0, "raise", 200), entry(1, "raise", 525),
+                                           entry(0, "call", 525), entry(1, "raise", 577, "flop")]}
+    shoves = 0
+    for _ in range(40):
+        out = player_with_companion.decide(state, ["fold", "call", "raise"], 0)
+        assert out["record"]["companion"] or out["record"]["fallback"]
+        shoves += out["action"] == "raise" and out["params"]["amount"] == 7175
+    assert shoves == 0
+
+
+def test_a_station_is_only_believed_after_enough_bets(tmp_path):
+    from chipzen.opponents import MIN_OBSERVED, Profiles
+    profiles = Profiles(str(tmp_path / "opp.json"))
+    hand = {"action_history": blinds() + [entry(0, "raise", 300), entry(1, "call", 300),
+                                          entry(1, "check", 0, "flop"), entry(0, "raise", 600, "flop"),
+                                          entry(1, "call", 600, "flop")]}
+    for _ in range(MIN_OBSERVED // 2 - 1):
+        profiles.observe(hand, 0, "station")
+    assert profiles.fold_to_bet("station")[0] is None
+    assert not profiles.never_folds("station")
+    profiles.observe(hand, 0, "station")
+    rate, n = profiles.fold_to_bet("station")
+    assert n == MIN_OBSERVED and rate == 0.0
+    assert profiles.never_folds("station")
+    profiles.save()
+    assert Profiles(str(tmp_path / "opp.json")).rows["station"]["bets_faced"] == MIN_OBSERVED
+
+
+def test_only_the_opponent_s_answers_to_our_bets_are_counted():
+    from chipzen.opponents import Profiles
+    profiles = Profiles("/nonexistent/opp.json")
+    # They raise, we call: nothing to count. Then we bet the flop and they fold.
+    hand = {"action_history": blinds() + [entry(1, "raise", 300), entry(0, "call", 300),
+                                          entry(0, "raise", 600, "flop"), entry(1, "fold", 0, "flop")]}
+    profiles.observe(hand, 0, "x")
+    assert profiles.rows["x"] == {"bets_faced": 1, "folds": 1, "calls": 0, "raises": 0, "hands": 1}
+
+
+def test_a_bluff_is_withheld_against_a_station_but_a_value_bet_is_not(player):
+    from chipzen.opponents import Profiles
+    player.profiles = Profiles("/nonexistent/opp.json")
+    player.profiles.rows["station"] = {"bets_faced": 500, "folds": 10, "calls": 490, "raises": 0, "hands": 300}
+    player.opponent = "station"
+    try:
+        weak = {"hand_number": 1, "phase": "flop", "board": ["Qc", "9s", "Kd"], "your_hole_cards": ["3h", "2c"],
+                "pot": 400, "your_stack": 9800, "opponent_stacks": [9800], "to_call": 0,
+                "min_raise": 100, "max_raise": 9800,
+                "action_history": blinds() + [entry(0, "raise", 200), entry(1, "call", 200),
+                                              entry(1, "check", 0, "flop")]}
+        strong = dict(weak, your_hole_cards=["Kc", "Kh"])
+        weak_raises = sum(player.decide(weak, ["check", "raise"], 0)["action"] == "raise" for _ in range(60))
+        strong_raises = sum(player.decide(strong, ["check", "raise"], 0)["action"] == "raise" for _ in range(60))
+        assert weak_raises == 0
+        assert strong_raises > 0
+        assert player.stats.bluffs_withheld > 0
+    finally:
+        player.profiles = None
+        player.opponent = None

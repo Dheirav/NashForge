@@ -40,8 +40,9 @@ from typing import Dict, List, Optional, Sequence
 
 import numpy as np
 
-from abstraction.betting import ALL_IN, CHECK_CALL, FOLD, RAISE_POT
+from abstraction.betting import ALL_IN, CHECK_CALL, FOLD, RAISE_ACTIONS, RAISE_POT
 from chipzen.bridge import Hand, cards, legal_mask, replay, to_chipzen
+from chipzen.opponents import Profiles
 from evaluation.benchmark import cfr_agent
 
 
@@ -64,6 +65,8 @@ class Stats:
     consulted: int = 0
     off_abstraction: int = 0
     companion_hits: int = 0
+    shoves_softened: int = 0
+    bluffs_withheld: int = 0
     fallbacks: int = 0
     miss_depths: Dict[int, int] = field(default_factory=dict)
     depths_used: Dict[str, int] = field(default_factory=dict)
@@ -118,6 +121,13 @@ class ArenaPlayer:
                                  key=lambda s: s.depth_bb)
         self.stats = Stats()
         self.probe: List = []
+        #: Set by the client at match start; read by the one adjustment below.
+        self.opponent: Optional[str] = None
+        self.profiles: Optional[Profiles] = None
+
+    #: A raise with a hand this weak or weaker is a bluff for the purpose of
+    #: withholding it: the bottom two of six strength classes.
+    BLUFF_STRENGTH = 1
 
     def solver_for(self, effective_bb: float) -> Solver:
         """Nearest rung in ratio, so 70bb goes to 100 rather than to 50 by a hair."""
@@ -177,9 +187,26 @@ class ArenaPlayer:
                 if deep.misses[0] == deep_before:
                     companion_used = f"{deep.depth_bb:g}bb{deep.schedule}"
                     self.stats.companion_hits += 1
+                    # The (4, 2) taper keeps only two-times-pot and all-in for
+                    # a re-raise, so whenever it wants to raise it shoves. On
+                    # 13 September that was 7,175 chips with middle pair into
+                    # jacks. A shove from the companion is taken as "raise",
+                    # and only the top bucket gets to make it a shove.
+                    if choice == ALL_IN and arena[CHECK_CALL] and \
+                            self._bucket(deep, hole, board) < self._top(deep):
+                        choice = CHECK_CALL
+                        self.stats.shoves_softened += 1
             if companion_used is None:
                 fell_back = True
                 choice = self._fallback(solver, hole, board, arena, state)
+        adjusted = None
+        if choice in RAISE_ACTIONS and arena[CHECK_CALL] and self.profiles is not None \
+                and self.profiles.never_folds(self.opponent) \
+                and self._bucket(solver, hole, board) <= self.BLUFF_STRENGTH:
+            # A measured station: bluffing it only builds a pot we are behind in.
+            choice = CHECK_CALL
+            adjusted = "bluff withheld"
+            self.stats.bluffs_withheld += 1
         if not arena[choice]:
             choice = int(np.flatnonzero(arena)[0])
 
@@ -203,11 +230,32 @@ class ArenaPlayer:
             "to_call": to_call, "history": node.history,
             "effective_bb": round(hand.effective_bb, 1), "solver": key,
             "miss": missed, "companion": companion_used, "fallback": fell_back,
+            "adjusted": adjusted, "opponent": self.opponent,
             "legal": [int(m) for m in mask], "choice": int(choice),
             "sent": outgoing, "ms": round(elapsed, 2),
         }
         return {"action": outgoing["action"], "params": outgoing["params"],
                 "record": record}
+
+    @staticmethod
+    def _bucket(solver: Solver, hole, board) -> int:
+        """
+        The hand's strength class, 0 to 5, as the solver itself would read it.
+
+        With a texture-aware abstraction the stored bucket also carries the
+        board's class; only the strength part is wanted for a threshold.
+        """
+        key = (tuple(c.index for c in hole), tuple(c.index for c in board))
+        bucket = solver.abstraction.bucket(
+            hole, board, np.random.default_rng(hash(key) % (2 ** 32)))
+        if board and hasattr(solver.abstraction, "strength_of"):
+            street = {3: "flop", 4: "turn", 5: "river"}[len(board)]
+            return solver.abstraction.strength_of(bucket, street)
+        return bucket
+
+    @staticmethod
+    def _top(solver: Solver) -> int:
+        return int(getattr(solver.abstraction, "postflop_buckets", 6)) - 1
 
     def _fallback(self, solver: Solver, hole, board, mask, state) -> int:
         """
@@ -216,11 +264,8 @@ class ArenaPlayer:
         Buckets run from 0 (weakest) to 5 (strongest). The price of a call is
         measured against the pot as the arena reports it, bet included.
         """
-        key = (tuple(c.index for c in hole), tuple(c.index for c in board))
-        bucket = solver.abstraction.bucket(
-            hole, board, np.random.default_rng(hash(key) % (2 ** 32)))
-        top = len(solver.abstraction.centroids("flop")) - 1 \
-            if hasattr(solver.abstraction, "centroids") else 5
+        bucket = self._bucket(solver, hole, board)
+        top = self._top(solver)
         to_call = int(state.get("to_call") or 0)
         pot = int(state.get("pot") or 0)
 

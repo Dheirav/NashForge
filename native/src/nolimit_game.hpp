@@ -29,6 +29,30 @@ struct Abstraction {
     /// Sorted centroids for flop, turn, river.
     std::array<std::vector<double>, 3> centroids;
     int equity_samples = 40;
+    /// Fold the board's texture into the postflop bucket. Mirrors
+    /// `abstraction.buckets.board_texture` exactly; see that docstring for why.
+    bool texture = false;
+
+    static int board_texture(const int* board, int n) {
+        if (n == 0) return 0;
+        int suits[4] = {0, 0, 0, 0};
+        bool ranks[14] = {false};          // index 0 is the ace playing low
+        for (int i = 0; i < n; ++i) {
+            ++suits[deck_suit(board[i])];
+            ranks[deck_rank(board[i]) + 1] = true;
+        }
+        int most = 0;
+        for (int s : suits) most = std::max(most, s);
+        const int flush = most <= 2 ? 0 : (most == 3 ? 1 : 2);
+        if (ranks[13]) ranks[0] = true;
+        int straight = 0;
+        for (int low = 0; low <= 9 && !straight; ++low) {
+            int count = 0;
+            for (int r = low; r <= low + 4; ++r) count += ranks[r] ? 1 : 0;
+            if (count >= 4) straight = 1;
+        }
+        return flush * 2 + straight;
+    }
 
     /// Mirrors `_nearest_centroid`: bisect_left, ties to the lower index.
     static int nearest(const std::vector<double>& sorted, double value) {
@@ -208,8 +232,11 @@ private:
         const double value = equity_vs_random(cards, 2, board, s.bet.board_n,
                                               abstraction_.equity_samples, key * 0x9E3779B97F4A7C15ULL);
         const int street_index = s.bet.board_n - 3;
-        const int bucket = Abstraction::nearest(
+        int bucket = Abstraction::nearest(
             abstraction_.centroids[static_cast<size_t>(street_index)], value);
+        if (abstraction_.texture)
+            bucket += static_cast<int>(abstraction_.centroids[static_cast<size_t>(street_index)].size())
+                      * Abstraction::board_texture(board, s.bet.board_n);
         // Cleared wholesale at the ceiling, as games/nolimit.py does.
         //
         // This was omitted when the game was ported and it cost a run: the

@@ -83,6 +83,33 @@ ignored API challenges. The queue is joined automatically whenever the bot is
 idle, inbound challenges are accepted, and the rest is the dashboard: a ranked
 challenge to `Blueprint` or `RoboPoker`, and tonight's 22:30 remote bracket.
 
+## What was done on the evening of 13 September
+
+After three rated losses to `mr_hide` (nine of eleven showdowns lost), four
+fixes, all in the code and tested, with the solvers they need training:
+
+1. **The companion no longer shoves with a middling hand.** Its `(4, 2)` tree
+   has only two-times-pot and all-in for a re-raise, so its every raise was a
+   shove; now a companion shove with anything below the top strength class is
+   taken as a call. (`chipzen/player.py`, `shoves_softened` in the stats.)
+2. **A full-size raise-cap-2 solver** (every size on the re-raise) at 100bb,
+   200 samples, three million iterations, training into `results/cfr/ladder200/
+   cap2_100bb.pkl`. The runner prefers a `cap2_*` companion over a taper at the
+   same depth.
+3. **Board texture in the bucket.** `abstraction.buckets.board_texture` classes a
+   board by flush (two or fewer, three, four or more of a suit) and by four ranks
+   within five; the postflop bucket becomes strength plus six times that class.
+   Mirrored in the native core (`Abstraction::board_texture`) and pinned equal on
+   3,000 random boards by `tests/test_native.py`. Off by default; the panel is
+   untouched. A texture-aware ladder is training into `results/cfr/ladder200t/`
+   (`--ladder-dir results/cfr/ladder200t` to play it).
+4. **A measured opponent profile.** `chipzen/opponents.py` counts, per opponent
+   and across matches, how they answer our bets. Below a 25 percent fold-to-bet
+   over at least 100 bets, the bot withholds bluffs (a raise with a bottom-two
+   strength class becomes a check or call); value bets are untouched. From the
+   logs so far: `mr_hide` folds to 14 percent of bets over 105, `hoops` 34
+   percent, so the adjustment fires against the first and not the second.
+
 ## Order
 
 1. Tonight: companions at every depth (running). Restart between matches.

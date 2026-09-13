@@ -8,14 +8,14 @@
 set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 DIR="$HOME/pokerbot-scratch/ladder"; mkdir -p "$DIR"
-OUT_DIR="${LADDER_DIR:-results/cfr/ladder}"; SAMPLES="${EQUITY_SAMPLES:-40}"; mkdir -p "$OUT_DIR"
+OUT_DIR="${LADDER_DIR:-results/cfr/ladder}"; SAMPLES="${EQUITY_SAMPLES:-40}"; TEXTURE_FLAG="${TEXTURE:+--texture}"; mkdir -p "$OUT_DIR"
 cd "$ROOT"
 for bb in "$@"; do
   out="$OUT_DIR/taper42_${bb}bb.pkl"
   if [ -f "$out" ]; then echo "$(date '+%H:%M:%S') ${bb}bb taper exists, skipping"; continue; fi
   echo "$(date '+%H:%M:%S') ${bb}bb taper (4,2): training"
   venv/bin/python scripts/cfr/train_nolimit.py --iterations 1000000 --raise-cap 4 2 \
-      --stack $((bb*2)) --big-blind 2 --equity-samples "$SAMPLES" --eval-hands 2000 --output "$out" > "$DIR/$(basename "$OUT_DIR")_taper42_${bb}bb.log" 2>&1 \
+      --stack $((bb*2)) --big-blind 2 --equity-samples "$SAMPLES" $TEXTURE_FLAG --eval-hands 2000 --output "$out" > "$DIR/$(basename "$OUT_DIR")_taper42_${bb}bb.log" 2>&1 \
     && echo "$(date '+%H:%M:%S') ${bb}bb taper: done  $(grep -E 'ms/iteration' "$DIR/taper42_${bb}bb.log" | tail -1)" \
     || echo "$(date '+%H:%M:%S') ${bb}bb taper: FAILED, see $DIR/$(basename "$OUT_DIR")_taper42_${bb}bb.log"
 done

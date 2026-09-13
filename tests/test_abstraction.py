@@ -474,3 +474,51 @@ def test_the_table_evaluator_matches_the_reference_one():
                 f"table evaluator differs on {[str(c) for c in cards]}")
             classes.add(reference >> 20)
     assert len(classes) >= 8, f"only saw hand classes {sorted(classes)}"
+
+
+# ---------------------------------------------------------------------------
+# Board texture
+# ---------------------------------------------------------------------------
+
+from abstraction.buckets import TEXTURE_CLASSES, board_texture  # noqa: E402
+
+
+def _cards(text):
+    from engine.cards import Card
+    return [Card(t[0], t[1]) for t in text.split()]
+
+
+def test_texture_is_zero_on_a_dry_board():
+    assert board_texture(_cards("Qc 9s 2d")) == 0
+    assert board_texture([]) == 0
+
+
+def test_three_of_a_suit_and_four_of_a_suit_are_different_classes():
+    assert board_texture(_cards("3h Ks 4h 9h")) == 2      # three hearts
+    assert board_texture(_cards("3h Ks 4h 9h 5h")) == 4   # four hearts
+
+
+def test_four_to_a_straight_is_flagged_with_the_ace_both_ways():
+    assert board_texture(_cards("Qc 9s Kd Ac Jd")) == 1   # K Q J and A within five ranks... plus 9: A K Q J
+    assert board_texture(_cards("Ah 2c 3d 5s")) == 1      # wheel draw, ace low
+    assert board_texture(_cards("2c 7d 9h Kd")) == 0
+
+
+def test_flush_and_straight_combine_into_six_classes():
+    assert board_texture(_cards("Qc 9c Kc Jc")) == 5      # four clubs and four to a straight
+    assert 0 <= board_texture(_cards("Ts 9s 8s")) < TEXTURE_CLASSES
+
+
+def test_a_texture_aware_abstraction_keeps_the_strength_part_recoverable():
+    from abstraction.buckets import CardAbstraction
+    import numpy as np
+    plain = CardAbstraction(preflop_buckets=6, postflop_buckets=6, samples=200,
+                            equity_samples=40).fit(np.random.default_rng(0))
+    aware = CardAbstraction(preflop_buckets=6, postflop_buckets=6, samples=200,
+                            equity_samples=40, texture=True).fit(np.random.default_rng(0))
+    hole, board = _cards("Kc 9d"), _cards("3h Ks 4h 9h 5h")
+    strength = plain.bucket(hole, board, np.random.default_rng(1))
+    composite = aware.bucket(hole, board, np.random.default_rng(1))
+    assert composite == strength + 6 * 4
+    assert aware.strength_of(composite, "river") == strength
+    assert aware.num_buckets("river") == 36 and plain.num_buckets("river") == 6

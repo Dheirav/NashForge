@@ -58,6 +58,9 @@ def parse_args():
     parser.add_argument("--big-blind", type=int, default=2)
     parser.add_argument("--abstraction-samples", type=int, default=800)
     parser.add_argument("--equity-samples", type=int, default=40)
+    parser.add_argument("--texture", action="store_true",
+                        help="fold the board's flush and straight texture into the "
+                             "postflop bucket (abstraction.buckets.board_texture)")
     parser.add_argument("--eval-hands", type=int, default=2000)
     parser.add_argument("--seed", type=int, default=0)
     parser.add_argument("--output", help="write the strategy and summary here")
@@ -136,7 +139,8 @@ def _train_native(args, abstraction, projected):
     print(f"\nTraining MCCFR (native) for {args.iterations:,} iterations...")
     solver = pokerbot_native.NoLimitSolver(
         preflop, flop, turn, river, args.equity_samples, args.stack,
-        args.big_blind // 2, args.big_blind, schedule, args.seed)
+        args.big_blind // 2, args.big_blind, schedule, args.seed,
+        texture=bool(getattr(abstraction, "texture", False)))
     start = time.perf_counter()
 
     # Trained in chunks so the run reports progress.
@@ -197,6 +201,7 @@ def main():
     abstraction = CardAbstraction(
         preflop_buckets=args.buckets, postflop_buckets=args.buckets,
         samples=args.abstraction_samples, equity_samples=args.equity_samples,
+        texture=args.texture,
     ).fit(rng)
     print(f"  fitted in {time.perf_counter() - start:.1f}s")
     print(abstraction.describe())

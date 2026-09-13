@@ -227,6 +227,7 @@ class Arena:
                         else:
                             self.status.current["opponent"] = entry.get("display_name")
                     self.status.current["seat"] = seat
+                    self.player.opponent = self.status.current.get("opponent")
                     self.status.current["config"] = msg.get("game_config")
                     self.status.current["timeout_ms"] = msg.get("turn_timeout_ms")
                     log.write(json.dumps({"frame": "match_start", "seat": seat,
@@ -278,6 +279,10 @@ class Arena:
                 elif kind == "round_result":
                     result = msg.get("result") or {}
                     self.status.hands += 1
+                    profiles = getattr(self.player, "profiles", None)
+                    if profiles is not None and seat is not None and self.player.opponent:
+                        profiles.observe(result, seat, self.player.opponent)
+                        profiles.save()
                     log.write(json.dumps({"frame": "round_result", "result": result}) + "\n")
                     log.flush()
                 elif kind == "match_end":

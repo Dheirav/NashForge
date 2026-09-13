@@ -93,6 +93,10 @@ NB_MODULE(pokerbot_native, m) {
     // over sampled equities is cheap and happens once, and refitting in C++
     // would be a second clustering that could silently disagree with the one
     // every existing strategy was built against.
+    m.def("board_texture", [](const std::vector<int>& board) {
+        return Abstraction::board_texture(board.data(), static_cast<int>(board.size()));
+    }, nb::arg("board"), "Board texture class, mirroring abstraction.buckets.board_texture.");
+
     nb::class_<MCCFR<NoLimitGame>>(m, "NoLimitSolver")
         .def("__init__", [](MCCFR<NoLimitGame>* self,
                             const std::vector<int>& preflop,
@@ -101,11 +105,13 @@ NB_MODULE(pokerbot_native, m) {
                             const std::vector<double>& river,
                             int equity_samples, int starting_stack,
                             int small_blind, int big_blind,
-                            const std::vector<int>& schedule, uint64_t seed) {
+                            const std::vector<int>& schedule, uint64_t seed,
+                            bool texture) {
             Abstraction abstraction;
             abstraction.preflop.assign(preflop.begin(), preflop.end());
             abstraction.centroids = {flop, turn, river};
             abstraction.equity_samples = equity_samples;
+            abstraction.texture = texture;
             RaiseSchedule sched;
             for (int n : schedule) sched.sizes.push_back(n);
             new (self) MCCFR<NoLimitGame>(
@@ -115,7 +121,7 @@ NB_MODULE(pokerbot_native, m) {
         }, nb::arg("preflop"), nb::arg("flop"), nb::arg("turn"), nb::arg("river"),
            nb::arg("equity_samples"), nb::arg("starting_stack"),
            nb::arg("small_blind"), nb::arg("big_blind"), nb::arg("schedule"),
-           nb::arg("seed"))
+           nb::arg("seed"), nb::arg("texture") = false)
         .def("train", &MCCFR<NoLimitGame>::train, nb::arg("iterations"),
              nb::call_guard<nb::gil_scoped_release>(),
              "Run `iterations` passes, each traversing once per player.")

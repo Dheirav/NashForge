@@ -210,6 +210,47 @@ def flop_table_arrays(abstraction):
 STRENGTH_SIGNALS = ("equity", "made_hand")
 
 
+#: Texture classes: three flush levels (two or fewer of a suit on board, three,
+#: four or more) times whether four board ranks sit within a five-rank window.
+TEXTURE_CLASSES = 6
+
+
+def board_texture(board: Sequence[Card]) -> int:
+    """
+    How dangerous the board is, as a small integer, 0 to 5.
+
+    Why this exists: a bucket is equity against a *random* hand, so two pair on
+    a board with four hearts still looks strong and the strategy calls a bet
+    that, from the range that bets there, is a flush. Measured 13 September on
+    Chipzen: nine of eleven showdowns lost to `mr_hide`, three of them one pair
+    or two pair calling on a four-flush or four-straight board. The abstraction
+    could not tell those boards from dry ones. With the texture in the key, the
+    solver learns separately what a bet means on each.
+
+    Flush: 0 for two or fewer of any suit, 1 for three, 2 for four or more.
+    Straight: 1 when four board ranks fit in a five-rank window, ace playing
+    both high and low. The class is flush * 2 + straight. Mirrored bit-for-bit
+    in `native/src/nolimit_game.hpp`; `tests/test_native.py` pins the two.
+    """
+    if not board:
+        return 0
+    suits = [0, 0, 0, 0]
+    ranks = set()
+    for card in board:
+        suits[card.index // 13] += 1
+        ranks.add(card.index % 13)
+    most = max(suits)
+    flush = 0 if most <= 2 else (1 if most == 3 else 2)
+    if 12 in ranks:              # the ace also plays below the two
+        ranks = ranks | {-1}
+    straight = 0
+    for low in range(-1, 9):
+        if sum(1 for r in ranks if low <= r <= low + 4) >= 4:
+            straight = 1
+            break
+    return flush * 2 + straight
+
+
 @dataclass
 class CardAbstraction:
     """
@@ -233,6 +274,10 @@ class CardAbstraction:
     #: Stored as a path rather than as arrays so that pickling a strategy does
     #: not carry 15 MB of table with it; the arrays live in a process-wide cache.
     equity_table: Optional[str] = None
+    #: Fold the board's texture into the postflop bucket (see `board_texture`).
+    #: Off by default: every panel solver was fitted without it, and the key
+    #: space multiplies by TEXTURE_CLASSES when it is on.
+    texture: bool = False
 
     _preflop: Dict[Tuple[str, str, bool], int] = None
     _centroids: Dict[str, np.ndarray] = None
@@ -257,6 +302,8 @@ class CardAbstraction:
         which would silently answer with a different clustering.
         """
         self.__dict__.update(state)
+        if "texture" not in state:
+            self.texture = False
         if getattr(self, "_centroid_list", None) is None and self._centroids:
             self._centroid_list = {street: centroids.tolist()
                                    for street, centroids in self._centroids.items()}
@@ -338,13 +385,23 @@ class CardAbstraction:
 
         street = _STREET_BY_BOARD[len(board)]
         value = self._postflop_strength(hole, board, rng)
-        return _nearest_centroid(self._centroid_list[street], value)
+        bucket = _nearest_centroid(self._centroid_list[street], value)
+        if getattr(self, "texture", False):
+            bucket += len(self._centroid_list[street]) * board_texture(board)
+        return bucket
+
+    def strength_of(self, bucket: int, street: str) -> int:
+        """The equity part of a bucket, with any texture stripped off."""
+        if street == "preflop" or not getattr(self, "texture", False):
+            return bucket
+        return bucket % len(self._centroid_list[street])
 
     def num_buckets(self, street: str) -> int:
         """Buckets available on a street."""
         if street == "preflop":
             return len(set(self._preflop.values()))
-        return int(self._centroids[street].size)
+        count = int(self._centroids[street].size)
+        return count * TEXTURE_CLASSES if getattr(self, "texture", False) else count
 
     def describe(self) -> str:
         """Human-readable summary, for reports."""

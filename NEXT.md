@@ -94,7 +94,9 @@ process has to be in the lobby when each fixture is dispatched:
 The bot's page, rating and replays: https://chipzen.ai/bots/29e73b2b-d349-4c60-b3d0-e9ddae8ae0f6.
 
 `chipzen/` is the bridge, the solver ladder by effective stack with a deeper-tree companion for
-off-tree re-raises, and the client; 30 tests in `tests/test_chipzen_*.py`. First exhibition: won 20,000 to 0 against a house bot in 13 hands, no
+off-tree re-raises, a per-opponent fold-to-bet profile, and the client; `tests/test_chipzen_*.py`.
+`docs/arena-plan.md` records the four fixes of 13 September and the three ladders
+(`--ladder-dir results/cfr/ladder200t` is the 200-sample, texture-aware one). First exhibition: won 20,000 to 0 against a house bot in 13 hands, no
 protocol errors, sub-millisecond decisions. A rating there measures "beats other people's bots",
 not distance from equilibrium; Slumbot remains the equilibrium instrument, and the contender plan
 below is unchanged by this.

@@ -220,3 +220,17 @@ def test_the_cpp_no_limit_solver_produces_a_usable_strategy():
         assert 2 <= len(probabilities) <= 6, f"{key!r} has {len(probabilities)} actions"
         assert abs(sum(probabilities) - 1.0) < 1e-9, f"{key!r} is not a distribution"
         assert all(p >= 0.0 for p in probabilities), f"{key!r} has a negative probability"
+
+
+def test_board_texture_agrees_between_python_and_the_native_core():
+    """Every class of board the C++ solver could bucket, read the same way."""
+    import numpy as np
+    from abstraction.buckets import board_texture
+    from abstraction.equity import FULL_DECK
+    import pokerbot_native
+    rng = np.random.default_rng(13)
+    for _ in range(3000):
+        n = int(rng.choice([3, 4, 5]))
+        picked = [int(i) for i in rng.choice(52, size=n, replace=False)]
+        cards = [FULL_DECK[i] for i in picked]
+        assert board_texture(cards) == pokerbot_native.board_texture([c.index for c in cards])

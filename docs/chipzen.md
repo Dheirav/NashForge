@@ -276,6 +276,15 @@ own page (`/bots/<id>`) holds its rating, record and every replay, and the
 `scripts/chipzen_review.py` reads the decision logs in `results/chipzen/matches/`
 and writes `results/chipzen/review.md`.
 
+**Later on 13 September**, after three rated losses to `mr_hide`, four changes:
+the companion's shoves are softened to calls below the top strength class, a
+full-size raise-cap-2 companion is trained, the postflop bucket can carry the
+board's flush and straight texture (`board_texture`, mirrored in C++, off by
+default), and a per-opponent fold-to-bet profile withholds bluffs from a bot
+that does not fold. `docs/arena-plan.md` has the detail. Ladders: `results/cfr/
+ladder/` (40 samples), `ladder200/` (200 samples), `ladder200t/` (200 samples
+plus texture); pick with `--ladder-dir`.
+
 ## What has to be true during the season
 
 - The process must be in the lobby when a fixture is dispatched, so

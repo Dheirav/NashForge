@@ -28,6 +28,7 @@ import numpy as np  # noqa: E402
 from chipzen.client import (Arena, accept_remote_challenge, challenge_remote,  # noqa: E402
                             house_bot_challenge, join_queue, lobby_opponents,
                             queue_status, remote_challenges)
+from chipzen.opponents import Profiles  # noqa: E402
 from chipzen.player import ArenaPlayer  # noqa: E402
 
 ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
@@ -56,12 +57,34 @@ def _config():
 
 async def _main(args, config):
     rng = np.random.default_rng(args.seed) if args.seed is not None else np.random.default_rng()
+    ladder_dir = args.ladder_dir or LADDER_DIR
+    # A ladder directory's own 100bb rung replaces the shipped solver, so a
+    # 200-sample or texture-aware set is complete on its own; the shipped
+    # solvers only fill in what the directory lacks.
+    own = sorted(glob.glob(os.path.join(ladder_dir, "nolimit_*bb.pkl")))
     ladder = list(args.ladder) if args.ladder else \
-        DEFAULT_LADDER + sorted(glob.glob(os.path.join(LADDER_DIR, "nolimit_*bb.pkl")))
-    companions = list(args.companions) if args.companions is not None else \
-        [p for p in DEFAULT_COMPANIONS if os.path.exists(p)] + \
-        sorted(glob.glob(os.path.join(LADDER_DIR, "taper42_*bb.pkl")))
+        own + [p for p in DEFAULT_LADDER
+               if not any(os.path.basename(p).replace("nolimit_strategy", "nolimit_100bb") ==
+                          os.path.basename(o) or (p.endswith("200bb_250k.pkl") and o.endswith("nolimit_200bb.pkl"))
+                          for o in own)]
+    # Companions: a full-size raise-cap-2 solver beats a (4, 2) taper at the
+    # same depth, because its re-raises have every size rather than two.
+    cap2 = sorted(glob.glob(os.path.join(ladder_dir, "cap2_*bb.pkl")))
+    cap2_depths = {os.path.basename(p).split("_")[1] for p in cap2}
+    tapers = [p for p in sorted(glob.glob(os.path.join(ladder_dir, "taper42_*bb.pkl")))
+              if os.path.basename(p).split("_")[1] not in cap2_depths]
+    if ladder_dir == LADDER_DIR:
+        tapers = [p for p in DEFAULT_COMPANIONS if os.path.exists(p) and "100bb" not in cap2_depths] + tapers
+    companions = list(args.companions) if args.companions is not None else cap2 + tapers
     player = ArenaPlayer(ladder, rng, companions=companions)
+    player.profiles = Profiles(os.path.join(ROOT, "results", "chipzen", "opponents.json")) \
+        .rebuild(args.matches_dir, os.path.join(args.log_dir, "matches"))
+    player.profiles.save()
+    for name, row in sorted(player.profiles.rows.items(), key=lambda kv: -kv[1]["bets_faced"])[:6]:
+        rate, n = player.profiles.fold_to_bet(name)
+        logging.info("opponent %-16s %3d hands, %3d bets faced, fold-to-bet %s%s", name, row["hands"], n,
+                     f"{rate:.0%}" if rate is not None else "unknown",
+                     "  (station: bluffs withheld)" if player.profiles.never_folds(name) else "")
     logging.info("ladder: %s", ", ".join(f"{s.depth_bb:g}bb {s.schedule}" for s in player.ladder))
     logging.info("companions: %s", ", ".join(f"{s.depth_bb:g}bb {s.schedule}" for s in player.companions) or "none")
     logging.info("warm-up: %.2fs", player.warm_up())
@@ -197,6 +220,8 @@ def main():
     parser.add_argument("--bot-id")
     parser.add_argument("--ladder", nargs="*", help="solver pickles; default is the shipped "
                         "100bb and 200bb solvers plus results/cfr/ladder/*.pkl")
+    parser.add_argument("--ladder-dir", help="use this directory's nolimit_*bb.pkl, cap2_*bb.pkl "
+                        "and taper42_*bb.pkl instead of results/cfr/ladder (e.g. ladder200, ladder200t)")
     parser.add_argument("--companions", nargs="*", default=None,
                         help="deeper-tree solvers asked when the ladder misses; default is "
                              "results/cfr/nolimit_taper_42.pkl plus results/cfr/ladder/taper42_*bb.pkl")
