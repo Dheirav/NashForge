@@ -4,7 +4,7 @@ One page, kept current. [`BACKLOG.md`](BACKLOG.md) holds the reasoning and every
 [`docs/training-plan.md`](docs/training-plan.md) holds the full phase plan and its results. This
 file is only the next thing to do.
 
-**Last updated:** 11 September 2026 · `main` at `9912610` · 293 tests (~6m09s, collection ~3m24s)
+**Last updated:** 13 September 2026 · 328 tests (~6m05s, collection ~3m24s)
 
 ---
 
@@ -76,6 +76,29 @@ real improvement are compatible; the earlier phrasing denied the second.
 ---
 
 ## Now — the next thing to do
+
+**NashForge is entered in Chipzen season 6 (13 September), and the bot has to be running
+for it.** Chipzen is a heads-up bot arena (`docs/chipzen.md`): elimination matches from 10,000
+chips at 50/100 with rising blinds, Glicko-2 rated, a weekly season of round-robin then playoffs.
+Registration closes Mon 14 Sept 23:59 UTC, the round robin runs **Tue 15 to Fri 18 Sept** and the
+playoffs Sat 19 to Sun 20, all with published fixture times. The entry is a remote bot, so the
+process has to be in the lobby when each fixture is dispatched:
+
+    tools/chipzen-run.sh --accept-inbound     # start, from Tuesday 05:30 IST until Sunday
+    tools/chipzen-progress.sh --watch         # what it is doing
+    tools/chipzen-run.sh stop
+    tools/chipzen-run.sh --house-bot --once   # one unrated practice match against a house bot
+    tools/chipzen-run.sh --challenge Blueprint RoboPoker --accept-inbound   # rated, remote track
+    venv/bin/python scripts/chipzen_review.py # results/chipzen/review.md from the match logs
+
+The bot's page, rating and replays: https://chipzen.ai/bots/29e73b2b-d349-4c60-b3d0-e9ddae8ae0f6.
+
+`chipzen/` is the bridge, the solver ladder by effective stack with a deeper-tree companion for
+off-tree re-raises, and the client; 30 tests in `tests/test_chipzen_*.py`. First exhibition: won 20,000 to 0 against a house bot in 13 hands, no
+protocol errors, sub-millisecond decisions. A rating there measures "beats other people's bots",
+not distance from equilibrium; Slumbot remains the equilibrium instrument, and the contender plan
+below is unchanged by this.
+
 
 **Both Slumbot steps are done, and the answer is that neither lever moved the number.**
 Path A completed on 10 September: a 200bb solver trained to 250,000 iterations

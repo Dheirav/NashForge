@@ -103,3 +103,11 @@ results/cfr/equity_tables/
 # tracked, the compiled module is not.
 native/build/
 *.so
+
+# The arena bot's weapons and its record: the solvers it plays on Chipzen and
+# every decision it took there. Public code, private weights; see docs/chipzen.md.
+results/cfr/ladder/
+results/cfr/ladder200/
+results/cfr/experiments/
+results/chipzen/matches/
+results/chipzen/review.md

@@ -1,0 +1,241 @@
+"""
+Run NashForge as a remote bot on Chipzen.
+
+    venv/bin/python scripts/chipzen_run.py                  # hold the lobby, play what is dispatched
+    venv/bin/python scripts/chipzen_run.py --house-bot      # also start one unrated house-bot match
+    venv/bin/python scripts/chipzen_run.py --house-bot --once
+
+Credentials come from ~/.chipzen/chipzen.toml (`[external_api] token`, `bot_id`),
+overridden by CHIPZEN_EXTBOT_TOKEN / CHIPZEN_BOT_ID / CHIPZEN_BASE_URL, overridden
+by flags. The token is never printed.
+
+Long-running: start it through tools/chipzen-run.sh and watch it with
+tools/chipzen-progress.sh. Decisions are logged per match under the log
+directory, and status.json there is what the progress reader shows.
+"""
+import argparse
+import asyncio
+import glob
+import logging
+import os
+import sys
+import tomllib
+
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
+
+import numpy as np  # noqa: E402
+
+from chipzen.client import (Arena, accept_remote_challenge, challenge_remote,  # noqa: E402
+                            house_bot_challenge, join_queue, lobby_opponents,
+                            queue_status, remote_challenges)
+from chipzen.player import ArenaPlayer  # noqa: E402
+
+ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
+DEFAULT_LADDER = [os.path.join(ROOT, "results", "cfr", "nolimit_strategy.pkl"),
+                  os.path.join(ROOT, "results", "cfr", "nolimit_strategy_200bb_250k.pkl")]
+LADDER_DIR = os.path.join(ROOT, "results", "cfr", "ladder")
+#: Deeper-tree solvers consulted when the one-raise ladder has no entry.
+DEFAULT_COMPANIONS = [os.path.join(ROOT, "results", "cfr", "nolimit_taper_42.pkl")]
+DEFAULT_LOG_DIR = os.path.join(os.path.expanduser("~"), "pokerbot-scratch", "chipzen")
+#: In the repository, because the record of how the bot played is a result.
+DEFAULT_MATCHES_DIR = os.path.join(ROOT, "results", "chipzen", "matches")
+CONFIG = os.path.join(os.path.expanduser("~"), ".chipzen", "chipzen.toml")
+
+
+def _config():
+    settings = {}
+    if os.path.exists(CONFIG):
+        with open(CONFIG, "rb") as handle:
+            settings = tomllib.load(handle).get("external_api", {})
+    return {
+        "token": os.environ.get("CHIPZEN_EXTBOT_TOKEN") or settings.get("token"),
+        "bot_id": os.environ.get("CHIPZEN_BOT_ID") or settings.get("bot_id"),
+        "base_url": os.environ.get("CHIPZEN_BASE_URL") or settings.get("url") or "wss://chipzen.ai",
+    }
+
+
+async def _main(args, config):
+    rng = np.random.default_rng(args.seed) if args.seed is not None else np.random.default_rng()
+    ladder = list(args.ladder) if args.ladder else \
+        DEFAULT_LADDER + sorted(glob.glob(os.path.join(LADDER_DIR, "nolimit_*bb.pkl")))
+    companions = list(args.companions) if args.companions is not None else \
+        [p for p in DEFAULT_COMPANIONS if os.path.exists(p)] + \
+        sorted(glob.glob(os.path.join(LADDER_DIR, "taper42_*bb.pkl")))
+    player = ArenaPlayer(ladder, rng, companions=companions)
+    logging.info("ladder: %s", ", ".join(f"{s.depth_bb:g}bb {s.schedule}" for s in player.ladder))
+    logging.info("companions: %s", ", ".join(f"{s.depth_bb:g}bb {s.schedule}" for s in player.companions) or "none")
+    logging.info("warm-up: %.2fs", player.warm_up())
+
+    arena = Arena(config["base_url"], config["bot_id"], config["token"], player,
+                  log_dir=args.log_dir, once=args.once, matches_dir=args.matches_dir)
+    task = asyncio.create_task(arena.run())
+
+    if args.house_bot is not None:
+        for _ in range(60):
+            await asyncio.sleep(0.5)
+            if arena.status.lobby == "connected":
+                break
+        else:
+            logging.error("lobby never connected; not issuing the challenge")
+        if arena.status.lobby == "connected":
+            opponent = args.house_bot or None
+            reply = await asyncio.to_thread(house_bot_challenge, config["base_url"],
+                                            config["token"], opponent)
+            logging.info("house-bot challenge: %s", {k: v for k, v in reply.items() if k != "token"})
+            if reply.get("http_status") != 200:
+                logging.error("challenge refused; nothing to play")
+                task.cancel()
+                return 2
+            # Dispatch can take a minute on a cold pool; a challenge that never
+            # turns into a match should not hold an exhibition loop forever.
+            for _ in range(360):
+                await asyncio.sleep(0.5)
+                if arena.status.matches_started:
+                    break
+            else:
+                logging.error("no match arrived within 180s of the challenge")
+                task.cancel()
+                return 3
+    if args.list_opponents:
+        reply = await asyncio.to_thread(lobby_opponents, config["base_url"], config["token"])
+        for row in reply.get("opponents") or []:
+            logging.info("challengeable now: %-24s rating %.0f", row.get("name"), row.get("rating") or 0)
+        if not reply.get("opponents"):
+            logging.info("nobody challengeable now: %s", reply)
+
+    inbound = asyncio.create_task(_accept_inbound(arena, config)) if args.accept_inbound else None
+    queue = asyncio.create_task(_keep_queued(arena, config)) if args.queue else None
+
+    if args.challenge:
+        await _wait_for_lobby(arena)
+        for name in args.challenge:
+            await _rated_challenge(arena, config, name)
+        if args.exit_after_challenges:
+            for extra in (inbound, queue):
+                if extra:
+                    extra.cancel()
+            task.cancel()
+            return 0
+
+    await task
+    return 0
+
+
+async def _wait_for_lobby(arena, seconds=30):
+    for _ in range(seconds * 2):
+        if arena.status.lobby == "connected":
+            return True
+        await asyncio.sleep(0.5)
+    return False
+
+
+async def _rated_challenge(arena, config, name):
+    """Challenge one remote bot, wait for its answer, then for the match if accepted."""
+    reply = await asyncio.to_thread(challenge_remote, config["base_url"], config["token"], name)
+    logging.info("rated challenge to %s: %s", name, reply)
+    if reply.get("http_status") != 200:
+        return
+    challenge_id = reply.get("challenge_id")
+    finished_before = arena.status.matches_finished
+    state = "pending"
+    for _ in range(24):                       # the challenge expires after ~60s
+        await asyncio.sleep(5)
+        listing = await asyncio.to_thread(remote_challenges, config["base_url"], config["token"])
+        row = next((c for c in listing.get("outbound") or [] if c.get("challenge_id") == challenge_id), None)
+        state = (row or {}).get("status") or state
+        if state != "pending":
+            break
+    logging.info("challenge to %s: %s", name, state)
+    if state != "accepted":
+        return
+    for _ in range(360):                      # a match is seldom longer than 30 min
+        await asyncio.sleep(5)
+        if arena.status.matches_finished > finished_before:
+            return
+    logging.warning("challenge to %s accepted but no match finished within 30 min", name)
+
+
+async def _accept_inbound(arena, config):
+    """Accept every rated challenge another remote bot sends us, while in the lobby."""
+    seen = set()
+    while True:
+        await asyncio.sleep(10)
+        if arena.status.lobby != "connected":
+            continue
+        try:
+            listing = await asyncio.to_thread(remote_challenges, config["base_url"], config["token"])
+        except Exception as error:            # a failed poll is not a reason to stop
+            logging.warning("inbound poll failed: %s", error)
+            continue
+        for row in listing.get("inbound") or []:
+            cid = row.get("challenge_id")
+            if row.get("status") == "pending" and cid not in seen:
+                seen.add(cid)
+                reply = await asyncio.to_thread(accept_remote_challenge, config["base_url"],
+                                                config["token"], cid)
+                logging.info("accepted challenge from %s: %s", row.get("opponent_name"), reply.get("status"))
+
+
+async def _keep_queued(arena, config):
+    """Sit in the rated queue, re-joining after each timeout and after each match."""
+    while True:
+        if arena.status.lobby == "connected" and not arena.status.matches_active:
+            try:
+                status = await asyncio.to_thread(queue_status, config["base_url"], config["token"])
+                if status.get("status") in ("idle", "timed_out"):
+                    reply = await asyncio.to_thread(join_queue, config["base_url"], config["token"])
+                    logging.info("rated queue: %s", {k: reply.get(k) for k in ("status", "position", "queue_ttl_seconds")})
+            except Exception as error:
+                logging.warning("queue poll failed: %s", error)
+        await asyncio.sleep(20)
+
+
+def main():
+    parser = argparse.ArgumentParser(description=__doc__,
+                                     formatter_class=argparse.RawDescriptionHelpFormatter)
+    parser.add_argument("--base-url")
+    parser.add_argument("--bot-id")
+    parser.add_argument("--ladder", nargs="*", help="solver pickles; default is the shipped "
+                        "100bb and 200bb solvers plus results/cfr/ladder/*.pkl")
+    parser.add_argument("--companions", nargs="*", default=None,
+                        help="deeper-tree solvers asked when the ladder misses; default is "
+                             "results/cfr/nolimit_taper_42.pkl plus results/cfr/ladder/taper42_*bb.pkl")
+    parser.add_argument("--log-dir", default=DEFAULT_LOG_DIR)
+    parser.add_argument("--matches-dir", default=DEFAULT_MATCHES_DIR,
+                        help="per-match decision logs; scripts/chipzen_review.py reads them")
+    parser.add_argument("--house-bot", nargs="?", const="", default=None,
+                        help="start one unrated match against a house bot (optionally named)")
+    parser.add_argument("--once", action="store_true", help="exit after one match")
+    parser.add_argument("--list-opponents", action="store_true",
+                        help="log which remote bots can be challenged for a rated match now")
+    parser.add_argument("--challenge", nargs="+", metavar="BOT",
+                        help="rated challenges to these remote bots, one after another")
+    parser.add_argument("--exit-after-challenges", action="store_true")
+    parser.add_argument("--accept-inbound", action="store_true",
+                        help="accept rated challenges from other remote bots while in the lobby")
+    parser.add_argument("--queue", action="store_true",
+                        help="sit in the rated matchmaking queue whenever idle")
+    parser.add_argument("--seed", type=int)
+    parser.add_argument("-v", "--verbose", action="store_true")
+    args = parser.parse_args()
+
+    config = _config()
+    if args.base_url:
+        config["base_url"] = args.base_url
+    if args.bot_id:
+        config["bot_id"] = args.bot_id
+    missing = [k for k in ("token", "bot_id") if not config.get(k)]
+    if missing:
+        sys.exit(f"missing {', '.join(missing)}: put them in {CONFIG} or the environment")
+
+    os.makedirs(args.log_dir, exist_ok=True)
+    logging.basicConfig(level=logging.DEBUG if args.verbose else logging.INFO,
+                        format="%(asctime)s %(levelname)s %(name)s: %(message)s")
+    try:
+        sys.exit(asyncio.run(_main(args, config)) or 0)
+    except KeyboardInterrupt:
+        pass
+
+
+if __name__ == "__main__":
+    main()
