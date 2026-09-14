@@ -111,3 +111,9 @@ results/cfr/ladder200/
 results/cfr/experiments/
 results/chipzen/matches/
 results/chipzen/review.md
+
+# Base papers for the course presentation: other people's PDFs, kept locally only.
+docs/base-papers/
+
+# PDF previews rendered from the Word and PowerPoint sources.
+docs/NashForge_*.pdf

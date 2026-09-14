@@ -1,0 +1,73 @@
+\relax 
+\@writefile{toc}{\contentsline {title}{NashForge: One Instrument for Three Learning Families in Heads-Up No-Limit Hold'em, and What a Live Arena Adds}{1}{}\protected@file@percent }
+\@writefile{toc}{\authcount {1}}
+\@writefile{toc}{\contentsline {author}{Dheirav Prakash}{1}{}\protected@file@percent }
+\@writefile{toc}{\contentsline {section}{\numberline {1}Introduction and Problem Statement}{1}{}\protected@file@percent }
+\@writefile{toc}{\contentsline {section}{\numberline {2}Literature Survey and the Gap}{2}{}\protected@file@percent }
+\@writefile{toc}{\contentsline {section}{\numberline {3}Methodology}{3}{}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {3.1}Overall Architecture}{3}{}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {3.2}Module: the Solver (CFR family)}{3}{}\protected@file@percent }
+\@writefile{lof}{\contentsline {figure}{\numberline {1}{\ignorespaces Overall architecture. The engine and abstraction are shared; the three families are measured on one internal instrument and the solver on two external ones.}}{4}{}\protected@file@percent }
+\newlabel{fig:1}{{1}{4}{}{}{}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {3.3}Module: Evolutionary Search}{4}{}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {3.4}Module: Proximal Policy Optimisation}{4}{}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {3.5}Module: the Evaluation Instrument}{4}{}\protected@file@percent }
+\@writefile{lof}{\contentsline {figure}{\numberline {2}{\ignorespaces Module design of the arena path. The lookup is the panel's own cfr\_agent, so the rating is earned by the agent that was measured.}}{5}{}\protected@file@percent }
+\newlabel{fig:2}{{2}{5}{}{}{}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {3.6}Module: the Arena Path (Phase 2)}{5}{}\protected@file@percent }
+\@writefile{toc}{\contentsline {section}{\numberline {4}Results and Analysis}{5}{}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {4.1}Validation on Solved Games}{5}{}\protected@file@percent }
+\@writefile{lot}{\contentsline {table}{\numberline {1}{\ignorespaces The comparison, BB/100 to the row agent, 40,000 hands per matchup (results/comparison/phase4\_native.json).}}{6}{}\protected@file@percent }
+\newlabel{tab:1}{{1}{6}{}{}{}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {4.2}Three Families on One Panel}{6}{}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {4.3}The Card Abstraction}{6}{}\protected@file@percent }
+\@writefile{lof}{\contentsline {figure}{\numberline {3}{\ignorespaces The three families against the panel. The baselines cannot rank agents: a less converged solver beats always-call by more, so only the solver column separates them.}}{7}{}\protected@file@percent }
+\newlabel{fig:3}{{3}{7}{}{}{}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {4.4}Speed}{7}{}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {4.5}Slumbot}{7}{}\protected@file@percent }
+\@writefile{lof}{\contentsline {figure}{\numberline {4}{\ignorespaces Six buckets minus twenty, chips per hand, at equal wall-clock training budgets; 95 percent intervals across three seeds.}}{8}{}\protected@file@percent }
+\newlabel{fig:4}{{4}{8}{}{}{}}
+\@writefile{lot}{\contentsline {table}{\numberline {2}{\ignorespaces Arena matches by opponent (results/chipzen/matches, via scripts/chipzen\_review.py).}}{8}{}\protected@file@percent }
+\newlabel{tab:2}{{2}{8}{}{}{}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {4.6}The Arena: Live, Rated Play}{8}{}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {4.7}Where the Chips Went, and Four Fixes}{8}{}\protected@file@percent }
+\@writefile{lof}{\contentsline {figure}{\numberline {5}{\ignorespaces The 200-sample estimator against the 40-sample one, same tree, three seeds of 40,000 hands.}}{9}{}\protected@file@percent }
+\newlabel{fig:5}{{5}{9}{}{}{}}
+\@writefile{toc}{\contentsline {section}{\numberline {5}Performance Metrics}{9}{}\protected@file@percent }
+\@writefile{lof}{\contentsline {figure}{\numberline {6}{\ignorespaces Milliseconds per MCCFR iteration at 100 big blinds, log scale.}}{10}{}\protected@file@percent }
+\newlabel{fig:6}{{6}{10}{}{}{}}
+\@writefile{lot}{\contentsline {table}{\numberline {3}{\ignorespaces Performance metrics and their values at submission.}}{10}{}\protected@file@percent }
+\newlabel{tab:3}{{3}{10}{}{}{}}
+\@writefile{toc}{\contentsline {section}{\numberline {6}Conclusion}{10}{}\protected@file@percent }
+\bibcite{ref1}{1}
+\bibcite{ref2}{2}
+\bibcite{ref3}{3}
+\bibcite{ref4}{4}
+\bibcite{ref5}{5}
+\bibcite{ref6}{6}
+\bibcite{ref7}{7}
+\bibcite{ref8}{8}
+\bibcite{ref9}{9}
+\bibcite{ref10}{10}
+\bibcite{ref11}{11}
+\@writefile{lof}{\contentsline {figure}{\numberline {7}{\ignorespaces Against Slumbot, milli-big-blinds per hand with 95 percent intervals, 9,999 hands each.}}{11}{}\protected@file@percent }
+\newlabel{fig:7}{{7}{11}{}{}{}}
+\bibcite{ref12}{12}
+\bibcite{ref13}{13}
+\bibcite{ref14}{14}
+\bibcite{ref15}{15}
+\bibcite{ref16}{16}
+\bibcite{ref17}{17}
+\bibcite{ref18}{18}
+\bibcite{ref19}{19}
+\@writefile{lof}{\contentsline {figure}{\numberline {8}{\ignorespaces Net chips by opponent. The bot crushes the weak bot, breaks even with the middle one, and loses to the one that re-raises.}}{12}{}\protected@file@percent }
+\newlabel{fig:8}{{8}{12}{}{}{}}
+\@writefile{lof}{\contentsline {figure}{\numberline {9}{\ignorespaces Net chips by effective stack depth at the start of the hand. Deep stacks are the re-raise game; shallow stacks are where the ladder wins.}}{13}{}\protected@file@percent }
+\newlabel{fig:9}{{9}{13}{}{}{}}
+\@writefile{lof}{\contentsline {figure}{\numberline {10}{\ignorespaces The progress reader during the 13 September session.}}{13}{}\protected@file@percent }
+\newlabel{fig:10}{{10}{13}{}{}{}}
+\@writefile{lof}{\contentsline {figure}{\numberline {11}{\ignorespaces One hand from the decision log: the solver called down with a pair of twos against a bluff.}}{13}{}\protected@file@percent }
+\newlabel{fig:11}{{11}{13}{}{}{}}
+\@writefile{lof}{\contentsline {figure}{\numberline {12}{\ignorespaces The native trainer finishing the raise-cap-2 solver.}}{14}{}\protected@file@percent }
+\newlabel{fig:12}{{12}{14}{}{}{}}
+\gdef \@abspage@last{14}

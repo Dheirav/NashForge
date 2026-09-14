@@ -1,4 +1,13 @@
 #!/usr/bin/env bash
+
+# Refuse to rebuild under a running training. The linker rewrites the .so in
+# place, and a process that has it mapped dies with SIGBUS: on 13 September a
+# rebuild killed a raise-cap-2 solver 80 minutes into its run. FORCE=1 to
+# override when that is what you want.
+if [ -z "${FORCE:-}" ] && pgrep -f "scripts/cfr/train_nolimit.py" >/dev/null 2>&1; then
+  echo "a training run is using the native module; finish it or FORCE=1" >&2
+  exit 1
+fi
 # Build the native module into native/build and copy it beside the Python.
 #
 # The interpreter is passed explicitly: this repo has a venv, and CMake's own

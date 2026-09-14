@@ -1,0 +1,415 @@
+This is pdfTeX, Version 3.141592653-2.6-1.40.25 (TeX Live 2023/Debian) (preloaded format=pdflatex 2026.3.20)  13 SEP 2026 22:51
+entering extended mode
+ restricted \write18 enabled.
+ %&-line parsing enabled.
+**nashforge.tex
+(./nashforge.tex
+LaTeX2e <2023-11-01> patch level 1
+L3 programming layer <2024-01-22>
+(./llncs.cls
+Document Class: llncs 2025/02/25 v2.26 
+ LaTeX document class for Lecture Notes in Computer Science
+(/usr/share/texlive/texmf-dist/tex/latex/base/article.cls
+Document Class: article 2023/05/17 v1.4n Standard LaTeX document class
+(/usr/share/texlive/texmf-dist/tex/latex/base/size10.clo
+File: size10.clo 2023/05/17 v1.4n Standard LaTeX file (size option)
+)
+\c@part=\count187
+\c@section=\count188
+\c@subsection=\count189
+\c@subsubsection=\count190
+\c@paragraph=\count191
+\c@subparagraph=\count192
+\c@figure=\count193
+\c@table=\count194
+\abovecaptionskip=\skip48
+\belowcaptionskip=\skip49
+\bibindent=\dimen140
+)
+(/usr/share/texlive/texmf-dist/tex/latex/tools/multicol.sty
+Package: multicol 2023/03/30 v1.9f multicolumn formatting (FMi)
+\c@tracingmulticols=\count195
+\mult@box=\box51
+\multicol@leftmargin=\dimen141
+\c@unbalance=\count196
+\c@collectmore=\count197
+\doublecol@number=\count198
+\multicoltolerance=\count199
+\multicolpretolerance=\count266
+\full@width=\dimen142
+\page@free=\dimen143
+\premulticols=\dimen144
+\postmulticols=\dimen145
+\multicolsep=\skip50
+\multicolbaselineskip=\skip51
+\partial@page=\box52
+\last@line=\box53
+\mc@boxedresult=\box54
+\maxbalancingoverflow=\dimen146
+\mult@rightbox=\box55
+\mult@grightbox=\box56
+\mult@firstbox=\box57
+\mult@gfirstbox=\box58
+\@tempa=\box59
+\@tempa=\box60
+\@tempa=\box61
+\@tempa=\box62
+\@tempa=\box63
+\@tempa=\box64
+\@tempa=\box65
+\@tempa=\box66
+\@tempa=\box67
+\@tempa=\box68
+\@tempa=\box69
+\@tempa=\box70
+\@tempa=\box71
+\@tempa=\box72
+\@tempa=\box73
+\@tempa=\box74
+\@tempa=\box75
+\@tempa=\box76
+\@tempa=\box77
+\@tempa=\box78
+\@tempa=\box79
+\@tempa=\box80
+\@tempa=\box81
+\@tempa=\box82
+\@tempa=\box83
+\@tempa=\box84
+\@tempa=\box85
+\@tempa=\box86
+\@tempa=\box87
+\@tempa=\box88
+\@tempa=\box89
+\@tempa=\box90
+\@tempa=\box91
+\@tempa=\box92
+\@tempa=\box93
+\@tempa=\box94
+\c@minrows=\count267
+\c@columnbadness=\count268
+\c@finalcolumnbadness=\count269
+\last@try=\dimen147
+\multicolovershoot=\dimen148
+\multicolundershoot=\dimen149
+\mult@nat@firstbox=\box95
+\colbreak@box=\box96
+\mc@col@check@num=\count270
+)
+(/usr/share/texlive/texmf-dist/tex/latex/oberdiek/aliascnt.sty
+Package: aliascnt 2018/09/07 v1.5 Alias counters (HO)
+)
+\c@chapter=\count271
+LaTeX Font Info:    Redeclaring math symbol \Gamma on input line 379.
+LaTeX Font Info:    Redeclaring math symbol \Delta on input line 380.
+LaTeX Font Info:    Redeclaring math symbol \Theta on input line 381.
+LaTeX Font Info:    Redeclaring math symbol \Lambda on input line 382.
+LaTeX Font Info:    Redeclaring math symbol \Xi on input line 383.
+LaTeX Font Info:    Redeclaring math symbol \Pi on input line 384.
+LaTeX Font Info:    Redeclaring math symbol \Sigma on input line 385.
+LaTeX Font Info:    Redeclaring math symbol \Upsilon on input line 386.
+LaTeX Font Info:    Redeclaring math symbol \Phi on input line 387.
+LaTeX Font Info:    Redeclaring math symbol \Psi on input line 388.
+LaTeX Font Info:    Redeclaring math symbol \Omega on input line 389.
+LaTeX Info: Redefining \vec on input line 394.
+\tocchpnum=\dimen150
+\tocsecnum=\dimen151
+\tocsectotal=\dimen152
+\tocsubsecnum=\dimen153
+\tocsubsectotal=\dimen154
+\tocsubsubsecnum=\dimen155
+\tocsubsubsectotal=\dimen156
+\tocparanum=\dimen157
+\tocparatotal=\dimen158
+\tocsubparanum=\dimen159
+\@tempcntc=\count272
+\fnindent=\dimen160
+\c@@inst=\count273
+\c@@auth=\count274
+\c@auco=\count275
+\instindent=\dimen161
+\authrun=\box97
+\authorrunning=\toks17
+\tocauthor=\toks18
+\titrun=\box98
+\titlerunning=\toks19
+\toctitle=\toks20
+\c@theorem=\count276
+\c@case=\count277
+\c@conjecture=\count278
+\c@corollary=\count279
+\c@definition=\count280
+\c@example=\count281
+\c@exercise=\count282
+\c@lemma=\count283
+\c@note=\count284
+\c@problem=\count285
+\c@property=\count286
+\c@proposition=\count287
+\c@question=\count288
+\c@solution=\count289
+\c@remark=\count290
+\headlineindent=\dimen162
+)
+(/usr/share/texlive/texmf-dist/tex/latex/base/fontenc.sty
+Package: fontenc 2021/04/29 v2.0v Standard LaTeX package
+)
+(/usr/share/texlive/texmf-dist/tex/latex/base/inputenc.sty
+Package: inputenc 2021/02/14 v1.3d Input encoding file
+\inpenc@prehook=\toks21
+\inpenc@posthook=\toks22
+)
+(/usr/share/texlive/texmf-dist/tex/latex/graphics/graphicx.sty
+Package: graphicx 2021/09/16 v1.2d Enhanced LaTeX Graphics (DPC,SPQR)
+
+(/usr/share/texlive/texmf-dist/tex/latex/graphics/keyval.sty
+Package: keyval 2022/05/29 v1.15 key=value parser (DPC)
+\KV@toks@=\toks23
+)
+(/usr/share/texlive/texmf-dist/tex/latex/graphics/graphics.sty
+Package: graphics 2022/03/10 v1.4e Standard LaTeX Graphics (DPC,SPQR)
+
+(/usr/share/texlive/texmf-dist/tex/latex/graphics/trig.sty
+Package: trig 2021/08/11 v1.11 sin cos tan (DPC)
+)
+(/usr/share/texlive/texmf-dist/tex/latex/graphics-cfg/graphics.cfg
+File: graphics.cfg 2016/06/04 v1.11 sample graphics configuration
+)
+Package graphics Info: Driver file: pdftex.def on input line 107.
+
+(/usr/share/texlive/texmf-dist/tex/latex/graphics-def/pdftex.def
+File: pdftex.def 2022/09/22 v1.2b Graphics/color driver for pdftex
+))
+\Gin@req@height=\dimen163
+\Gin@req@width=\dimen164
+)
+(/usr/share/texlive/texmf-dist/tex/latex/booktabs/booktabs.sty
+Package: booktabs 2020/01/12 v1.61803398 Publication quality tables
+\heavyrulewidth=\dimen165
+\lightrulewidth=\dimen166
+\cmidrulewidth=\dimen167
+\belowrulesep=\dimen168
+\belowbottomsep=\dimen169
+\aboverulesep=\dimen170
+\abovetopsep=\dimen171
+\cmidrulesep=\dimen172
+\cmidrulekern=\dimen173
+\defaultaddspace=\dimen174
+\@cmidla=\count291
+\@cmidlb=\count292
+\@aboverulesep=\dimen175
+\@belowrulesep=\dimen176
+\@thisruleclass=\count293
+\@lastruleclass=\count294
+\@thisrulewidth=\dimen177
+)
+(/usr/share/texlive/texmf-dist/tex/latex/tools/array.sty
+Package: array 2023/10/16 v2.5g Tabular extension package (FMi)
+\col@sep=\dimen178
+\ar@mcellbox=\box99
+\extrarowheight=\dimen179
+\NC@list=\toks24
+\extratabsurround=\skip52
+\backup@length=\skip53
+\ar@cellbox=\box100
+)
+(/usr/share/texlive/texmf-dist/tex/latex/url/url.sty
+\Urlmuskip=\muskip16
+Package: url 2013/09/16  ver 3.4  Verb mode for urls, etc.
+)
+(/usr/share/texlive/texmf-dist/tex/latex/l3backend/l3backend-pdftex.def
+File: l3backend-pdftex.def 2024-01-04 L3 backend support: PDF output (pdfTeX)
+\l__color_backend_stack_int=\count295
+\l__pdf_internal_box=\box101
+)
+(./nashforge.aux)
+\openout1 = `nashforge.aux'.
+
+LaTeX Font Info:    Checking defaults for OML/cmm/m/it on input line 9.
+LaTeX Font Info:    ... okay on input line 9.
+LaTeX Font Info:    Checking defaults for OMS/cmsy/m/n on input line 9.
+LaTeX Font Info:    ... okay on input line 9.
+LaTeX Font Info:    Checking defaults for OT1/cmr/m/n on input line 9.
+LaTeX Font Info:    ... okay on input line 9.
+LaTeX Font Info:    Checking defaults for T1/cmr/m/n on input line 9.
+LaTeX Font Info:    ... okay on input line 9.
+LaTeX Font Info:    Checking defaults for TS1/cmr/m/n on input line 9.
+LaTeX Font Info:    ... okay on input line 9.
+LaTeX Font Info:    Checking defaults for OMX/cmex/m/n on input line 9.
+LaTeX Font Info:    ... okay on input line 9.
+LaTeX Font Info:    Checking defaults for U/cmr/m/n on input line 9.
+LaTeX Font Info:    ... okay on input line 9.
+
+(/usr/share/texlive/texmf-dist/tex/context/base/mkii/supp-pdf.mkii
+[Loading MPS to PDF converter (version 2006.09.02).]
+\scratchcounter=\count296
+\scratchdimen=\dimen180
+\scratchbox=\box102
+\nofMPsegments=\count297
+\nofMParguments=\count298
+\everyMPshowfont=\toks25
+\MPscratchCnt=\count299
+\MPscratchDim=\dimen181
+\MPnumerator=\count300
+\makeMPintoPDFobject=\count301
+\everyMPtoPDFconversion=\toks26
+) (/usr/share/texlive/texmf-dist/tex/latex/epstopdf-pkg/epstopdf-base.sty
+Package: epstopdf-base 2020-01-24 v2.11 Base part for package epstopdf
+Package epstopdf-base Info: Redefining graphics rule for `.eps' on input line 4
+85.
+
+(/usr/share/texlive/texmf-dist/tex/latex/latexconfig/epstopdf-sys.cfg
+File: epstopdf-sys.cfg 2010/07/13 v1.3 Configuration of (r)epstopdf for TeX Liv
+e
+))
+LaTeX Font Info:    External font `cmex10' loaded for size
+(Font)              <7> on input line 15.
+LaTeX Font Info:    External font `cmex10' loaded for size
+(Font)              <5> on input line 15.
+LaTeX Font Info:    Trying to load font information for T1+cmtt on input line 1
+5.
+
+(/usr/share/texlive/texmf-dist/tex/latex/base/t1cmtt.fd
+File: t1cmtt.fd 2023/04/13 v2.5m Standard LaTeX font definitions
+)
+LaTeX Font Info:    External font `cmex10' loaded for size
+(Font)              <9> on input line 17.
+LaTeX Font Info:    External font `cmex10' loaded for size
+(Font)              <6> on input line 17.
+ [1
+
+{/var/lib/texmf/fonts/map/pdftex/updmap/pdftex.map}] [2]
+<../figures/phase2/fig_architecture.png, id=18, 574.18515pt x 370.38374pt>
+File: ../figures/phase2/fig_architecture.png Graphic file (type png)
+<use ../figures/phase2/fig_architecture.png>
+Package pdftex.def Info: ../figures/phase2/fig_architecture.png  used on input 
+line 44.
+(pdftex.def)             Requested size: 347.12354pt x 223.92178pt.
+ [3] [4 <../figures/phase2/fig_architecture.png>]
+<../figures/phase2/fig_arena_modules.png, id=28, 574.18515pt x 314.73586pt>
+File: ../figures/phase2/fig_arena_modules.png Graphic file (type png)
+<use ../figures/phase2/fig_arena_modules.png>
+Package pdftex.def Info: ../figures/phase2/fig_arena_modules.png  used on input
+ line 66.
+(pdftex.def)             Requested size: 347.12354pt x 190.2789pt.
+ [5 <../figures/phase2/fig_arena_modules.png>]
+<../figures/phase2/fig_panel.png, id=33, 506.97404pt x 253.30635pt>
+File: ../figures/phase2/fig_panel.png Graphic file (type png)
+<use ../figures/phase2/fig_panel.png>
+Package pdftex.def Info: ../figures/phase2/fig_panel.png  used on input line 98
+.
+(pdftex.def)             Requested size: 347.12354pt x 173.43648pt.
+ [6]
+<../figures/phase2/fig_bucket_sweep.png, id=37, 379.77885pt x 234.8775pt>
+File: ../figures/phase2/fig_bucket_sweep.png Graphic file (type png)
+<use ../figures/phase2/fig_bucket_sweep.png>
+Package pdftex.def Info: ../figures/phase2/fig_bucket_sweep.png  used on input 
+line 110.
+(pdftex.def)             Requested size: 298.75394pt x 184.77705pt.
+<../figures/phase2/fig_eq200.png, id=38, 349.7868pt x 209.94435pt>
+File: ../figures/phase2/fig_eq200.png Graphic file (type png)
+<use ../figures/phase2/fig_eq200.png>
+Package pdftex.def Info: ../figures/phase2/fig_eq200.png  used on input line 11
+7.
+(pdftex.def)             Requested size: 270.30118pt x 162.23747pt.
+<../figures/phase2/fig_speed.png, id=39, 385.9218pt x 209.94435pt>
+File: ../figures/phase2/fig_speed.png Graphic file (type png)
+<use ../figures/phase2/fig_speed.png>
+Package pdftex.def Info: ../figures/phase2/fig_speed.png  used on input line 12
+7.
+(pdftex.def)             Requested size: 284.52756pt x 154.78937pt.
+<../figures/phase2/fig_slumbot.png, id=40, 371.10645pt x 219.7008pt>
+File: ../figures/phase2/fig_slumbot.png Graphic file (type png)
+<use ../figures/phase2/fig_slumbot.png>
+Package pdftex.def Info: ../figures/phase2/fig_slumbot.png  used on input line 
+137.
+(pdftex.def)             Requested size: 270.30118pt x 160.02489pt.
+ [7 <../figures/phase2/fig_panel.png>]
+Underfull \hbox (badness 10000) in paragraph at lines 146--146
+[]\T1/cmr/bx/n/9 Table 2. \T1/cmr/m/n/9 Arena matches by op-po-nent (re-sults/c
+hipzen/matches, via
+ []
+
+<../figures/phase2/fig_arena_opponents.png, id=46, 384.11505pt x 210.3057pt>
+File: ../figures/phase2/fig_arena_opponents.png Graphic file (type png)
+<use ../figures/phase2/fig_arena_opponents.png>
+Package pdftex.def Info: ../figures/phase2/fig_arena_opponents.png  used on inp
+ut line 165.
+(pdftex.def)             Requested size: 284.52756pt x 155.78743pt.
+[8 <../figures/phase2/fig_bucket_sweep.png>]
+<../figures/phase2/fig_arena_depth.png, id=51, 399.29175pt x 222.5916pt>
+File: ../figures/phase2/fig_arena_depth.png Graphic file (type png)
+<use ../figures/phase2/fig_arena_depth.png>
+Package pdftex.def Info: ../figures/phase2/fig_arena_depth.png  used on input l
+ine 177.
+(pdftex.def)             Requested size: 284.52756pt x 158.61513pt.
+
+Overfull \hbox (184.92265pt too wide) in paragraph at lines 190--204
+ [][] 
+ []
+
+<../figures/phase2/snap_progress.png, id=52, 528.65504pt x 162.6075pt>
+File: ../figures/phase2/snap_progress.png Graphic file (type png)
+<use ../figures/phase2/snap_progress.png>
+Package pdftex.def Info: ../figures/phase2/snap_progress.png  used on input lin
+e 210.
+(pdftex.def)             Requested size: 347.12354pt x 106.77542pt.
+[9 <../figures/phase2/fig_eq200.png>]
+<../figures/phase2/snap_decision_log.png, id=57, 528.65504pt x 135.1449pt>
+File: ../figures/phase2/snap_decision_log.png Graphic file (type png)
+<use ../figures/phase2/snap_decision_log.png>
+Package pdftex.def Info: ../figures/phase2/snap_decision_log.png  used on input
+ line 217.
+(pdftex.def)             Requested size: 347.12354pt x 88.74223pt.
+<../figures/phase2/snap_training.png, id=58, 528.65504pt x 148.8762pt>
+File: ../figures/phase2/snap_training.png Graphic file (type png)
+<use ../figures/phase2/snap_training.png>
+Package pdftex.def Info: ../figures/phase2/snap_training.png  used on input lin
+e 224.
+(pdftex.def)             Requested size: 347.12354pt x 97.75882pt.
+ [10 <../figures/phase2/fig_speed.png>]
+Underfull \hbox (badness 3701) in paragraph at lines 238--239
+[]\T1/cmr/m/n/9 Tammelin, O.: Solv-ing large im-per-fect in-for-ma-tion games u
+s-ing CFR+.
+ []
+
+[11 <../figures/phase2/fig_slumbot.png>]
+Underfull \hbox (badness 1590) in paragraph at lines 247--248
+[]\T1/cmr/m/n/9 Brown, N., Sand-holm, T.: Su-per-hu-man AI for mul-ti-player po
+ker. Sci-ence
+ []
+
+[12 <../figures/phase2/fig_arena_opponents.png>] [13 <../figures/phase2/fig_are
+na_depth.png> <../figures/phase2/snap_progress.png> <../figures/phase2/snap_dec
+ision_log.png>] [14 <../figures/phase2/snap_training.png>] (./nashforge.aux)
+ ***********
+LaTeX2e <2023-11-01> patch level 1
+L3 programming layer <2024-01-22>
+ ***********
+ ) 
+Here is how much of TeX's memory you used:
+ 2407 strings out of 476106
+ 38242 string characters out of 5793933
+ 1933975 words of memory out of 5000000
+ 24420 multiletter control sequences out of 15000+600000
+ 566703 words of font info for 52 fonts, out of 8000000 for 9000
+ 59 hyphenation exceptions out of 8191
+ 57i,9n,65p,1473b,313s stack positions out of 10000i,1000n,20000p,200000b,200000s
+ </home/dheirav/.texlive2023/texmf-var/fonts/pk/ljfour/jknappen/ec/ecbx1200.6
+00pk> </home/dheirav/.texlive2023/texmf-var/fonts/pk/ljfour/jknappen/ec/tcrm100
+0.600pk> </home/dheirav/.texlive2023/texmf-var/fonts/pk/ljfour/jknappen/ec/ecbx
+1000.600pk> </home/dheirav/.texlive2023/texmf-var/fonts/pk/ljfour/jknappen/ec/e
+cbx0900.600pk> </home/dheirav/.texlive2023/texmf-var/fonts/pk/ljfour/jknappen/e
+c/ectt0900.600pk> </home/dheirav/.texlive2023/texmf-var/fonts/pk/ljfour/jknappe
+n/ec/ecrm0900.600pk> </home/dheirav/.texlive2023/texmf-var/fonts/pk/ljfour/jkna
+ppen/ec/ecrm1000.600pk> </home/dheirav/.texlive2023/texmf-var/fonts/pk/ljfour/j
+knappen/ec/ecbx1440.600pk></usr/share/texlive/texmf-dist/fonts/type1/public/ams
+fonts/cm/cmsy10.pfb></usr/share/texlive/texmf-dist/fonts/type1/public/amsfonts/
+cm/cmsy9.pfb>
+Output written on nashforge.pdf (14 pages, 854251 bytes).
+PDF statistics:
+ 429 PDF objects out of 1000 (max. 8388607)
+ 72 compressed objects within 1 object stream
+ 0 named destinations out of 1000 (max. 500000)
+ 61 words of extra memory for PDF output out of 10000 (max. 10000000)
+

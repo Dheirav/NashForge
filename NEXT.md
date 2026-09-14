@@ -80,16 +80,20 @@ real improvement are compatible; the earlier phrasing denied the second.
 **NashForge is entered in Chipzen season 6 (13 September), and the bot has to be running
 for it.** Chipzen is a heads-up bot arena (`docs/chipzen.md`): elimination matches from 10,000
 chips at 50/100 with rising blinds, Glicko-2 rated, a weekly season of round-robin then playoffs.
-Registration closes Mon 14 Sept 23:59 UTC, the round robin runs **Tue 15 to Fri 18 Sept** and the
-playoffs Sat 19 to Sun 20, all with published fixture times. The entry is a remote bot, so the
-process has to be in the lobby when each fixture is dispatched:
+Registration closes Mon 14 Sept 23:59 UTC, the round robin runs **Tue 15 to Fri 18 Sept, one
+round per evening from 23:30 IST (18:00 UTC), matches ten minutes apart**, and the playoffs Sat 19
+to Sun 20. Remote bots get 30 seconds per decision; blinds step up every 20 hands. The entry is a
+remote bot, so the process has to be in the lobby when each fixture opens (it waits about 90 s):
 
-    tools/chipzen-run.sh --accept-inbound     # start, from Tuesday 05:30 IST until Sunday
+    tools/chipzen-run.sh --accept-inbound --queue     # running every evening from 23:15 IST, Tue to Sun
+    venv/bin/python scripts/chipzen_run.py --fixtures # this bot's fixtures, in IST
     tools/chipzen-progress.sh --watch         # what it is doing
     tools/chipzen-run.sh stop
     tools/chipzen-run.sh --house-bot --once   # one unrated practice match against a house bot
     tools/chipzen-run.sh --challenge Blueprint RoboPoker --accept-inbound   # rated, remote track
     venv/bin/python scripts/chipzen_review.py # results/chipzen/review.md from the match logs
+    venv/bin/python scripts/chipzen_ledger.py # results/chipzen/ledger.md: win rate per bot version
+    tools/chipzen-run.sh --accept-inbound --queue --label "what changed"   # stamps every match
 
 The bot's page, rating and replays: https://chipzen.ai/bots/29e73b2b-d349-4c60-b3d0-e9ddae8ae0f6.
 

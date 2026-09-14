@@ -42,6 +42,12 @@ CLIENT_VERSION = "0.1.0"
 BOT_TOKEN_SUBPROTOCOL = "chipzen-bot-token"
 #: The executor's mid-match reconnect budget, per the transport spec.
 MATCH_RECONNECTS = 3
+#: The server pings the lobby every 15 s. A socket that has gone this long
+#: without any frame is dead whatever the OS says: on 14 September the machine
+#: slept, the server closed us, and the client sat "connected" on a socket
+#: that would never deliver another byte, missing every match for a day.
+LOBBY_SILENCE = 60.0
+MATCH_SILENCE = 120.0
 
 
 @dataclass
@@ -72,8 +78,13 @@ class Arena:
 
     def __init__(self, base_url: str, bot_id: str, token: str, player,
                  log_dir: str, status_path: Optional[str] = None,
-                 once: bool = False, matches_dir: Optional[str] = None):
+                 once: bool = False, matches_dir: Optional[str] = None,
+                 version: Optional[dict] = None):
         self.base = _normalise_base(base_url)
+        #: What the bot was when it played: commit, solver set, flags, label.
+        #: Written into every match log so scripts/chipzen_ledger.py can put a
+        #: win rate against each change.
+        self.version = version or {}
         self.bot_id = bot_id
         self.token = token
         self.player = player
@@ -129,8 +140,15 @@ class Arena:
         self.status.lobby = "connecting"
         self._event("lobby connecting")
         async with websockets.connect(url, max_size=2 ** 24) as ws:
+            self._lobby_ws = ws
             await ws.send(json.dumps({"type": "authenticate", "token": self.token}))
-            async for raw in ws:
+            while True:
+                try:
+                    raw = await asyncio.wait_for(ws.recv(), timeout=LOBBY_SILENCE)
+                except asyncio.TimeoutError:
+                    raise ConnectionError(f"no lobby frame for {LOBBY_SILENCE:.0f}s; assuming the socket is dead")
+                except websockets.exceptions.ConnectionClosed as closed:
+                    raise ConnectionError(f"lobby closed: {closed}")
                 msg = _loads(raw)
                 kind = msg.get("type")
                 if kind == "hello":
@@ -152,7 +170,17 @@ class Arena:
                     logger.debug("lobby: ignoring %s", kind)
                 if self.once and self.status.matches_finished:
                     return
-        raise ConnectionError("lobby closed")
+
+    async def drop_lobby(self, why: str) -> None:
+        """Close the lobby socket so `run` reconnects; used when the platform says we are offline."""
+        ws = getattr(self, "_lobby_ws", None)
+        if ws is not None:
+            logger.warning("lobby: dropping the connection (%s)", why)
+            self._event(f"lobby dropped on purpose: {why}")
+            try:
+                await ws.close()
+            except Exception:
+                pass
 
     # ---- match -------------------------------------------------------------
 
@@ -214,7 +242,13 @@ class Arena:
             self._event("match handshake done")
 
             seat: Optional[int] = None
-            async for raw in ws:
+            while True:
+                try:
+                    raw = await asyncio.wait_for(ws.recv(), timeout=MATCH_SILENCE)
+                except asyncio.TimeoutError:
+                    raise ConnectionError(f"no match frame for {MATCH_SILENCE:.0f}s; re-dialling")
+                except websockets.exceptions.ConnectionClosedOK:
+                    break
                 msg = _loads(raw)
                 kind = msg.get("type")
                 if kind == "ping":
@@ -232,6 +266,7 @@ class Arena:
                     self.status.current["timeout_ms"] = msg.get("turn_timeout_ms")
                     log.write(json.dumps({"frame": "match_start", "seat": seat,
                                           "match_id": match_id, "at": time.time(),
+                                          "version": self.version,
                                           "rated": self.status.current.get("rated"),
                                           "seats": msg.get("seats"),
                                           "game_config": msg.get("game_config"),
@@ -242,6 +277,11 @@ class Arena:
                     log.write(json.dumps({"frame": "round_start", "state": msg.get("state")}) + "\n")
                 elif kind == "turn_request":
                     acting = int(msg.get("seat", seat if seat is not None else 0))
+                    if seat is None:
+                        # A resumed match re-sends no match_start; the turn
+                        # request names the seat that must act, which is ours.
+                        seat = acting
+                        self.status.current["seat"] = seat
                     state = msg.get("state") or {}
                     valid = msg.get("valid_actions") or []
                     started = time.perf_counter()
@@ -414,6 +454,19 @@ def accept_remote_challenge(base_url: str, token: str, challenge_id: str) -> dic
 def decline_remote_challenge(base_url: str, token: str, challenge_id: str) -> dict:
     return _http(base_url, token, "POST",
                  f"/api/external-api/challenges/remote/{challenge_id}/decline", {})
+
+
+def upcoming_fixtures(base_url: str, token: str) -> dict:
+    """
+    Season fixtures scheduled for this bot, with their decision clocks.
+
+    Per the platform's author (13 September): fixtures run one round per
+    evening from 18:00 UTC, ten minutes apart, the clock is written on each
+    fixture as `decision_clock_seconds` (30 for remote bots), and the process
+    must be in the lobby when a fixture opens: it waits about 90 seconds and
+    re-kicks twice, then the match is a walkover.
+    """
+    return _http(base_url, token, "GET", "/api/external-api/fixtures/upcoming")
 
 
 def join_queue(base_url: str, token: str) -> dict:

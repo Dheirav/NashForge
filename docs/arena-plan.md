@@ -93,9 +93,12 @@ fixes, all in the code and tested, with the solvers they need training:
    shove; now a companion shove with anything below the top strength class is
    taken as a call. (`chipzen/player.py`, `shoves_softened` in the stats.)
 2. **A full-size raise-cap-2 solver** (every size on the re-raise) at 100bb,
-   200 samples, three million iterations, training into `results/cfr/ladder200/
-   cap2_100bb.pkl`. The runner prefers a `cap2_*` companion over a taper at the
-   same depth.
+   200 samples, three million iterations: `results/cfr/ladder200/cap2_100bb.pkl`,
+   390,456 information sets, 2h12m native (2.64 ms/iteration with the machine
+   shared), +240.5 BB/100 against random and +204.2 against always-call, the
+   latter a third of the one-raise solver's +647, which is the exploitation
+   given up for knowing what a re-raise means. `--deep-primary` plays it as the
+   main solver at its depth; texture-aware copies at 100, 70 and 50bb follow.
 3. **Board texture in the bucket.** `abstraction.buckets.board_texture` classes a
    board by flush (two or fewer, three, four or more of a suit) and by four ranks
    within five; the postflop bucket becomes strength plus six times that class.
@@ -117,4 +120,9 @@ fixes, all in the code and tested, with the solvers they need training:
 3. Tuesday 05:30 IST: the bot must be running; the machine must not sleep.
 4. During the season: the contender plan against Slumbot, in parallel; the
    arena logs accumulate for the opponent question.
-5. After the season: bet sizes, and an exploit if the logs justify one.
+5. After the season: the **container upload** (a second rated record on the
+   bigger ladder, run on their machines): the play path drops numba in favour
+   of the C++ equity function, the process loads only the rungs a match can
+   reach and is checked against the 256 MB cap (the remote bot sat at 763 MB
+   after two hours on 13 September, unexplained), the image stays under 200 MB
+   without llvmlite. Then bet sizes, and an exploit if the logs justify one.

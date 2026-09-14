@@ -1,0 +1,5 @@
+[
+ {"from": "2026-09-13T16:50:00+05:30", "label": "v0: one-raise ladder, 100/200bb only, random fallback"},
+ {"from": "2026-09-13T17:09:00+05:30", "label": "v1: depth ladder 5 to 200bb, (4,2) companion, hand-strength rule"},
+ {"from": "2026-09-13T20:57:00+05:30", "label": "v2: companion shoves softened; bluffs withheld vs stations"}
+]

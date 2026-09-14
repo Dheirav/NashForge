@@ -1,0 +1,44 @@
+{
+ "Blueprint": {
+  "bets_faced": 592,
+  "calls": 38,
+  "folds": 481,
+  "hands": 1269,
+  "raises": 73
+ },
+ "PluriBot": {
+  "bets_faced": 6,
+  "calls": 1,
+  "folds": 3,
+  "hands": 15,
+  "raises": 2
+ },
+ "hoops": {
+  "bets_faced": 1073,
+  "calls": 607,
+  "folds": 366,
+  "hands": 1116,
+  "raises": 100
+ },
+ "mr_hide": {
+  "bets_faced": 951,
+  "calls": 708,
+  "folds": 167,
+  "hands": 862,
+  "raises": 76
+ },
+ "pebble": {
+  "bets_faced": 16,
+  "calls": 6,
+  "folds": 10,
+  "hands": 28,
+  "raises": 0
+ },
+ "r0ckGarden": {
+  "bets_faced": 1545,
+  "calls": 573,
+  "folds": 838,
+  "hands": 1927,
+  "raises": 134
+ }
+}

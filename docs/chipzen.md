@@ -285,13 +285,43 @@ that does not fold. `docs/arena-plan.md` has the detail. Ladders: `results/cfr/
 ladder/` (40 samples), `ladder200/` (200 samples), `ladder200t/` (200 samples
 plus texture); pick with `--ladder-dir`.
 
+**From the platform's author, by email on 13 September, 19:01 IST.** The
+2-second clock in the manual is a mistake; season fixtures give every match
+with a remote bot **30 seconds per decision**, written on each fixture as
+`decision_clock_seconds` (`GET /api/external-api/fixtures/upcoming`, or
+`scripts/chipzen_run.py --fixtures`). A timeout costs the hand, not the match.
+Format: 10,000 chips at 50/100, **blinds step up every 20 hands**, stacks carry
+over, play to a bust. **Fixtures run one round per evening from Tuesday,
+starting 18:00 UTC, which is 23:30 IST, ten minutes apart.** The process must
+be in the lobby when a fixture opens: the platform waits about 90 seconds and
+re-kicks twice, then it is a walkover for whoever was there.
+
+**From the author, 21:45.** A direct API challenge to another owner's remote
+bot lands on that owner's dashboard and needs a human to accept it; nothing is
+pushed to their client. So `--accept-inbound` sees nothing today and the rated
+queue is the only way two remote bots meet without a person in the loop; he
+intends to push challenges over the lobby with an auto-accept option and will
+tell us when it exists. The dashboard's own AUTO-ACCEPT switch on the bot page
+is the mirror image: with it on, other owners' dashboard challenges to us start
+without a click, which is more rated games while the bot is running anyway.
+
+**The ledger.** Every match log carries the bot's version (commit, solver
+directory, deep-primary flag, the `--label` given at start) and
+`scripts/chipzen_ledger.py` groups matches by it: matches, win rate, hands, net
+chips, chips per hand with a standard error, showdowns, per opponent. Matches
+older than the stamping are assigned by time from `results/chipzen/epochs.json`.
+Chips per hand is the number to compare versions on; a match win rate over
+twenty matches has an error of about ±10 points.
+
 ## What has to be true during the season
 
-- The process must be in the lobby when a fixture is dispatched, so
-  `tools/chipzen-run.sh` has to be running from **Tuesday 05:30 IST** until the
-  end of the playoffs on Sunday, and this machine must not sleep or restart
-  during a fixture. Windows Update restarted it at 04:29 on Wednesday last week.
-  Fixture start times are published on the season page once registration closes.
+- The process must be in the lobby when a fixture opens, so
+  `tools/chipzen-run.sh` has to be running and this machine awake **every
+  evening from 23:15 IST, Tuesday to Friday**, for as long as the round takes
+  (matches ten minutes apart), and again for the playoffs on Saturday and
+  Sunday. Windows Update restarted this machine at 04:29 one night last week;
+  the evening window is safer, and the machine can sleep in between.
+  `scripts/chipzen_run.py --fixtures` prints the exact times in IST.
 - The runner restarts the process if it dies, and the process reconnects the
   lobby on its own; a full restart mid-match resumes the seat, but the clock
   runs while we are away.
