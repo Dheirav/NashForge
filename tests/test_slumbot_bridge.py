@@ -243,3 +243,103 @@ def test_a_full_hand_replays_without_losing_chips():
     assert node.pot == 400
     assert node.to_call == 0
     assert node.street == 3
+
+
+# --- the raise schedule ----------------------------------------------------
+#
+# The contender plan's first step: translate over the sizes the schedule has at
+# this depth, and count the re-raises it has no size for, by depth. Before this
+# a deeper solver was measured as a one-raise one and missed for the wrong reason.
+
+def test_a_reraise_under_the_one_raise_cap_is_a_schedule_miss_at_depth_one():
+    node = replay(state("b200b600"), RNG())
+    assert node.miss_depths == [1]
+    assert node.history[-1] == "5"      # nothing sized to read it as, so a shove
+
+
+def test_a_reraise_under_a_taper_translates_over_the_taper_s_own_sizes():
+    """`(4, 2)` keeps two-times-pot and all-in on the re-raise, and nothing smaller."""
+    node = replay(state("b200b600"), RNG(), schedule=(4, 2))
+    assert node.miss_depths == []
+    assert node.history[-1] in "45"
+
+
+def test_a_third_raise_under_cap_two_is_a_schedule_miss_at_depth_two():
+    node = replay(state("b200b600b1800"), RNG(), schedule=2)
+    assert node.miss_depths == [2]
+
+
+def test_the_player_reads_the_schedule_from_the_pickle(tmp_path):
+    import pickle
+    from abstraction.buckets import CardAbstraction
+    from slumbot.player import SolverPlayer, strategy_schedule
+    abstraction = CardAbstraction(preflop_buckets=2, postflop_buckets=2,
+                                  samples=20, equity_samples=4).fit(np.random.default_rng(0))
+    path = tmp_path / "taper.pkl"
+    with open(path, "wb") as handle:
+        pickle.dump({"strategy": {}, "abstraction": abstraction,
+                     "args": {"raise_cap": [4, 2], "stack": 400, "big_blind": 2}}, handle)
+    assert strategy_schedule({"args": {"raise_cap": 2}}) == 2
+    assert strategy_schedule({"args": {}}) == 1
+    player = SolverPlayer(str(path), RNG())
+    assert player.raise_cap == (4, 2)
+    # A re-raise is on the taper's tree, so it is a lookup miss (empty strategy)
+    # and not a schedule miss. Depth is raises already on the street, two here,
+    # the convention `scripts/chipzen_review.py` reports in.
+    player(state("b200b600"))
+    assert player.stats.schedule_misses == {}
+    assert player.stats.miss_depths == {2: 1}
+
+
+def test_the_player_records_each_hand_s_misses_street_and_position(tmp_path):
+    """The per-hand record `scripts/slumbot_split.py` splits the loss by."""
+    import pickle
+    from abstraction.buckets import CardAbstraction
+    from slumbot.player import SolverPlayer
+    abstraction = CardAbstraction(preflop_buckets=2, postflop_buckets=2,
+                                  samples=20, equity_samples=4).fit(np.random.default_rng(0))
+    path = tmp_path / "empty.pkl"
+    with open(path, "wb") as handle:
+        pickle.dump({"strategy": {}, "abstraction": abstraction, "args": {"raise_cap": 1}}, handle)
+    player = SolverPlayer(str(path), RNG())
+    player.begin_hand()
+    player(state("b200"))                      # a decision, and a miss (empty strategy)
+    finished = HandState(token="t", action="b200c/kk/kk/kb300f", old_action="", client_pos=1,
+                         hole_cards=["Ah", "Kh"], board=["2c", "7d", "9s", "Ts", "3h"], winnings=-300)
+    record = player.hand_record(finished)
+    assert record == {"w": -300, "pos": 1, "street": 3, "showdown": False,
+                      "decisions": 1, "miss": 1, "sched_miss": 0, "off": 0}
+    player.begin_hand()
+    assert player.hand_record(finished)["miss"] == 0
+
+
+def test_a_miss_is_answered_by_the_hand_strength_rule_not_a_random_guess(tmp_path):
+    """
+    With an empty strategy every lookup misses. Until 15 September the player
+    then chose uniformly among legal actions, a shove one time in six; at
+    3,000 hands against Slumbot the hands with a miss carried 68 percent of
+    the loss. The rule folds a weak hand to a pot-sized bet and raises a strong
+    one, and never sends an illegal action.
+    """
+    import pickle
+    from abstraction.buckets import CardAbstraction
+    from slumbot.player import SolverPlayer
+    abstraction = CardAbstraction(preflop_buckets=2, postflop_buckets=6,
+                                  samples=60, equity_samples=8).fit(np.random.default_rng(0))
+    path = tmp_path / "empty.pkl"
+    with open(path, "wb") as handle:
+        pickle.dump({"strategy": {}, "abstraction": abstraction, "args": {"raise_cap": 2}}, handle)
+    player = SolverPlayer(str(path), RNG())
+    # Seven-deuce facing a pot-sized river bet: fold, every time.
+    weak = HandState(token="t", action="b200c/kk/kk/b600", old_action="", client_pos=1,
+                     hole_cards=["7h", "2d"], board=["As", "Kd", "9c", "4h", "3s"])
+    assert {player(weak) for _ in range(20)} == {"f"}
+    assert player.stats.fallbacks == 20
+    # Top set on the same board, facing the same bet: never a fold.
+    strong = HandState(token="t", action="b200c/kk/kk/b600", old_action="", client_pos=1,
+                       hole_cards=["Ah", "Ad"], board=["As", "Kd", "9c", "4h", "3s"])
+    assert "f" not in {player(strong) for _ in range(20)}
+    # The old behaviour is still available for a measurement of the solver alone.
+    guesser = SolverPlayer(str(path), RNG(), fallback=False)
+    assert len({guesser(weak) for _ in range(40)}) > 1
+    assert guesser.stats.fallbacks == 0

@@ -1,0 +1,18 @@
+{
+ "first": "results/cfr/experiments/nolimit_100bb_eq200.pkl",
+ "second": "results/cfr/nolimit_strategy.pkl",
+ "hands": 40000,
+ "seeds": [
+  0,
+  1,
+  2
+ ],
+ "bb_per_100": [
+  8.047500000000001,
+  2.0968750000000003,
+  7.5575
+ ],
+ "mean": 5.900625000000001,
+ "stderr": 1.9071279057678157,
+ "measured": "2026-09-13 17:41"
+}

@@ -1,0 +1,200 @@
+{
+ "summary": {
+  "name": "wsp",
+  "matches": 26,
+  "hands": 1563,
+  "platform": {
+   "rating": 1987.4920950906849,
+   "matches_played": 272,
+   "wins": 191,
+   "losses": 81,
+   "bb_per_100": 80.27398512802317,
+   "bb_hands_counted": 11274,
+   "llm_author_model": null,
+   "bot_kind": "sandboxed"
+  },
+  "vpip": 0.5515035188739603,
+  "pfr": 0.472808701215611,
+  "three_bet": 0.0,
+  "fold_to_three_bet": 0.39705882352941174,
+  "fold_to_bet": 0.5705669481302774,
+  "call_share_of_answers": 0.9325842696629213,
+  "bets_faced": 829,
+  "raise_sizes": {
+   "1-2": 0.5,
+   "<\u00bd": 0.0,
+   "\u00bd-1": 0.49
+  },
+  "showdown_rate": 0.20857325655790146,
+  "showdown_win": 0.6134969325153374,
+  "river_bets": 113,
+  "river_bluff_rate": 0.0,
+  "big_bets": 0,
+  "big_bet_air_rate": 0.0,
+  "small_bets": 417,
+  "small_bet_air_rate": 0.0,
+  "bb_fold_to_open": 0.4409090909090909,
+  "bb_opens_faced": 220,
+  "shown_chen_mean": 4.355828220858895,
+  "station": false,
+  "fold_or_raise": false,
+  "top_opponents": [
+   [
+    "Maxwell",
+    8
+   ],
+   [
+    "Fold-ver-3",
+    5
+   ],
+   [
+    "mellyy",
+    3
+   ],
+   [
+    "Fabulous",
+    3
+   ],
+   [
+    "runner1",
+    2
+   ]
+  ]
+ },
+ "counts": {
+  "name": "wsp",
+  "matches": 26,
+  "hands": 1563,
+  "bets_faced": 829,
+  "folds": 473,
+  "calls": 332,
+  "raises": 24,
+  "by_history": {
+   "preflop:": {
+    "raise": 587,
+    "fold": 193
+   },
+   "preflop:TrUr": {
+    "call": 40,
+    "fold": 27
+   },
+   "flop:Ur": {
+    "raise": 12,
+    "fold": 63,
+    "call": 59
+   },
+   "flop:UrTrUr": {
+    "call": 1,
+    "raise": 1
+   },
+   "preflop:Ur": {
+    "fold": 97,
+    "call": 123
+   },
+   "flop:Uc": {
+    "raise": 70,
+    "check": 170
+   },
+   "flop:": {
+    "check": 381,
+    "raise": 123
+   },
+   "flop:TcUr": {
+    "call": 27,
+    "fold": 118
+   },
+   "turn:": {
+    "check": 242,
+    "raise": 94
+   },
+   "turn:TcUr": {
+    "call": 5,
+    "fold": 57
+   },
+   "river:": {
+    "check": 167,
+    "raise": 64
+   },
+   "river:TcUr": {
+    "fold": 41,
+    "call": 2
+   },
+   "turn:Ur": {
+    "call": 35,
+    "fold": 39,
+    "raise": 5
+   },
+   "river:Ur": {
+    "call": 19,
+    "fold": 31,
+    "raise": 4
+   },
+   "turn:Uc": {
+    "check": 133,
+    "raise": 50
+   },
+   "river:Uc": {
+    "check": 90,
+    "raise": 44
+   },
+   "preflop:Uc": {
+    "check": 251,
+    "raise": 152
+   },
+   "flop:TrUr": {
+    "call": 8,
+    "raise": 1
+   },
+   "turn:TrUr": {
+    "call": 5
+   },
+   "flop:TrUrTrUr": {
+    "call": 1
+   },
+   "river:TrUr": {
+    "call": 5
+   },
+   "preflop:UcTrUr": {
+    "call": 1
+   },
+   "flop:UcTrUr": {
+    "call": 1
+   },
+   "river:UrTrUr": {
+    "raise": 1
+   }
+  },
+  "vpip": 862,
+  "pfr": 739,
+  "three_bet": 0,
+  "three_bet_chances": 220,
+  "fold_to_three_bet": 27,
+  "three_bets_faced": 68,
+  "showdowns": 326,
+  "showdowns_won": 200,
+  "raise_sizes": {
+   "1-2": 607,
+   "\u00bd-1": 595,
+   "<\u00bd": 6
+  },
+  "opponents": {
+   "Sleight-of-Hand": 1,
+   "mellyy": 3,
+   "SolvencyCheck": 1,
+   "runner1": 2,
+   "Maxwell": 8,
+   "OmegaBot": 1,
+   "Blueprint": 1,
+   "tRufFle": 1,
+   "Fabulous": 3,
+   "Fold-ver-3": 5
+  },
+  "net_chips": 0,
+  "river_bets": 113,
+  "river_bluffs": 0,
+  "big_bets": 0,
+  "big_bets_air": 0,
+  "small_bets": 417,
+  "small_bets_air": 0
+ }
+}

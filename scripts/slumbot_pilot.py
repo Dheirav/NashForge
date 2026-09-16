@@ -29,6 +29,7 @@ Usage
     venv/bin/python scripts/slumbot_pilot.py --hands 300
 """
 import argparse
+from types import SimpleNamespace
 import json
 import os
 import sys
@@ -41,6 +42,7 @@ sys.path.insert(0, ROOT)
 import numpy as np
 
 from slumbot import SlumbotError, play_hand
+from slumbot.api import always_fold, call_station
 from slumbot.player import SolverPlayer
 
 STRATEGY = os.path.join(ROOT, "results", "cfr", "nolimit_strategy.pkl")
@@ -52,19 +54,43 @@ def main():
     parser.add_argument("--hands", type=int, default=300)
     parser.add_argument("--seed", type=int, default=0)
     parser.add_argument("--out", default=os.path.join(OUT, "pilot.json"))
+    parser.add_argument("--strategy", default=STRATEGY,
+                        help="the pickle to play; its raise schedule is read from the file")
+    parser.add_argument("--purify", default="none", choices=["none", "postflop", "all"],
+                        help="play the most probable action instead of sampling; off by default")
+    parser.add_argument("--policy", default="solver", choices=["solver", "fold", "call"],
+                        help="fold or call plays a fixed policy instead of the solver, for calibration")
+    parser.add_argument("--no-fallback", action="store_true",
+                        help="guess uniformly at random on a lookup miss, as before 15 September")
     args = parser.parse_args()
 
-    player = SolverPlayer(STRATEGY, np.random.default_rng(args.seed))
+    if args.policy == "solver":
+        player = SolverPlayer(args.strategy, np.random.default_rng(args.seed), purify=args.purify,
+                              fallback=not args.no_fallback)
+    else:
+        # A fixed policy needs no strategy, and the contender's pickle is 3 GB
+        # in a process: loading it for a calibration run is what would keep the
+        # calibration from running beside anything else.
+        from slumbot.player import SessionStats
+        player = SimpleNamespace(stats=SessionStats(), raise_cap=None, purify="none", fallback=False,
+                                 begin_hand=lambda: None,
+                                 hand_record=lambda state: {"w": state.winnings, "pos": state.client_pos,
+                                                            "street": state.action.count("/"),
+                                                            "showdown": not state.action.rstrip("/").endswith("f")})
+    policy = {"solver": player, "fold": always_fold, "call": call_station}[args.policy]
+    print(f"strategy {os.path.basename(args.strategy)}, schedule {player.raise_cap}")
     hands, errors, positions = [], [], Counter()
     token = None
 
     print(f"{args.hands} hands, seed {args.seed} — protocol health only\n")
     for index in range(args.hands):
         try:
-            state = play_hand(player, token)
+            player.begin_hand()
+            state = play_hand(policy, token)
             token = state.token
             positions[state.client_pos] += 1
             hands.append({
+                **player.hand_record(state),
                 "action": state.action,
                 "client_pos": state.client_pos,
                 "hole_cards": state.hole_cards,
@@ -79,6 +105,11 @@ def main():
                   f"miss rate {player.stats.miss_rate:.1%}", flush=True)
 
     report(player, hands, errors, positions, args)
+    if args.policy != "solver" and hands:
+        w = np.array([h["w"] for h in hands if h.get("w") is not None], dtype=float)
+        b = np.array([h["w"] - h["baseline_winnings"] for h in hands if h.get("baseline_winnings") is not None], dtype=float)
+        print(f"\ncalibration ({args.policy}): raw {w.mean() / 100 * 1000:+.0f} ± {1.96 * w.std(ddof=1) / np.sqrt(len(w)) / 100 * 1000:.0f} mbb/hand"
+              + (f"; baseline-differenced {b.mean() / 100 * 1000:+.0f} ± {1.96 * b.std(ddof=1) / np.sqrt(len(b)) / 100 * 1000:.0f}" if len(b) > 1 else ""))
 
 
 def report(player, hands, errors, positions, args):
@@ -92,6 +123,8 @@ def report(player, hands, errors, positions, args):
     print(f"actions sent       {dict(stats.actions_sent)}")
     print(f"lookup miss rate   {stats.miss_rate:.1%} "
           f"({stats.misses}/{stats.consulted})")
+    print(f"misses by raises already on the street  {dict(sorted(stats.miss_depths.items()))}")
+    print(f"re-raises the schedule had no size for  {dict(sorted(stats.schedule_misses.items()))}")
     print(f"off-abstraction    {stats.off_abstraction} bets too large to describe")
     print(f"seat distribution  {dict(positions)}")
 
@@ -110,6 +143,12 @@ def report(player, hands, errors, positions, args):
         json.dump({"hands": hands, "errors": errors,
                    "decisions": stats.decisions,
                    "miss_rate": stats.miss_rate,
+                   "strategy": os.path.basename(args.strategy),
+                   "schedule": str(player.raise_cap),
+                   "purify": player.purify, "policy": args.policy,
+                   "fallback": player.fallback, "fallbacks": player.stats.fallbacks,
+                   "misses_by_raise_depth": {str(k): v for k, v in sorted(stats.miss_depths.items())},
+                   "schedule_misses_by_raise_depth": {str(k): v for k, v in sorted(stats.schedule_misses.items())},
                    "off_abstraction": stats.off_abstraction,
                    "note": "PILOT — protocol shakedown. Not a result. "
                            "The win rate over these hands is not to be quoted."},

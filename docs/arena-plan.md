@@ -113,6 +113,117 @@ fixes, all in the code and tested, with the solvers they need training:
    logs so far: `mr_hide` folds to 14 percent of bets over 105, `hoops` 34
    percent, so the adjustment fires against the first and not the second.
 
+## 14 September: v3 and v4
+
+The texture-aware, 200-sample set with cap-2 primary at 50, 70 and 100bb went
+live at 02:55 as **v3**: 20 rated matches against `Blueprint` by 06:07, 13 won,
++47 ± 31 chips per hand. Then nothing until 21:00, for two reasons that are now
+fixed: the laptop slept and the lobby socket died silently (a 60-second silence
+watchdog reconnects; `EXT_BOT_OFFLINE` from the platform drops the lobby), and
+the free tier's 20 challenge matches a day were used by 06:07 (resets 05:30
+IST; season fixtures do not count).
+
+The seven Blueprint losses were all one call of its all-in. Blueprint folds to
+81 percent of bets and its raises are value; the solver's three-bet-shove nodes
+are the thinnest part of its tree. **v4** adds a second measured rule in
+`chipzen/opponents.py`: a fold-or-raise bot (calls under half of its non-fold
+answers over 100 bets; Blueprint 0.34, the others 0.8 to 0.9) gets its
+pot-sized bets called only by the top strength class; and the fallback rule no
+longer calls a pot-sized bet with a middling hand. The ledger separates v2, v3
+and v4.
+
+## 14 September, later: the preflop abstraction, not the fallback
+
+The eight most expensive hands on record are five solver decisions, two
+companion decisions and one fallback; the rule path answered 32 of v3's 1,367
+decisions. Reading the shipped strategy directly: KQo, T9s and 77 are one
+preflop class (six k-means groups over 27 distinct Chen scores), and at 70bb
+that class calls a shove after a two-times-pot open 97 percent of the time,
+which is right for TT and AQ and wrong for the KQ that lost two Blueprint
+stacks. Preflop has 169 hands and no reason to be clustered at all, so
+`preflop_buckets=169` is now lossless, with the coarse class kept behind
+`strength_of` so the player's six-class rules keep their meaning. The ladder is
+retraining as `results/cfr/ladder169/` on the `ladder200t` recipe, gated by a
+40,000-hand play-off per tree before it replaces v4. The v4 rules stay: a
+sharper solver narrows the calling range, while Blueprint's never-bluff shove
+is still an opponent property an equilibrium does not know.
+
+**Measured, later that night.** The lossless ladder lost the same-tree gate at every
+budget: −4.4 ± 1.8 BB/100 on the cap-2 100bb tree at 3M iterations, −5.7 ± 1.5 on the
+one-raise tree at 1M against 1M, −15.8 ± 3.8 at 250k against 250k. The gap closes with
+iterations and has not crossed. The offline replay (`scripts/chipzen_replay.py`) shows the
+lossless 100bb solver folding the hands that lost, so the head-to-head is measuring the
+price of tighter play against an opponent whose shoves carry bluffs, not whether the fold
+was right against Blueprint. No swap; v4 stays. The set is kept for the container upload
+question and for a bigger-budget retrain if the arena record ever justifies one.
+
+## 15 September, v4's quota burst read against the revealed cards
+
+v4 played 25 rated matches, 19 won, **+77 ± 51 chips per hand over 1,693 hands**, 15 of 20
+against Blueprint at +62. The big pots turned round: 23 won for +140,822 against 11 lost for
+−70,600, where v3's seven Blueprint losses had each been one all-in call. Lookup misses 6.2
+percent, 100 of the 140 at two raises on the one-raise rungs below 35bb; the companions
+answered 104 and the rule 36.
+
+**The shove-call rule was wrong where it fired most.** The arena reveals the opponent's cards
+after a fold, so each of the rule's 70 folds could be judged against Blueprint's actual hand:
+Blueprint was behind in 31 of them and calling was better in 48, worth about **184,000 chips**
+over the burst, more than v4 won. Sixty of the seventy were preflop at short stacks, where
+Blueprint shoves any two cards (K9, J3, A3, K5, 22 among the revealed hands) and the rule
+folded KJs at 2bb effective and 33 against 22 at 15bb. Split by effective stack, the rule
+left +112,979 on the table under 10bb, +43,382 from 10 to 20bb, and was neutral from 20bb up
+(+200 over 34 fires, the turn and river folds all right). The rule now fires only at 20bb and
+deeper (`ArenaPlayer.SHOVE_RULE_MIN_BB`), which keeps its deep three-bet-shove purpose and
+returns the short stacks to the solver, whose rungs at those depths know the calling ranges.
+Fitted on 70 hands against one opponent; the 20 to 30bb boundary is within noise. The bluff
+rule fired in four hands for −400 and says nothing yet.
+
+## 15 September: the bridge read every call wrong
+
+The arena sends a call's amount as the increment and a raise's as the level; the bridge read
+both as levels. Verified on 3,128 logged calls, none of which carried the level. The pot was
+undercounted in 60 percent of decisions and the solver's history key was wrong in 23 percent
+(hand 4 against hoops: our pot-sized flop bet keyed as two times pot), the effective stack
+shrank inside a hand and dropped the ladder a rung in 97 hands, and the inflated bet fractions
+produced most of the logged misses and fallbacks. Fixed the afternoon of 15 September; the
+first version that plays with the right pot is v5. Seven short-stack technicalities from the
+same audit were fixed alongside, and the two scouted reads went in behind `--scout-reads`.
+
+## 15 September: the season's opponents, scouted from the platform's own records
+
+The platform's page shows nothing about other bots, but its API answers our token with every
+match ever played and every hand of any match with both players' cards. `scripts/chipzen_scout.py`
+indexes the list once (19,756 matches, cached), pulls a bot's recent matches, and counts from
+its seat the same things `chipzen/opponents.py` keeps, plus entry rates, sizing and showdowns.
+**Calibration against the three bots we have played:** hoops 34 percent fold-to-bet scouted
+against 34 measured, Blueprint 71 against 81, mr_hide 23 against 14 to 18, and the same two
+reads either way. The fixtures (`chipzen_run.py --fixtures`, opponent field fixed) and the reads:
+
+| when (IST) | opponent | rating | record | fold to bet | call share | read | what it means |
+|---|---|---|---|---|---|---|---|
+| Wed 00:10 | runner1 | 1736 on 5 matches | 2 and 3 | 27% (470) | 89% | station with the sequential trigger | never raises (PFR 2%), limps 65%: value-bet, never bluff |
+| Wed 01:50 | mellyy | 1929, season 5 champion | 14 and 10 | **76%** (908) | 64% | none | tight and folds to almost everything, 86% to a three-bet: the exploit is more bluffing, which no rule does |
+| Thu 00:00 | v003 | unrated | none | | | | never played a hand on record |
+| Thu 23:50 | Shadow | 1662, −85 bb/100 | 21 and 33 | 51% (613) | 46% | fold-or-raise | raises 41% of hands, mostly 1 to 2x pot; shove rule from 20bb |
+| Fri 23:40 | PoetAndCoder | 1762, +134 bb/100 over 59,000 hands | 2,209 and 1,293 | 24% (966) | 79% | station | plays 78% of hands, folds to nothing, shows down weak hands (mean Chen 4.2) and still wins: bluffs withheld, value thin |
+
+The scouted rows are seeded into `results/chipzen/opponents.json` marked `scouted`, and the
+start-up rebuild keeps them as the prior (`Profiles.rebuild`), so the rules can fire from hand
+one. Not done, on purpose: a folder exploit for mellyy, because a rule written the afternoon it
+plays is how the shove rule went wrong. Our platform record for comparison: 1617, 89 and 54,
++21 bb/100 over 6,898 hands, earned against the same weak field that inflated the others.
+Expected scores by rating: 0.33, 0.14, unknown, 0.44, 0.30.
+
+## 15 September: the next levers, coded and flagged off
+
+Four reviews (`docs/research/`) ranked what would move the bot. The pieces that could be
+written in a night are in, each behind a flag and unmeasured: postflop purification
+(`--purify postflop`), sequential exploit triggers and a bankroll cap
+(`--sequential-triggers`, `--exploit-bankroll`), per-history opponent counts for a later
+data-biased response (always on), a Slumbot loss split (`scripts/slumbot_split.py`), and
+river endgame solving on the exact hand (`--river-solve`, `cfr/river.py`, with
+`scripts/river_solve.py` to re-solve logged rivers). Each goes live only after its own gate.
+
 ## Order
 
 1. Tonight: companions at every depth (running). Restart between matches.

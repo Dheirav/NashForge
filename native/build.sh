@@ -4,7 +4,7 @@
 # place, and a process that has it mapped dies with SIGBUS: on 13 September a
 # rebuild killed a raise-cap-2 solver 80 minutes into its run. FORCE=1 to
 # override when that is what you want.
-if [ -z "${FORCE:-}" ] && pgrep -f "scripts/cfr/train_nolimit.py" >/dev/null 2>&1; then
+if [ -z "${FORCE:-}" ] && ps -eo args | grep -v grep | grep -qE "^(venv/bin/)?python[0-9.]* scripts/cfr/train_nolimit.py"; then
   echo "a training run is using the native module; finish it or FORCE=1" >&2
   exit 1
 fi

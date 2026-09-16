@@ -1,0 +1,44 @@
+{
+  "args": {
+    "iterations": 1000000,
+    "buckets": 6,
+    "preflop_buckets": 169,
+    "raise_cap": [
+      4,
+      2
+    ],
+    "stack": 50,
+    "big_blind": 2,
+    "abstraction_samples": 800,
+    "equity_samples": 200,
+    "texture": true,
+    "eval_hands": 2000,
+    "seed": 0,
+    "output": "results/cfr/ladder169/taper42_25bb.pkl",
+    "native": true
+  },
+  "results": {
+    "uniform random": {
+      "chips_per_hand": 2.0485,
+      "stderr": 0.3143067263583728,
+      "ci95": [
+        1.4324588163375895,
+        2.664541183662411
+      ],
+      "bb_per_100": 102.42500000000001,
+      "separated_from_zero": true
+    },
+    "always call": {
+      "chips_per_hand": 3.659,
+      "stderr": 0.2810428829396423,
+      "ci95": [
+        3.108155949438301,
+        4.209844050561699
+      ],
+      "bb_per_100": 182.95,
+      "separated_from_zero": true
+    }
+  },
+  "information_sets_reached": 147945,
+  "seconds": 856.5495920990361
+}

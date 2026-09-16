@@ -102,3 +102,12 @@ def test_the_stakes_are_the_ones_measured_against_the_server():
     """
     assert (SMALL_BLIND, BIG_BLIND, STARTING_STACK) == (50, 100, 20_000)
     assert STARTING_STACK / BIG_BLIND == 200
+
+
+def test_the_small_blind_faces_a_bet_before_any_action():
+    """The blinds are not in the action string; the button still owes half a blind."""
+    from slumbot.api import HandState, always_fold
+    sb = HandState(token="t", action="", old_action="", client_pos=1, hole_cards=["7h", "2d"], board=[])
+    bb = HandState(token="t", action="", old_action="", client_pos=0, hole_cards=["7h", "2d"], board=[])
+    assert sb.facing_bet and always_fold(sb) == "f"
+    assert not bb.facing_bet and always_fold(bb) == "k"

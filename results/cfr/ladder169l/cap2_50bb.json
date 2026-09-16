@@ -1,0 +1,42 @@
+{
+  "args": {
+    "iterations": 3000000,
+    "buckets": 6,
+    "preflop_buckets": 169,
+    "raise_cap": 2,
+    "stack": 100,
+    "big_blind": 2,
+    "abstraction_samples": 800,
+    "equity_samples": 200,
+    "update_rule": "linear",
+    "texture": true,
+    "eval_hands": 2000,
+    "seed": 0,
+    "output": "results/cfr/ladder169l/cap2_50bb.pkl",
+    "native": true
+  },
+  "results": {
+    "uniform random": {
+      "chips_per_hand": 3.46675,
+      "stderr": 0.5033283515096947,
+      "ci95": [
+        2.4802264310409985,
+        4.453273568959002
+      ],
+      "bb_per_100": 173.3375,
+      "separated_from_zero": true
+    },
+    "always call": {
+      "chips_per_hand": 4.53575,
+      "stderr": 0.428958099345667,
+      "ci95": [
+        3.694992125282493,
+        5.3765078747175075
+      ],
+      "bb_per_100": 226.78750000000002,
+      "separated_from_zero": true
+    }
+  },
+  "information_sets_reached": 1058042,
+  "seconds": 6249.927658155
+}

@@ -139,11 +139,25 @@ def _solver_actions(history: str, to_call: int, raise_cap: int):
     return list(solver_legal_actions(raises_so_far, to_call > 0, raise_cap, last))
 
 
+#: Where purification applies: nowhere (the average strategy as stored),
+#: postflop only (Baby Tartanian8's choice, preflop left mixed), or everywhere.
+PURIFY_MODES = ("none", "postflop", "all")
+
+
 def cfr_agent(strategy: Dict[Hashable, np.ndarray], abstraction,
               rng: np.random.Generator, misses: Optional[List[int]] = None,
-              raise_cap: int = 1, probe: Optional[List] = None) -> Agent:
+              raise_cap: int = 1, probe: Optional[List] = None,
+              purify: str = "none") -> Agent:
     """
     A solved strategy, playing in the engine.
+
+    ``purify`` plays the most probable action rather than sampling. Its stated
+    purpose in the ACPC record (Ganzfried and Sandholm 2012; Tartanian7, 2015:
+    +17 to +25 mbb/h against Slumbot-class bots) is to compensate for an
+    unconverged average strategy, which is where this project's blueprints are.
+    Off by default, because it is a change to the instrument every panel figure
+    was measured with, and it raises worst-case exploitability against an
+    opponent who adapts.
 
     The key is rebuilt here rather than read off the engine: the bucket comes
     from the cards, which are the same objects in both games, and the history is
@@ -172,6 +186,8 @@ def cfr_agent(strategy: Dict[Hashable, np.ndarray], abstraction,
     # situation from its own key and therefore gives it one fixed bucket, so the
     # agent being scored was bucketing inconsistently with the way the strategy
     # it plays was fitted, and adding noise to every measurement.
+    if purify not in PURIFY_MODES:
+        raise ValueError(f"purify must be one of {PURIFY_MODES}, got {purify!r}")
     buckets: dict = {}
 
     def bucket_for(hole, board):
@@ -227,6 +243,14 @@ def cfr_agent(strategy: Dict[Hashable, np.ndarray], abstraction,
 
         if probe is not None:
             probe[:] = [np.asarray(weights, dtype=np.float64) / total]
+        if purify == "all" or (purify == "postflop" and board):
+            # The most probable action, first index on a tie: purification
+            # rather than sampling, see the docstring.
+            best, best_weight = 0, -1.0
+            for action, value in enumerate(weights):
+                if value > best_weight:
+                    best, best_weight = action, value
+            return best
         # Inverse-CDF sampling from one uniform draw. `rng.choice(n, p=...)`
         # validates and normalises the distribution on every call, which is most
         # of its cost at this size.

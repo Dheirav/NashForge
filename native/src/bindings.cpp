@@ -1,3 +1,4 @@
+#include <string>
 #include <nanobind/nanobind.h>
 #include <nanobind/stl/vector.h>
 #include <nanobind/stl/tuple.h>
@@ -106,7 +107,7 @@ NB_MODULE(pokerbot_native, m) {
                             int equity_samples, int starting_stack,
                             int small_blind, int big_blind,
                             const std::vector<int>& schedule, uint64_t seed,
-                            bool texture) {
+                            bool texture, const std::string& rule) {
             Abstraction abstraction;
             abstraction.preflop.assign(preflop.begin(), preflop.end());
             abstraction.centroids = {flop, turn, river};
@@ -117,11 +118,11 @@ NB_MODULE(pokerbot_native, m) {
             new (self) MCCFR<NoLimitGame>(
                 NoLimitGame(std::move(abstraction), starting_stack, small_blind,
                             big_blind, std::move(sched)),
-                UpdateRule::vanilla(), seed);
+                UpdateRule::from_name(rule), seed);
         }, nb::arg("preflop"), nb::arg("flop"), nb::arg("turn"), nb::arg("river"),
            nb::arg("equity_samples"), nb::arg("starting_stack"),
            nb::arg("small_blind"), nb::arg("big_blind"), nb::arg("schedule"),
-           nb::arg("seed"), nb::arg("texture") = false)
+           nb::arg("seed"), nb::arg("texture") = false, nb::arg("rule") = "vanilla")
         .def("train", &MCCFR<NoLimitGame>::train, nb::arg("iterations"),
              nb::call_guard<nb::gil_scoped_release>(),
              "Run `iterations` passes, each traversing once per player.")

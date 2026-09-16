@@ -112,9 +112,16 @@ def replay(state: dict, seat: int, rng: np.random.Generator,
     start = [now[s] + contributed[s] for s in (0, 1)]
 
     big_blind = 0
+    small_blind = 0
     for entry in history:
         if entry.get("action") == "post_big_blind":
             big_blind = int(entry.get("amount") or 0)
+        elif entry.get("action") == "post_small_blind":
+            small_blind = int(entry.get("amount") or 0)
+    # A short post (a player with less than a blind) is not the level: 35
+    # logged hands read as 1bb deep at any true depth. The small blind's post
+    # pins it, except when both are short, where nothing does.
+    big_blind = max(big_blind, 2 * small_blind)
     hand = Hand(node=Node(), seat=seat, big_blind=big_blind, start_stacks=start)
     node = hand.node
 
@@ -147,9 +154,12 @@ def replay(state: dict, seat: int, rng: np.random.Generator,
         elif action == "check":
             node.history += str(CHECK_CALL)
         elif action == "call":
-            increment = amount - node.committed[actor]
-            node.pot += increment
-            node.committed[actor] = amount
+            # A call's amount is the increment, not the level: 3,128 logged
+            # calls carried the increment and none the level (15 September).
+            # Reading it as a level undercounted the pot in 60 percent of
+            # decisions and keyed a quarter of them at a line never taken.
+            node.pot += amount
+            node.committed[actor] += amount
             node.history += str(CHECK_CALL)
         elif action == "raise":
             to_call = max(node.committed[1 - actor] - node.committed[actor], 0)
@@ -162,8 +172,15 @@ def replay(state: dict, seat: int, rng: np.random.Generator,
             node.pot += increment
             node.committed[actor] = amount
             node.raises_this_street += 1
+        elif action.startswith("post"):
+            # A post this bridge has not seen (an ante under another name):
+            # dead money, not a decision. Raising here folded a whole match.
+            node.pot += amount
+            node.prior[actor] += amount
         else:
-            raise TranslationError(f"unknown action {action!r} in history")
+            # An unknown verb is read as the passive action rather than as a
+            # reason to abandon the hand's history.
+            node.history += str(CHECK_CALL)
 
     # The arena's own phase field is authoritative for where we are, and it
     # can be ahead of the history: a street that opened with our action has no
@@ -203,9 +220,14 @@ def _contributions(history: Sequence[dict]) -> List[int]:
         if entry.get("phase") != phase:
             phase = entry.get("phase")
             level = [0, 0]
-        if action in ("call", "raise"):
-            total[actor] += amount - level[actor]
+        if action == "call":
+            total[actor] += amount                  # the increment, see `replay`
+            level[actor] += amount
+        elif action == "raise":
+            total[actor] += amount - level[actor]   # a raise is a level
             level[actor] = amount
+        elif action.startswith("post"):
+            total[actor] += amount
     return total
 
 
@@ -255,13 +277,19 @@ def to_chipzen(action: int, node: Node, state: dict) -> dict:
 
     low = int(state.get("min_raise") or 0)
     high = int(state.get("max_raise") or 0)
+    if high <= 0:
+        # Nothing to raise with: the shove the solver wanted is a call.
+        return {"action": "check" if to_call <= 0 else "call", "params": {}}
     if action == ALL_IN:
         return {"action": "raise", "params": {"amount": high}}
 
     pot_after_call = int(state.get("pot") or 0) + to_call
     fraction = RAISE_FRACTIONS[action - 2]
     level = node.committed[node.to_act] + to_call + int(round(pot_after_call * fraction))
-    return {"action": "raise", "params": {"amount": max(low, min(level, high))}}
+    # The ceiling wins over the floor: short, min_raise can exceed max_raise
+    # (only a shove for less is possible), and max(low, ...) then sent more
+    # chips than we had and was rejected.
+    return {"action": "raise", "params": {"amount": min(high, max(low, level))}}
 
 
 def cards(state: dict) -> Tuple[List[Card], List[Card]]:

@@ -101,6 +101,49 @@ say a third level would remove most of what is left. If it does say that, train
 `[4,2,1]` first, because it costs one more training run and one more 74-minute
 gate and not another 12 hours.
 
+## Step 3, measured 15 September
+
+The contender is a full raise-cap-2 solver rather than the `[4,2]` taper (every size on the
+re-raise, 200bb, texture, 200 samples, 3M native iterations, 4,208,416 information sets,
+`results/cfr/contender/cap2_200bb.pkl`), because the arena had already shown the taper's
+shove-only re-raise to be the worse tool. Against Slumbot over 999 hands (one protocol error,
+`results/slumbot/contender_cap2_200bb_1k.json`):
+
+| | one-raise 200bb, 250k | cap-2 200bb, 3M |
+|---|---|---|
+| lookup miss rate | 11.9% | **4.1%** (93 of 2,285) |
+| misses by raises already on the street | | 0: 54, 1: 8, 2: 6, 3: 25 |
+| re-raises the schedule had no size for | | depth 2: 48 |
+| bets too large to describe | 609 in 24,527 | 49 in 2,285 |
+
+**The gate passes:** two thirds of the misses are gone and the interval at 1,000 hands is
+about ±1.3 points. The histogram says what is left: 54 misses at zero raises are histories the
+solver never reached in 3M iterations, which is coverage and would come down with the linear
+rule and more iterations; 25 at three raises are the third raise a cap-3 would add. Step 4,
+the 10,000-hand run, is next, after the arena ladder retrain finishes (one heavy job at a
+time on this machine). The bridge now reads the schedule from the pickle and records both
+histograms (`slumbot/player.py`), which was step 1.
+
+## Step 4, begun 15 September, and what the first 3,000 hands said
+
+The 10,000-hand run started at 17:50 IST (`results/slumbot/m1_cap2_200bb.partial.json`). At 3,000
+hands the raw figure was −1,255 ± 758, inside the old solver's interval, and the split by
+lookup miss answered the question the win rate could not: hands without a miss were −416 ± 484,
+not separated from zero; the 135 hands with a miss lost 19,059 mbb/hand each and were 68
+percent of the loss, with the third-raise misses at −33,174 and river misses at −72,538. The
+Slumbot player was guessing uniformly at random at a miss, a shove one in six times, which the
+arena player has never done. The arena's fallback rule now answers misses in the Slumbot player
+too (`slumbot/player.py`, `fallback_choice` in `chipzen/player.py`), and the 10,000-hand run is
+repeated with it on a fresh file after an always-fold calibration of the baseline column. So the
+record figure of −997 ± 396 measured the random agent at the misses, which is the failure this
+file's opening paragraphs warned about in another form.
+
+**Calibration, 16 September.** 1,000 hands of always-fold against Slumbot: −699 ± 21 mbb/hand
+raw, where the exact value is −700 (button hands −500, big-blind hands −900 on average because
+Slumbot folds its small blind about a fifth of the time). The raw column can be trusted to its
+interval. The baseline-differenced column read −646 ± 1,193 on the same hands, an interval
+fifty times the raw one, and is never to be quoted.
+
 ## What is not being done, and why
 
 **The comparison instrument is untouched.** `nolimit_strategy.pkl` stays the

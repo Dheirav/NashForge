@@ -82,6 +82,10 @@ class Node:
     raises_this_street: int = 0
     to_act: int = 0
     misses: int = 0                   # bets that fell outside the abstraction entirely
+    #: Raise depths at which the schedule had no sized raise to read a bet as.
+    #: Under a one-raise cap every re-raise lands here; it is the count the
+    #: contender plan gates a deeper tree on, so it is kept by depth.
+    miss_depths: List[int] = field(default_factory=list)
 
     @property
     def to_call(self) -> int:
@@ -100,7 +104,7 @@ def _blinds(client_pos: int) -> Tuple[int, int]:
     return (BIG_BLIND, SMALL_BLIND) if client_pos == 0 else (SMALL_BLIND, BIG_BLIND)
 
 
-def replay(state: HandState, rng: np.random.Generator) -> Node:
+def replay(state: HandState, rng: np.random.Generator, schedule=1) -> Node:
     """
     Walk Slumbot's betting string, translating each bet into an abstract action.
 
@@ -142,7 +146,7 @@ def replay(state: HandState, rng: np.random.Generator) -> Node:
                 increment = level - node.committed[actor]
                 # The pot the bet was sized against is what was there before it.
                 fraction = increment / node.pot if node.pot else 0.0
-                node.history += str(_as_abstract(fraction, level, node, rng))
+                node.history += str(_as_abstract(fraction, level, node, schedule, rng))
                 node.pot += increment
                 node.committed[actor] = level
                 node.raises_this_street += 1
@@ -157,7 +161,7 @@ def replay(state: HandState, rng: np.random.Generator) -> Node:
     return node
 
 
-def _as_abstract(fraction: float, level: int, node: Node,
+def _as_abstract(fraction: float, level: int, node: Node, schedule,
                  rng: np.random.Generator) -> int:
     """
     Which of the six the solver should think it faced.
@@ -165,16 +169,31 @@ def _as_abstract(fraction: float, level: int, node: Node,
     An all-in is its own action rather than a very large raise: the solver has a
     slot for it, and calling a 200bb shove "two times pot" would ask the strategy
     a question about a bet it could fold to.
+
+    Translation is over the sizes the schedule has at *this* raise depth, as
+    `chipzen.bridge` does. Translating over all three at every depth read a
+    re-raise of a third of the pot as "half pot" under a `(4, 2)` taper, a code
+    the solver never stored there, so it missed for the wrong reason and the
+    miss rate could not say what a deeper tree would buy.
     """
     if level >= STARTING_STACK:
         return ALL_IN
-    if fraction >= RAISE_FRACTIONS[-1] * 1.5:
+    sizes = raise_sizes_at(schedule, node.raises_this_street)
+    fractions = [RAISE_FRACTIONS[a - 2] for a in sizes if a != ALL_IN]
+    if not fractions:
+        # No sized raise at this depth: only all-in, or nothing at all. Either
+        # way the solver has no sized entry to be asked, and this is the count
+        # a deeper schedule would change.
+        node.miss_depths.append(node.raises_this_street)
+        return ALL_IN
+    if fraction >= fractions[-1] * 1.5:
         # Beyond the largest size the abstraction carries and short of a shove.
         # Counted, because a bet this project cannot describe is exactly the
         # thing that should show up as a number rather than as a shrug.
         node.misses += 1
         return ALL_IN
-    return 2 + translate(RAISE_FRACTIONS, max(fraction, RAISE_FRACTIONS[0]), rng)
+    chosen = translate(fractions, max(fraction, fractions[0]), rng)
+    return [a for a in sizes if a != ALL_IN][chosen]
 
 
 def max_level(node: Node, stack: int = STARTING_STACK) -> int:

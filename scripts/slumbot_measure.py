@@ -96,8 +96,20 @@ def _caveat(strategy):
     referred to. That crashed with a NameError after 739 minutes of API calls,
     on the last line before the result would have been written.
     """
-    return (f"{_strategy_depth(strategy)} one-raise-per-street solver "
+    return (f"{_strategy_depth(strategy)} {_strategy_tree(strategy)} solver "
             "against Slumbot's 200bb unlimited-raise game")
+
+
+def _strategy_tree(path):
+    """The betting tree, read from the file, so a deeper solver is labelled as one."""
+    from slumbot.player import strategy_schedule
+    with open(path, "rb") as handle:
+        schedule = strategy_schedule(pickle.load(handle))
+    if schedule == 1:
+        return "one-raise-per-street"
+    if isinstance(schedule, int):
+        return f"raise-cap-{schedule}"
+    return f"taper-{'-'.join(str(n) for n in schedule)}"
 
 
 def _partial_path(out):
@@ -106,7 +118,7 @@ def _partial_path(out):
 
 
 def _save_partial(path, args, player, winnings, baseline, positions, errors,
-                  attempts, elapsed):
+                  attempts, elapsed, hands=()):
     """
     Every hand so far, written atomically every 500.
 
@@ -138,6 +150,7 @@ def _save_partial(path, args, player, winnings, baseline, positions, errors,
             # a rate that silently describes 500 hands of 10,000 is the same
             # failure wearing a checkpoint.
             "stats": dataclasses.asdict(player.stats),
+            "hand_records": list(hands),
             "provenance": getattr(args, "provenance", None),
             "note": "PARTIAL. Not a result -- resume with --resume.",
         }, handle)
@@ -174,6 +187,10 @@ def main():
     #: 185 BB/100 -- and a result that does not say which produced it cannot be
     #: compared with the other.
     parser.add_argument("--strategy", default=STRATEGY)
+    parser.add_argument("--purify", default="none", choices=["none", "postflop", "all"],
+                        help="play the most probable action instead of sampling; off by default")
+    parser.add_argument("--no-fallback", action="store_true",
+                        help="guess uniformly at random on a lookup miss, as before 15 September")
     parser.add_argument("--resume", action="store_true",
                         help="continue from the .partial.json beside --out")
     args = parser.parse_args()
@@ -183,15 +200,17 @@ def main():
                      "scripts/slumbot_pilot.py is the script that does not "
                      "report a result")
 
-    player = SolverPlayer(args.strategy, np.random.default_rng(args.seed))
+    player = SolverPlayer(args.strategy, np.random.default_rng(args.seed), purify=args.purify,
+                          fallback=not args.no_fallback)
     caveat = _caveat(args.strategy)
     winnings, baseline, positions = [], [], Counter()
-    errors, token, started = [], None, time.time()
+    hands, errors, token, started = [], [], None, time.time()
     partial, first, prior_elapsed, args.segments = _partial_path(args.out), 0, 0.0, 1
 
     if args.resume and os.path.exists(partial):
         saved = _load_partial(partial, args)
         winnings, baseline, errors = saved["winnings"], saved["baseline"], saved["errors"]
+        hands = saved.get("hand_records", [])
         # JSON turns integer keys into strings; a Counter keyed on "0" and one
         # keyed on 0 both look right and never sum.
         positions = Counter({int(k): v for k, v in saved["positions"].items()})
@@ -216,11 +235,13 @@ def main():
 
     for index in range(first, args.hands):
         try:
+            player.begin_hand()
             state = play_hand(player, token)
             token = state.token
             winnings.append(state.winnings)
             baseline.append(state.baseline_winnings)
             positions[state.client_pos] += 1
+            hands.append(player.hand_record(state))
         except SlumbotError as error:
             errors.append(f"hand {index + 1}: {error}")
         if (index + 1) % 500 == 0:
@@ -235,10 +256,10 @@ def main():
                   f"eta {(args.hands - done) / rate / 60:5.1f} min  "
                   f"[{mean:+7.0f} ± {half:.0f} mbb/hand so far]", flush=True)
             _save_partial(partial, args, player, winnings, baseline, positions,
-                          errors, done, prior_elapsed + segment)
+                          errors, done, prior_elapsed + segment, hands)
 
     report(player, winnings, baseline, positions, errors, args,
-           prior_elapsed + time.time() - started)
+           prior_elapsed + time.time() - started, hands)
 
     # Only once the result exists. The checkpoint is the fallback, and removing
     # it before the thing it falls back to is written would recreate the hole.
@@ -246,7 +267,7 @@ def main():
         os.remove(partial)
 
 
-def report(player, winnings, baseline, positions, errors, args, elapsed):
+def report(player, winnings, baseline, positions, errors, args, elapsed, hands=()):
     stats, caveat = player.stats, _caveat(args.strategy)
     raw_mean, raw_half = interval(winnings)
 
@@ -268,6 +289,10 @@ def report(player, winnings, baseline, positions, errors, args, elapsed):
 
     print(f"\n  lookup miss rate    {stats.miss_rate:.1%} "
           f"({stats.misses}/{stats.consulted})")
+    print(f"  misses by raises already on the street  "
+          f"{dict(sorted(stats.miss_depths.items()))}")
+    print(f"  re-raises the schedule had no size for  "
+          f"{dict(sorted(stats.schedule_misses.items()))}")
     print(f"  off-abstraction     {stats.off_abstraction}")
     print(f"  seats               {dict(positions)}")
     print(f"  protocol errors     {len(errors)}")
@@ -288,6 +313,11 @@ def report(player, winnings, baseline, positions, errors, args, elapsed):
                              "actual. Interpretation unverified; not the "
                              "reported result.",
             "lookup_miss_rate": stats.miss_rate,
+            "lookup_misses_by_raise_depth": {str(k): v for k, v in sorted(stats.miss_depths.items())},
+            "schedule_misses_by_raise_depth": {str(k): v for k, v in sorted(stats.schedule_misses.items())},
+            "schedule": str(player.raise_cap),
+            "purify": player.purify,
+            "fallback": player.fallback, "fallbacks": player.stats.fallbacks,
             "off_abstraction": stats.off_abstraction,
             "seats": dict(positions),
             "protocol_errors": errors,
@@ -295,6 +325,9 @@ def report(player, winnings, baseline, positions, errors, args, elapsed):
             "segments": getattr(args, "segments", 1),
             "provenance": getattr(args, "provenance", None),
             "elapsed_seconds": elapsed,
+            # Per hand, for scripts/slumbot_split.py: winnings, position, final
+            # street, showdown, and whether the solver missed in the hand.
+            "hand_records": list(hands),
         }, handle, indent=1)
     print(f"\nwrote {args.out}")
 

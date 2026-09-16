@@ -4,7 +4,7 @@ One page, kept current. [`BACKLOG.md`](BACKLOG.md) holds the reasoning and every
 [`docs/training-plan.md`](docs/training-plan.md) holds the full phase plan and its results. This
 file is only the next thing to do.
 
-**Last updated:** 13 September 2026 · 328 tests (~6m05s, collection ~3m24s)
+**Last updated:** 14 September 2026 · 338 tests (~7m with the machine shared; collection ~3m24s)
 
 ---
 
@@ -77,34 +77,409 @@ real improvement are compatible; the earlier phrasing denied the second.
 
 ## Now — the next thing to do
 
-**NashForge is entered in Chipzen season 6 (13 September), and the bot has to be running
-for it.** Chipzen is a heads-up bot arena (`docs/chipzen.md`): elimination matches from 10,000
-chips at 50/100 with rising blinds, Glicko-2 rated, a weekly season of round-robin then playoffs.
-Registration closes Mon 14 Sept 23:59 UTC, the round robin runs **Tue 15 to Fri 18 Sept, one
-round per evening from 23:30 IST (18:00 UTC), matches ten minutes apart**, and the playoffs Sat 19
-to Sun 20. Remote bots get 30 seconds per decision; blinds step up every 20 hands. The entry is a
-remote bot, so the process has to be in the lobby when each fixture opens (it waits about 90 s):
+**State on Monday 14 September, 21:15 IST.** NashForge is entered in Chipzen season 6 as a
+remote bot and is running on this machine as **v4** (`tools/chipzen-progress.sh`): the
+texture-aware 200-sample ladder (`results/cfr/ladder200t/`) with full-size raise-cap-2 solvers
+playing first at 50, 70 and 100bb, `(4,2)` companions at 12 to 35bb, and two measured opponent
+rules (bluffs withheld against a bot that folds to under 25% of bets; a fold-or-raise bot's
+pot-sized bet called only by the top strength class). Ledger: `results/chipzen/ledger.md`.
+Everything is pushed except the v4 rules (`chipzen/opponents.py`, `chipzen/player.py`,
+`tests/test_chipzen_player.py`): commit those first.
 
-    tools/chipzen-run.sh --accept-inbound --queue     # running every evening from 23:15 IST, Tue to Sun
-    venv/bin/python scripts/chipzen_run.py --fixtures # this bot's fixtures, in IST
-    tools/chipzen-progress.sh --watch         # what it is doing
-    tools/chipzen-run.sh stop
-    tools/chipzen-run.sh --house-bot --once   # one unrated practice match against a house bot
-    tools/chipzen-run.sh --challenge Blueprint RoboPoker --accept-inbound   # rated, remote track
-    venv/bin/python scripts/chipzen_review.py # results/chipzen/review.md from the match logs
-    venv/bin/python scripts/chipzen_ledger.py # results/chipzen/ledger.md: win rate per bot version
-    tools/chipzen-run.sh --accept-inbound --queue --label "what changed"   # stamps every match
+**Read first: `docs/research/2026-09-15-what-moves-the-bot.md`**, the synthesis of four reviews
+run overnight on 14 to 15 September, with the four full reports beside it. The cause of the
+lossless preflop's loss is the solver's averaging (unweighted, per-visit discount that
+collapsed to vanilla at rarely reached nodes, exact uniform for never-averaged nodes), fixed
+that night: `--update-rule linear` on the trainer and a cumulative discount in `cfr/updates.py`
+and `native/src/mccfr.hpp`. **Wednesday 08:40 IST: mellyy won too; the calibration said what it needed to.** Fixture 2:
+NashForge beat mellyy, 94 hands, +10,000, 77 of 94 hands won; blind opens fired 5 times for +900,
+the three-bet twice for −250; 3 misses, slowest 3.7 ms. **Two of two.** The night job ran the
+always-fold calibration and then the fixed player's 10,000 hands (at 6,000 by 08:19, done about
+12:05, then the bot returns for its quota). Calibration: only the 500 big-blind hands completed,
+because `HandState.facing_bet` did not know the small blind owes half a blind before any action
+(fixed, tested); on those 500 the raw column read −840 mbb/hand against an expectation of about
+−840 for big-blind-only hands, so **the raw column is honest**, while the baseline-differenced
+column read +418 ± 1,077: **useless, and never to be quoted**. The calibration is re-running with
+the fix (`results/slumbot/calibration_always_fold_1k.json`; raw must read −750 over both seats).
+**v6 is assembled** in `results/cfr/ladder169l_v6/` (v5's 16 rungs plus cap-2 at 35, 25, 18,
+12bb); its replay waits for the Slumbot run to free the memory, then it takes Thursday's 05:30
+quota as its gate. Playoff picture from round 1: wsp, Fold-ver-3, mellyy and one of PoetAndCoder,
+v003 or us.
 
-The bot's page, rating and replays: https://chipzen.ai/bots/29e73b2b-d349-4c60-b3d0-e9ddae8ae0f6.
+**Wednesday 00:40 IST: runner1 won, a fifth read in for mellyy.** Fixture 1: NashForge beat
+runner1, 78 hands, +10,000; 21 bluffs withheld, one river bet believed, 10 misses, slowest
+decision 166 ms. Round 1 elsewhere went with the ratings (Fold-ver-3 over Blueprint, v003 over
+Shadow, wsp over Sleight-of-Hand, mellyy over PoetAndCoder); Blueprint and the house bot
+Sleight-of-Hand are in the field. Added `Profiles.folds_to_three_bet` (25 of 29 for mellyy, 0.75
+over 25 as the trigger): facing an open at 30bb or deeper, a fold from the solver becomes a
+half-pot three-bet, which replaces an action worth zero with one that shows a profit at any fold
+rate above two thirds. Fires for mellyy alone. Bot restarted 00:36 with it. Remote-track note:
+our rated queue only pairs with Blueprint and RoboPoker, so our rating is capped near 1650
+whatever we do; the container upload (flat table plus the C++ equity path) is what puts a copy in
+the upload pool.
 
-`chipzen/` is the bridge, the solver ladder by effective stack with a deeper-tree companion for
-off-tree re-raises, a per-opponent fold-to-bet profile, and the client; `tests/test_chipzen_*.py`.
-`docs/arena-plan.md` records the four fixes of 13 September and the three ladders
-(`--ladder-dir results/cfr/ladder200t` is the 200-sample, texture-aware one). First exhibition: won 20,000 to 0 against a house bot in 13 hands, no
-protocol errors, sub-millisecond decisions. A rating there measures "beats other people's bots",
-not distance from equilibrium; Slumbot remains the equilibrium instrument, and the contender plan
-below is unchanged by this.
+**Tuesday 20:45 IST: tonight's order, by the user's call.** After the 01:50 fixture ends (from
+02:00, three quiet minutes with no match active) the bot stops, the always-fold calibration runs
+(1,000 hands), then the fixed player's 10,000 hands (`results/slumbot/m1_cap2_200bb_fallback.json`,
+about 9 hours, checkpointed), and then the bot restarts as v5 and takes its queue quota, around
+noon Wednesday. Timed job: `~/pokerbot-scratch/slumbot/handover_night.log`. The Slumbot run
+crosses the 03:00 to 09:00 Windows restart window with the bot off; a restart costs only the last
+checkpoint, resumed by hand. The old player's run pauses at 22:45 and is not resumed; its partial
+at about 5,600 hands is the record of the random-guess player.
 
+**Tuesday 20:30 IST: the Slumbot loss is the random guess on a miss, not the solver.** At 3,000
+hands of the contender the raw figure was −1,255 ± 758 mbb/hand, but split by lookup
+(`scripts/slumbot_split.py results/slumbot/m1_cap2_200bb.partial.json`): the 2,864 hands without
+a miss were **−416 ± 484, not separated from zero**, while the 135 hands with a miss lost 19,059
+each and carried 68 percent of the loss (a third raise the tree lacks: 69 hands at −33,174; river
+misses: 39 hands at −72,538). The Slumbot player took the panel agent's uniform random action on a
+miss, a shove one time in six, in exactly the re-raised pots; the arena player never did.
+`fallback_choice` (the arena's hand-strength rule) is now shared with `slumbot/player.py`
+(`--no-fallback` keeps the old behaviour for a measurement of the solver alone), tested. The
+current run keeps the old player until the 22:45 pause as the record of it; the morning job runs
+the always-fold calibration (`slumbot_pilot.py --policy fold`, raw must read −750) and then
+10,000 hands of the fixed player on `results/slumbot/m1_cap2_200bb_fallback.json`. **The
+−997 ± 396 on record is a measurement of a random agent at its misses**, which the project's own
+history said to look for.
+
+**Tuesday 18:35 IST: the audit of the bot against the frontier is done.** Two reports
+(`docs/research/2026-09-15-frontier-audit.md`, `2026-09-15-solver-engineering-audit.md`) and the
+plan they produce, `docs/research/2026-09-15-two-week-push.md`: seven correctness-preserving
+engineering changes (about 30x per night together, including a flat strategy table that turns the
+2.4 GB ladder into 200 MB), five convergence-preserving solver changes, then the gated strategy
+changes, then Slumbot. Starts Thursday daytime at the earliest; nothing rebuilds native while the
+season runs.
+
+**Tuesday 17:55 IST: the 20-bucket gate drew (−0.5 ± 1.2 BB/100 on the cap-2 100bb tree, 20
+buckets without texture against v5's six with texture; no ladder retrain), so the night is the
+Slumbot 10,000-hand run on the contender.** The contender's pickle is 3.2 GB in a process and the
+bot 2.4 GB, which is the memory-kill state, so they alternate by timed jobs
+(`~/pokerbot-scratch/slumbot/handover_*.log`, `~/pokerbot-scratch/chipzen/v5_timed_start.log`):
+Slumbot alone 17:47 to 22:45 (paused by kill, checkpoint every 500 hands), the bot alone from 23:00
+through the 00:10 and 01:50 fixtures and the 05:30 queue burst, Slumbot resumed from 07:00 once no
+match is active until it finishes (about 14:00 Wednesday), then the bot restarted as v5. Watch:
+`tools/slumbot-progress.sh ~/pokerbot-scratch/slumbot/m1_cap2_200bb.log`. The v6 set
+(`results/cfr/ladder169l_short/`, cap-2 at 35, 25, 18, 12bb) is complete; on the push-or-fold check
+its calls against a shove agree with the equilibrium on 91 to 94 percent of hands and its small blind
+limps about half instead of min-raising nine in ten.
+
+**Tuesday 17:10 IST: v5 is up now (16:58) rather than at 23:00; the Slumbot 10,000-hand run is
+deferred.** Rule for the overnight core: improvement first, measurement when there is a question.
+If the 20-bucket gate (`gate_b20_vs_v5_cap2_100bb.json`, about 17:40) wins, the night trains the
+20-bucket ladder; if it loses, nothing else is ready and the idle core runs Slumbot instead
+(`scripts/slumbot_measure.py --hands 10000 --strategy results/cfr/contender/cap2_200bb.pkl --out
+results/slumbot/m1_cap2_200bb.json --resume`). The paper can quote the miss-rate gate (4.1 against
+11.9 percent) and the record figure honestly either way.
+
+**Tuesday 17:05 IST: v5's start is armed for 23:00** (a timed job, `~/pokerbot-scratch/chipzen/
+v5_timed_start.log`, with a lobby check at 23:45). The short cap-2 rungs at 35, 25 and 18bb are
+trained (`results/cfr/ladder169l_short/`, 12bb finishing); on the push-or-fold check they limp
+about half of small-blind hands and raise 40 percent instead of min-raising 90, and their calls
+against a shove agree with the equilibrium on 91 to 94 percent of hands
+(`results/cfr/pushfold_check_short_cap2.md`). **v6 = v5 plus those four rungs copied into
+ladder169l**, gated by Thursday's 05:30 queue burst under its own label, for Thursday night.
+Wednesday's 05:30 burst is v5's first live test.
+
+**Tuesday 16:10 IST: v5 beats v4 at every rung** (`results/cfr/ladder169l/h2h_*.json`, same
+tree per rung, 40,000 hands x 3 seeds, BB/100 to v5): cap-2 100bb +6.5 ± 0.5, 70bb +5.6 ± 1.5,
+50bb +4.9 ± 1.4; one-raise 35bb +33.7 ± 2.7, 25bb +47.1 ± 2.4, 18bb +51.8 ± 3.3, 12bb +53.8 ± 9.3,
+8bb +21.8 ± 3.8, 5bb +101.1 ± 9.3. The short rungs are where the difference is: v4's were 250k
+vanilla iterations on six Chen classes, v5's are 3M linear on 169, and the push-or-fold check says
+v4 called shoves 13 to 19 points too wide there. Half of every match is played on those rungs.
+
+**Tuesday 15:50 IST: v5 verified and parked; the afternoon's runs.** The ladder169l set is
+complete (16 rungs), the replay of the logs passed (the same 202 misses as logged), and v5 was
+started once with its full flags, loaded everything, warmed up in 0.24 s, read the scouted
+profiles and reached the lobby; it is stopped and **restarts at 23:00 for the 00:10 fixture**
+(`tools/chipzen-run.sh --accept-inbound --queue --ladder-dir results/cfr/ladder169l
+--deep-primary --sequential-triggers --scout-reads --label "v5: ..."`). Push-or-fold check
+(`scripts/cfr/pushfold_check.py`, `results/cfr/pushfold_check.md`): the new 5bb rung is within
+0.012 bb/hand of the exact equilibrium and the big blind's calling ranges are within a point or
+two at every depth, where the old set called 13 to 19 points too wide; the small-blind side
+min-raises nearly every hand because the one-raise tree has no re-jam, which is what the short
+cap-2 rungs fix. A fourth scouted read, PoetAndCoder's sizing tell (`Profiles.big_bets_are_value`,
+0 of 463 big bets air against 363 of 960 small), is in behind the same flag. Running: lane K, cap-2
+short rungs into `results/cfr/ladder169l_short/` for a gated v6 (about 17:30); lane L, the
+20-bucket postflop rung and its gate (`gate_b20_vs_v5_cap2_100bb.json`, about 18:30); lane M, v5
+against v4 rung by rung (`results/cfr/ladder169l/h2h_*.json`); then the 10,000-hand Slumbot run
+on the contender, chained behind lane K (`tools/slumbot-progress.sh
+~/pokerbot-scratch/slumbot/m1_cap2_200bb.log`), about 12 h. The rating trace records after every
+match (`scripts/chipzen_rating.py`). The bot is off until 23:00 by request; quota spent.
+
+**Tuesday 13:10 IST: the bridge was mis-reading every call, and it is fixed.** An audit of the
+arena path (`docs/research/2026-09-15-season6-levers.md`) found `chipzen/bridge.py` treating a
+call's amount as a bet level where the arena sends the increment (3,128 of 3,128 logged calls).
+Pot undercounted in 60 percent of decisions, wrong history key in 23 percent, effective stack
+shrinking inside a hand, most of the logged misses and fallbacks. Fixed with a real hand pinned
+(`tests/test_chipzen_bridge.py`), plus seven short-stack technicalities (raise clamp, rejection
+fallback, mid-match re-dial, short blind post, pot-odds fold, legality guard, bluff rule facing
+a bet). **Every figure before v5 was measured with the old bridge.** Two scouted reads added
+behind `--scout-reads` (`Profiles.folds_blind`, `never_bluffs`): mellyy's blind is opened for
+the minimum, runner1's river bets are believed from 20bb. Three research reports in
+`docs/research/` (format, opponents, synthesis). **v5 flags:** `--ladder-dir
+results/cfr/ladder169l --deep-primary --sequential-triggers --scout-reads --accept-inbound
+--queue`, label "v5: 169-class linear ladder, bridge call fix, shove rule from 20bb, scouted
+reads". After the swap: cap-2 on the short rungs, then the PoetAndCoder sizing response.
+
+**Tuesday 12:40 IST: fixtures and scouting.** It was a Windows Update restart at 06:59, not
+sleep (KB5129195; active hours 09:00 to 03:00 allow restarts overnight, which is the user's
+setting to change). Fixtures: Wed 00:10 runner1, Wed 01:50 mellyy, Thu 00:00 v003, Thu 23:50
+Shadow, Fri 23:40 PoetAndCoder, 30 s clock. None is in our logs; `scripts/chipzen_scout.py`
+profiled them from the platform's own hand histories (validated on Blueprint, mr_hide, hoops)
+and seeded `opponents.json`; see `docs/arena-plan.md` for the reads. v4's burst, read against
+the revealed cards: the shove rule cost about 184,000 chips at short stacks and now fires only
+from 20bb (`SHOVE_RULE_MIN_BB`). **v5 = ladder169l + that fix + seeded profiles +
+`--sequential-triggers`**, when the lanes finish (about 14:40).
+
+**Tuesday 15 September, 09:55 IST. The swap gate passed, then the laptop slept.** The 169-class
+linear cap-2 100bb rung beat the live cap2_100bb by **+6.5 ± 0.5 BB/100** over 40,000 hands x 3
+seeds (`results/cfr/ladder169l/gate_cap2_100bb.json`, 06:42). v4's quota burst from 05:40:
+**24 matches, 18 won, +71 ± 26 chips/hand**, 20 of them against Blueprint at +62. The laptop
+slept at about 06:59 (WSL booted again 09:46), which killed the bot and both ladder lanes, so
+rungs in progress restarted from scratch. Bot relaunched on v4 at 09:52; the ladder resumed in
+three lanes (cap-2 70 and 50; one-raise 50, 35, 25; one-raise 18, 12, 8, 5 then companions),
+`tools/ladder-progress.sh ladder169l`. Estimated complete about 14:30 from the measured
+rates. **Then, in order:** replay the logs through `ladder169l`
+(`scripts/chipzen_replay.py --ladder-dir results/cfr/ladder169l`), restart the bot as v5 on
+`--ladder-dir results/cfr/ladder169l --deep-primary`, before the 23:30 fixtures and never
+during a match; then the 10,000-hand Slumbot run on the contender, one heavy job at a time.
+The machine must not sleep tonight.
+
+**04:49 IST: crossed at 3M, and the Slumbot miss rate gate passes.** 169 linear against 6
+linear at 3M on the one-raise tree: **+1.4 ± 0.9** (seeds −0.4, +2.4, +2.2), so the trend
+−15.8, −5.7, −3.1, +1.4 has crossed, thinly. The 200bb cap-2 contender
+(`results/cfr/contender/cap2_200bb.pkl`, 4.2M infosets, 3M iterations) played 850 of 1,000
+Slumbot hands at a **4.2 percent lookup miss rate against 11.9** for the one-raise 200bb
+solver: the deeper tree removes two thirds of the misses, which is the contender plan's gate.
+Do not read that run's win rate. Two lanes are retraining the whole ladder as
+`results/cfr/ladder169l/` (169 classes, linear, 3M per rung, the same recipe otherwise;
+`tools/ladder-progress.sh ladder169l`): lane H is the cap-2 rungs with the swap gate after
+the 100bb one (`gate_cap2_100bb.json`, about 07:00), lane I the one-raise rungs and
+companions, about 12:00. **Swap only if the cap-2 gate wins**, with a new label, before the
+23:30 fixtures. After the lanes: the 10,000-hand Slumbot run on the contender
+(`scripts/slumbot_measure.py --strategy results/cfr/contender/cap2_200bb.pkl --out
+results/slumbot/m1_cap2_200bb.json`, about 12 h), one heavy job at a time.
+
+**02:53 IST: the clean test.** Six-class under linear as the opponent: **169 linear loses
+−3.1 ± 1.6**, and 6 linear against 6 vanilla is +2.1 ± 2.4, not separated. So the earlier
++5.4 was the rule helping the 169-class solver converge, not the abstraction winning. The gap
+at equal budget is −15.8 (250k), −5.7 (1M vanilla), −3.1 (1M linear): closing, not crossed.
+No ladder retrain. Lane G runs both at 3M under linear (`gate_linear169_vs_linear6_3m.json`,
+about 04:20); if that crosses, the retrain is worth it, and if not, the preflop lever waits
+for the exact preflop all-in evaluation and the skip-early-averaging trick from the
+convergence review.
+
+**02:28 IST: linear averaging flips the preflop result.** On the one-raise 100bb tree at 1M
+iterations each, the 169-class solver under `--update-rule linear` beats the 169-class vanilla
+one by **+6.4 ± 2.7** and the six-class vanilla one by **+5.4 ± 2.4** BB/100
+(`results/cfr/ladder169/gate_linear169_*.json`), where last night 169 vanilla lost to 6 vanilla
+by 5.7 ± 1.5. Shove-node jaggedness 0.32 to 0.23, not yet converged. Confound: the six-class
+opponent was vanilla; the clean test (six-class linear, then 169 linear against it and 6 linear
+against 6 vanilla) is lane F, `gate_linear169_vs_linear6_1m.json` and
+`gate_linear6_vs_vanilla6_1m.json`. If 169 linear still wins, the ladder is retrained under
+linear with 169 classes and gated on the cap-2 tree before any swap.
+
+**02:04 IST: the harness killed every background lane for low memory** (the bot's 2.4 GB plus a
+1 GB trainer plus the test suite), and the contender's pickle was truncated mid-write. Relaunched
+at 02:08 with the native module already rebuilt and its 8 tests passing: the contender retrain
+finishes about 04:20, its Slumbot run about 05:35; the linear experiment about 02:40. One
+heavy job at a time while the bot is live. Three lanes were queued (`~/pokerbot-scratch/ladder169/lane*.log`,
+`tools/ladder-progress.sh ladder169`): the 200bb cap-2 contender for Slumbot
+(`results/cfr/contender/`), a 1,000-hand Slumbot miss-rate run on it
+(`tools/slumbot-progress.sh ~/pokerbot-scratch/slumbot/contender_pilot.log`), and the
+169-class one-raise rung at 1M under linear with two play-offs
+(`results/cfr/ladder169/gate_linear169_*.json`). The Slumbot bridge now reads the schedule from
+the pickle and counts misses by raise depth (`slumbot/bridge.py`, `slumbot/player.py`). The
+lane-A 70bb and 50bb rungs of `ladder169` were stopped: they carried the old discount.
+
+**Written 15 September, 00:10 to 00:40 IST, all behind flags and all off by default**, so the
+live bot and every panel figure are unchanged until one is switched on and gated:
+
+| piece | flag | where | tests |
+|---|---|---|---|
+| Postflop purification (argmax instead of sampling) | `--purify postflop` on `chipzen_run.py`, `slumbot_measure.py`, `slumbot_pilot.py` | `evaluation.benchmark.cfr_agent(purify=)` | `test_benchmark.py` |
+| Slumbot loss split by miss, street, position | runs from now on write `hand_records`; `scripts/slumbot_split.py <result.json>` | `slumbot/player.py` `begin_hand`/`hand_record` | `test_slumbot_bridge.py` |
+| Sequential exploit triggers (fire from 40 bets when the interval excludes the baseline) | `--sequential-triggers` | `chipzen/opponents.py` | `test_chipzen_opponents.py` |
+| Bankroll cap on exploits (only while net against that opponent is not negative) | `--exploit-bankroll` | same | same |
+| Per-history opponent action counts, the raw material for a data-biased response | always collected now (`by_history` in `results/chipzen/opponents.json`) | same | same |
+| **River endgame solving on the exact hand** (vector CFR+, blueprint ranges, live chips) | `--river-solve [--river-budget 8]` | `cfr/river.py`, hook in `chipzen/player.py` | `test_river.py` |
+| Re-solve logged rivers and compare with the play | `scripts/river_solve.py --last 20 [--opponent X]` | writes `results/chipzen/river_resolve.md` | |
+
+The river solver builds the 1,081 hands in about 1.3 s and runs 400 iterations in about 3 s;
+the decision record carries `river: {iterations, ms, strategy}` when it fires and the blueprint's
+answer stands if it fails or overruns. A first look at four logged Blueprint rivers agreed with
+the play on two and folded ace-queen high to a 41 percent bet where the play called and won;
+that is a reading against the blueprint's own betting range, not against Blueprint's. None of
+this is measured. The gate for each is the same as ever: 40,000 hands on the same tree, or the
+arena ledger under its own label. Not built: the overnight data-biased response solve itself
+(the counts for it are now collected).
+
+**Measured Monday night, 14 September: the lossless preflop loses the same-tree gate, so the
+bot stays on v4.** The cause of the big Blueprint losses was traced to the preflop abstraction
+rather than the fallback: six Chen classes put KQo, T9s and 77 in one bucket with TT and AQ, and
+at the 70bb rung that bucket calls a three-bet shove 97 percent of the time. The fallback rule
+answered 32 of v3's 1,367 decisions and one of the eight most expensive hands on record.
+`CardAbstraction(preflop_buckets=169)` now keeps every starting hand its own class
+(`abstraction/buckets.py`, native table widened to 16 bits, `--preflop-buckets 169` on the
+trainer, `PREFLOP_BUCKETS=169` on the tool scripts), and a full ladder was retrained on the
+`ladder200t` recipe into `results/cfr/ladder169/` (`tools/ladder-progress.sh ladder169`). The
+gate is `play_pickles` at 40,000 hands x 3 seeds against the 200t solver on the same tree, so
+the only difference is the preflop abstraction. BB/100 to the 169-class solver:
+
+| play-off, 100bb | 169 vs 6 |
+|---|---|
+| cap-2, 3M iterations, **the swap gate** | **−4.4 ± 1.8** (every seed below zero) |
+| one-raise, 1M vs 1M | −5.7 ± 1.5 |
+| one-raise, 250k vs 250k | −15.8 ± 3.8 |
+| one-raise, 1M vs the live 250k rung | +15.2 ± 4.4 (iterations, not abstraction) |
+
+The gap closes with iterations and has not crossed at any budget tried, so the rule set before
+the run stands: no swap. `scripts/chipzen_replay.py` re-asks every logged decision of a ladder
+that has not played (`results/chipzen/replay.md`), and at the 100bb cap-2 rung the lossless
+solver does fold the hands that lost: Q9o to a three-bet, 68s to a two-times open, KTs to a shove
+two thirds of the time. So the mechanism is real and the head-to-head still penalises it, which
+is the equilibrium-against-exploitation trade this project has now measured five times: the
+six-class opponent's shoving range carries the bluffs an equilibrium has and Blueprint does not.
+The instrument that could settle it is the arena, and at 20 matches a day and ±31 chips a hand
+it cannot. The 70bb and 50bb cap-2 rungs finish about 03:45; re-run the replay then for the KQ
+hands, which sat at the 70bb rung. `results/cfr/experiments/nolimit_100bb_{169,6}_1m.pkl` are
+the density-test solvers.
+
+### After the season: the open defects, in the order to fix them
+
+Found by the 15 September audits (`docs/research/2026-09-15-solver-engineering-audit.md`,
+`2026-09-15-frontier-audit.md`, the arena-path audit in `2026-09-15-season6-levers.md`). The
+sixteen defects fixed that day are recorded in `docs/arena-plan.md`; these are the ones still
+open. Every solver item needs a native rebuild, which kills any running training, so none of them
+starts before Friday's fixture. Guard the equality items with a native golden test: 2,000 cap-2
+iterations at a fixed seed, `average_strategy()` byte-identical before and after.
+
+| # | defect | where | fix | effort | gate |
+|---|---|---|---|---|---|
+| 1 | a never-averaged node is exported as an exact uniform: the 50/50 facing a shove, invisible to the miss counter | `native/src/mccfr.hpp` `average_strategy` | export regret matching's current strategy where the sum is zero, or mark the entry as a miss so the companion answers | 1 h | same-tree head-to-head |
+| 2 | the export builds a `std::map`, then a dict, then millions of numpy arrays: a 1 GB spike on every write, the memory-kill state twice on 15 Sept | `bindings.cpp:131-136`, `train_nolimit.py:180` | stream to flat arrays | 1.5 h | equality |
+| 3 | **done 16 Sept, ladders converted** (ladder169l, ladder169l_v6, contender: 3.2 GB to 263 MB): `cfr/flat.py` (`FlatStrategy`, `load_strategy`), `scripts/cfr/flatten_strategy.py`, `tests/test_flat.py` pins the chip series identical; the three loaders prefer a flat pair newer than its pickle. Convert the ladders (`flatten_strategy.py results/cfr/ladder169l/*.pkl`, one pickle in memory at a time) when the machine is free, then restart the bot on them | every `saved["strategy"]` site | sorted `uint64` keys, `int32` offsets, one `float32` array, behind a `Mapping` shim with `.get` | 6 to 8 h | equality: shim reproduces the dict entry for entry, `benchmark()` chip series identical at a fixed seed |
+| 4 | `street_actions` builds a string 4,052 times per iteration; `utility` and `who_folded` copy substrings 210 times | `nolimit.hpp:94-97`, `nolimit_game.hpp:152,185` | `string_view` or a cached street-start index in `State` | 2 h | equality |
+| 5 | **done 16 Sept**: refetch removed, golden output identical. The reserve was tried and taken out (1.62 with, 1.65 without, no difference). Speed effect of the refetch itself unmeasured: the audit's 1.43 ms baseline was a six-class-preflop tree, and the 169-class one times at 1.62; a proper A/B against the pre-change module is part of the Thursday sitting | | | | |
+| 6 | **done 16 Sept** (memo cap 4,096; golden output identical; `cache_size` still unbound) | | | | |
+| 7 | packed keys: 20-char strings hashed per visit | `nolimit_game.hpp:176-178` | `(bucket << 56) \| code` in a `uint64`, 3 bits per symbol, 50 bits of history | 3 h | equality (bijective) |
+| 8 | every traverser branch deals its own board: about 91 runouts per iteration, variance, 5x of wasted time | `mccfr.hpp:173-174`, `nolimit_game.hpp:112-148` | one deal per iteration, prefixes revealed | 4 to 6 h | Kuhn −1/18, Leduc exploitability, one same-tree head-to-head |
+| 9 | an all-in is scored by one sampled runout: the dominant noise at the shove nodes | `nolimit.hpp:117`, `nolimit_game.hpp:150-174` | preflop by a suit-aware 1,326 x 1,326 table (build once), turn by 44 runouts, flop by 990 | 4 h plus the table | convergence tests |
+| 10 | the average accumulates from iteration 1 | `mccfr.hpp` | skip the first part of the run (Pluribus, Modicum) | 0.5 h | Kuhn and Leduc |
+| 11 | one thread per solve | `mccfr.hpp` | after 7: pre-sized open-addressed table with CAS insert, per-thread RNG and game, relaxed atomic accumulation | 8 to 16 h | Kuhn with 8 threads; a head-to-head |
+| 12 | **done 16 Sept**: a per-decision memo in `decide` and a bounded memo across decisions in `ArenaPlayer._bucket` (the same cards come back every street), seeded per key as the lookup is; rule tests pass | `benchmark.py:196-198`, `chipzen/player.py:341-347` | memoise per decision | 1 h | equality |
+| 13 | **memo done 16 Sept** (`HandSet.build` and the per-board bucket arrays memoised, river tests pass, warm build 0 ms); the tree build outside the budget and the incidence matmul remain | `cfr/river.py:360-373,430-432` | memoise by board; move the build inside the budget; an incidence matmul in `showdown` | 1 to 2 h | equality |
+| 14 | **done 16 Sept**: always-fold read −699 ± 21 mbb/hand over 1,000 hands against an expectation of −700 (Slumbot folds its small blind a fifth of the time), so the raw column is honest; the baseline-differenced column read −646 ± 1,193 and is retired | | |
+| 15 | nothing restarts the bot after a Windows reboot (the 06:59 outage) | Windows | a Task Scheduler entry at logon that starts WSL and `tools/chipzen-run.sh` | 1 h | none |
+
+**The golden test exists (16 Sept):** `scripts/cfr/make_golden.py` wrote
+`tests/golden/native_cap2_20bb_seed7_2000.json` (46,664 information sets, seed 7, 2,000
+iterations, linear) with the module as it stood before any solver change, and
+`tests/test_native.py` re-solves and requires every entry identical. Re-baseline with `--force`
+only after a deliberate path change has passed Kuhn and Leduc. Reframed effort for the C++
+items, from the day's actuals: 2 at 20 min, 4 at 30, 5 and 6 and 10 at 5 each, 7 at 1 h, 1 at 15
+min plus its gate, 8 at 1.5 h, 9 at 1 h plus the table, 11 at half a day; items 1 to 10 are one
+sitting of about four hours, the first window with nothing training, Thursday daytime.
+
+Order: 2 and 3 first (they end the memory juggling and make the ladder a few hundred MB), then
+4 to 7 and 12 to 13 as one equality-tested batch, then 8, 9, 10 with the convergence tests, then
+11, then 1 with its gate, and 14 and 15 whenever the network and the Windows side are free.
+
+### After the defects: the baseline plan, in order
+
+What the solver is given to work with, once the defect list above makes a night worth about
+30x today's iterations. Each step has the gate that can read it; the frontier comparison
+(`docs/research/2026-09-15-frontier-audit.md`) says two weeks of this moves the Slumbot loss from
+about −1,000 to a few hundred, and that a win needs steps 1 to 3 together, which is the month.
+
+1. **Train to convergence.** A cap-2 rung at 60M iterations in a night rather than 3M in two
+   hours. The lossless preflop's thin nodes (50/50 facing a shove) and the 20-bucket draw were
+   density problems, and this is where that stops being true. Gate: same-tree head-to-head,
+   40,000 hands x 3 seeds.
+2. **Resolution postflop.** Fifty to 200 imperfect-recall buckets with the 169 preflop, river
+   equity by enumerating the 990 opponent hands and flop equity from a table rather than 200
+   samples. Six buckets is why queen-nine and queen-ten are one hand. Retrains the ladder;
+   gates each step.
+3. **Search at play time.** The river solver (`cfr/river.py`, built) with Modicum's tweaks and
+   ported to C++ so 2,000 iterations fit in a second, then the turn solved to the end with its
+   44 rivers. Modicum's turn solver was worth 22 mbb/hand against Slumbot, more than its
+   blueprint. Keep it unsafe (at 200 buckets unsafe beats max-margin; the estimate variants
+   need per-hand values a coarse blueprint cannot supply). Gate: on against off on the same
+   tree, then its own arena label.
+4. **Purification postflop and the current-strategy fallback**, built or an hour away, both
+   gated: small gains that compensate for an unconverged average.
+5. **Measure honestly.** The always-fold calibration of Slumbot's baseline column, then a
+   chance-only AIVAT from the blueprint's values, so the external number carries an interval a
+   change can cross. Without it nothing above can be ranked against Slumbot.
+6. **Only then the tree**: a third raise or opponent-only sizes, chosen from the
+   translation-distance histogram in the Slumbot logs, because the cost of few sizes is what
+   the turn solver removes on the streets it covers.
+7. **On top, for the arena**: the data-biased response per opponent from the scouted counts,
+   capped by what it has won. The 2000 rating is exploitation the ledger can measure, built on a
+   baseline that no longer gives chips away.
+
+### The week, in order
+
+1. **Tuesday afternoon:** `venv/bin/python scripts/chipzen_run.py --fixtures` for the round's
+   times. Read the ledger: v4 against v3 and v2 on chips per hand; revert to v3 flags only if v4
+   is clearly worse (both are one restart, see the commands below).
+2. **Tuesday to Friday, from 23:15 IST:** machine awake, bot connected (it reconnects on its
+   own after sleep; confirm with the progress reader before 23:30). Round-robin fixtures start
+   23:30 IST (18:00 UTC), ten minutes apart, 30-second clock, 10,000 chips at 50/100, blinds up
+   every 20 hands. The platform waits about 90 s for a remote bot, then walkover.
+3. **After each round:** `scripts/chipzen_review.py` and `scripts/chipzen_ledger.py`; the biggest
+   losing hands are the diagnosis. Change one thing at a time and restart with a new `--label`.
+4. **Wednesday:** Tuesday's round into the paper and slides
+   (`scripts/phase2/make_figures.py`, `make_springer.py`, `make_latex.py`, `make_slides.py`);
+   rehearse the demo (bot in the lobby, `tools/chipzen-progress.sh --watch`, a house-bot match
+   via `tools/chipzen-run.sh --house-bot --once`, the review). Package the code: tag the commit,
+   zip `results/chipzen/matches`.
+5. **Thursday 18 September:** fold Wednesday's round in, submit (`docs/NashForge_LNCS.docx`,
+   `docs/latex/nashforge.pdf`, `docs/NashForge_Phase2.pptx`), demo. Plan and rubric:
+   `docs/submission-plan.md`, `docs/course/assignment-brief.pdf`.
+6. **Saturday and Sunday:** playoffs, if we qualify; times from `--fixtures`.
+
+### Commands
+
+    tools/chipzen-run.sh --accept-inbound --queue --ladder-dir results/cfr/ladder200t --deep-primary --label "v4: ..."
+    tools/chipzen-run.sh stop                     # never during a match: progress reader shows 0 active
+    tools/chipzen-progress.sh --watch
+    venv/bin/python scripts/chipzen_run.py --fixtures
+    venv/bin/python scripts/chipzen_ledger.py     # win rate and chips/hand per version
+    venv/bin/python scripts/chipzen_review.py     # the expensive hands, off-tree rate, action mix
+    tools/chipzen-run.sh --house-bot --once       # one unrated practice match (uses the daily quota of 20)
+
+Free tier: 20 challenge or queue matches a day, reset 05:30 IST; season fixtures do not count.
+Every match log is stamped with the version; `results/chipzen/epochs.json` labels the older ones.
+
+### After the season, in this order
+
+- **Read `docs/arena-plan.md`** for the drawbacks and what each fix did; **`docs/chipzen.md`**
+  for the platform; **`docs/contender-plan.md`** for the deeper tree gated on Slumbot.
+- The container upload (a second rated record on the bigger ladder): drop numba from the play
+  path via the C++ equity function, load only reachable rungs under 256 MB, image under 200 MB.
+  The solver tables are dicts of small arrays at a few hundred bytes each; flat arrays would cut
+  the 2.4 GB the v3 set uses to a fifth.
+- The cap-2 solvers at 50, 70 and 100bb had 3M iterations over 1 to 2.2 million situations, so
+  the rare corners (three-bet shoves) are thinly trained: more iterations there is the cheapest
+  strength gain, about 2 hours per rung per 3M iterations.
+- Slumbot re-measurement on the contender set (12 h), then the miss-rate gate in the contender
+  plan; bet sizes (`NUM_ACTIONS`) last.
+
+### What was learned this week, briefly
+
+- The arena found the abstraction's weakest point in a day: deep-stacked re-raised pots. A
+  one-raise solver answers every re-raise with a substitute; the cap-2 solver removed that.
+- The bot loses in one of two ways against strong bots: calling too much against a fold-or-raise
+  bot (Blueprint), or bluffing into a bot that never folds (mr_hide). Both now have a measured
+  trigger in `chipzen/opponents.py`.
+- Two operational failures cost a day each and are fixed: a lobby socket that died in the
+  laptop's sleep but read as connected (silence watchdog), and rebuilding the native module
+  under a running training (SIGBUS; `native/build.sh` now refuses).
+
+---
+
+## Earlier: the Slumbot steps and the abstraction findings
 
 **Both Slumbot steps are done, and the answer is that neither lever moved the number.**
 Path A completed on 10 September: a 200bb solver trained to 250,000 iterations

@@ -10,7 +10,13 @@ Two streets, two methods:
 
 * **Preflop** has only 169 strategically distinct starting hands, so nothing is
   sampled: all 169 are enumerated and grouped by strength directly. The existing
-  Chen-formula score is used, as the project's proposal specifies.
+  Chen-formula score is used, as the project's proposal specifies. With
+  ``preflop_buckets`` at :data:`PREFLOP_HANDS` or more the grouping is dropped
+  and every starting hand is its own class, which is lossless: six Chen classes
+  put KQo, T9s and 77 in one bucket, and on the arena that bucket called a
+  three-bet shove 97 percent of the time because it also holds TT and AQ.
+  The postflop key carries only the postflop bucket, so the lossless preflop
+  costs the tree almost nothing.
 
 * **Postflop** cannot be enumerated — the flop alone has around 26 million
   (hole, board) combinations — so equity is computed on a sample and clustered
@@ -39,6 +45,10 @@ from engine.features import chen_formula, made_hand_strength
 
 from .canonical import build_hash, hash_value
 from .equity import card_index, equity_vs_random, sample_situations
+
+#: The strategically distinct starting hands. At this many preflop buckets (or
+#: more) the abstraction stops clustering and keeps every hand apart.
+PREFLOP_HANDS = 169
 
 #: Board sizes for the streets that have one.
 STREET_BOARD_SIZE = {"flop": 3, "turn": 4, "river": 5}
@@ -280,6 +290,12 @@ class CardAbstraction:
     texture: bool = False
 
     _preflop: Dict[Tuple[str, str, bool], int] = None
+    #: Lossless preflop only: each hand's coarse Chen class, `postflop_buckets`
+    #: of them, so a strength threshold written for six classes (the arena
+    #: player's bluff and shove rules) keeps its meaning when the solver's own
+    #: preflop key has 169. None when the preflop is clustered, where the bucket
+    #: already is the class.
+    _preflop_strength: Dict[int, int] = None
     _centroids: Dict[str, np.ndarray] = None
     #: The same centroids as plain sorted lists, for the binary-search lookup.
     _centroid_list: Dict[str, List[float]] = None
@@ -304,6 +320,8 @@ class CardAbstraction:
         self.__dict__.update(state)
         if "texture" not in state:
             self.texture = False
+        if "_preflop_strength" not in state:
+            self._preflop_strength = None
         if getattr(self, "_centroid_list", None) is None and self._centroids:
             self._centroid_list = {street: centroids.tolist()
                                    for street, centroids in self._centroids.items()}
@@ -350,6 +368,24 @@ class CardAbstraction:
             for high, low, suited in hands
         ])
 
+        if self.preflop_buckets >= PREFLOP_HANDS:
+            # Lossless: one class per hand, numbered weakest first so the
+            # "bucket 0 is weakest" convention survives. Chen scores tie (27
+            # distinct values over 169 hands), and the tie-break is only for a
+            # stable, readable order: pairs above suited above offsuit, then
+            # by rank. The coarse class is still fitted, for `strength_of`.
+            order = sorted(
+                range(len(hands)),
+                key=lambda i: (scores[i], hands[i][0] == hands[i][1], hands[i][2],
+                               RANKS.index(hands[i][0]), RANKS.index(hands[i][1])))
+            self._preflop = {hands[i]: rank for rank, i in enumerate(order)}
+            coarse = _fit_kmeans_1d(scores, self.postflop_buckets)
+            classes = np.abs(scores[:, None] - coarse[None, :]).argmin(axis=1)
+            self._preflop_strength = {self._preflop[hands[i]]: int(classes[i])
+                                      for i in range(len(hands))}
+            return
+
+        self._preflop_strength = None
         centroids = _fit_kmeans_1d(scores, self.preflop_buckets)
         assignments = np.abs(scores[:, None] - centroids[None, :]).argmin(axis=1)
         self._preflop = {hand: int(bucket) for hand, bucket in zip(hands, assignments)}
@@ -391,8 +427,15 @@ class CardAbstraction:
         return bucket
 
     def strength_of(self, bucket: int, street: str) -> int:
-        """The equity part of a bucket, with any texture stripped off."""
-        if street == "preflop" or not getattr(self, "texture", False):
+        """
+        The strength part of a bucket: texture stripped off postflop, and the
+        coarse Chen class rather than the hand's own index when the preflop is
+        lossless. Either way the answer is one of `postflop_buckets` classes.
+        """
+        if street == "preflop":
+            strength = getattr(self, "_preflop_strength", None)
+            return strength[bucket] if strength else bucket
+        if not getattr(self, "texture", False):
             return bucket
         return bucket % len(self._centroid_list[street])
 

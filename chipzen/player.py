@@ -40,8 +40,10 @@ from typing import Dict, List, Optional, Sequence
 
 import numpy as np
 
-from abstraction.betting import ALL_IN, CHECK_CALL, FOLD, RAISE_ACTIONS, RAISE_POT
+from abstraction.betting import ALL_IN, CHECK_CALL, FOLD, RAISE_ACTIONS, RAISE_HALF, RAISE_POT
+from cfr.flat import load_strategy
 from chipzen.bridge import Hand, cards, legal_mask, replay, to_chipzen
+from cfr.river import decide_river
 from chipzen.opponents import Profiles
 from evaluation.benchmark import cfr_agent
 
@@ -67,6 +69,14 @@ class Stats:
     companion_hits: int = 0
     shoves_softened: int = 0
     bluffs_withheld: int = 0
+    shove_calls_declined: int = 0
+    river_solves: int = 0
+    blinds_opened: int = 0
+    three_bets_into_folders: int = 0
+    river_bets_believed: int = 0
+    big_bets_believed: int = 0
+    small_bets_called: int = 0
+    river_failures: int = 0
     fallbacks: int = 0
     miss_depths: Dict[int, int] = field(default_factory=dict)
     depths_used: Dict[str, int] = field(default_factory=dict)
@@ -87,9 +97,11 @@ def _shim(hole, board, to_call: int):
         current_bet=to_call)
 
 
-def load_solver(path: str, rng: np.random.Generator) -> Solver:
-    with open(path, "rb") as handle:
-        saved = pickle.load(handle)
+def load_solver(path: str, rng: np.random.Generator, purify: str = "none") -> Solver:
+    # The flat pair beside the pickle when it exists (cfr/flat.py): the same
+    # answers, a twentieth of the memory, which is what lets the whole ladder
+    # sit beside a training run.
+    saved = load_strategy(path)
     args = saved.get("args") or {}
     if not isinstance(args, dict):
         args = vars(args)
@@ -99,8 +111,55 @@ def load_solver(path: str, rng: np.random.Generator) -> Solver:
     solver = Solver(path=path, depth_bb=depth, schedule=schedule,
                     strategy=saved["strategy"], abstraction=saved["abstraction"])
     solver.agent = cfr_agent(solver.strategy, solver.abstraction, rng,
-                             misses=solver.misses, raise_cap=schedule)
+                             misses=solver.misses, raise_cap=schedule, purify=purify)
     return solver
+
+
+def strength_class(abstraction, hole, board) -> int:
+    """
+    The hand's strength class, 0 to 5, as the solver reads it: the texture and
+    the lossless preflop index stripped off. Seeded from the cards, as
+    `cfr_agent` seeds, so the class is the one the lookup used.
+    """
+    key = (tuple(c.index for c in hole), tuple(c.index for c in board))
+    bucket = abstraction.bucket(hole, board, np.random.default_rng(hash(key) % (2 ** 32)))
+    if hasattr(abstraction, "strength_of"):
+        street = {0: "preflop", 3: "flop", 4: "turn", 5: "river"}[len(board)]
+        return abstraction.strength_of(bucket, street)
+    return bucket
+
+
+def fallback_choice(bucket: int, top: int, mask, pot: int, to_call: int) -> int:
+    """
+    A policy for a node the strategy never stored. Crude on purpose.
+
+    Buckets run from 0 (weakest) to `top` (strongest). The price of a call is
+    measured against the pot with the bet included. Shared by the arena player
+    and the Slumbot player: until 15 September the Slumbot player guessed
+    uniformly at random on a miss, a shove one time in six, and at 3,000 hands
+    the 135 hands with a miss carried 68 percent of the loss while the hands
+    without one were not separated from zero.
+    """
+    def first_legal(*preferred):
+        for action in preferred:
+            if mask[action]:
+                return int(action)
+        return int(np.flatnonzero(mask)[0])
+
+    if bucket >= top:
+        return first_legal(RAISE_POT, ALL_IN, CHECK_CALL)
+    if to_call > 0 and to_call >= pot - to_call:
+        # A bet of the pot or more, and the rule has no read on the bettor:
+        # 14 September's T-5 calling a shove with a pair of fives is what
+        # this line prevents.
+        return first_legal(FOLD, CHECK_CALL)
+    if bucket >= top - 1:
+        return first_legal(CHECK_CALL, FOLD)
+    if bucket >= top - 2:
+        return first_legal(CHECK_CALL, FOLD) if to_call <= pot * 0.5 \
+            else first_legal(FOLD, CHECK_CALL)
+    return first_legal(CHECK_CALL, FOLD) if to_call <= pot * 0.15 \
+        else first_legal(FOLD, CHECK_CALL)
 
 
 class ArenaPlayer:
@@ -111,13 +170,20 @@ class ArenaPlayer:
     COMPANION_REACH = 2.0
 
     def __init__(self, paths: Sequence[str], rng: Optional[np.random.Generator] = None,
-                 companions: Sequence[str] = ()):
+                 companions: Sequence[str] = (), purify: str = "none",
+                 river: bool = False, river_budget_s: float = 8.0):
         self.rng = rng if rng is not None else np.random.default_rng()
-        self.ladder = sorted((load_solver(p, self.rng) for p in paths),
+        self.purify = purify
+        #: River endgame solving (cfr/river.py), off by default: the river is
+        #: re-solved on the exact hand from the blueprint's ranges, and the
+        #: blueprint's own answer is kept only if the solve fails or overruns.
+        self.river = river
+        self.river_budget_s = river_budget_s
+        self.ladder = sorted((load_solver(p, self.rng, purify) for p in paths),
                              key=lambda s: s.depth_bb)
         if not self.ladder:
             raise ValueError("an empty ladder cannot play")
-        self.companions = sorted((load_solver(p, self.rng) for p in companions),
+        self.companions = sorted((load_solver(p, self.rng, purify) for p in companions),
                                  key=lambda s: s.depth_bb)
         self.stats = Stats()
         self.probe: List = []
@@ -128,6 +194,21 @@ class ArenaPlayer:
     #: A raise with a hand this weak or weaker is a bluff for the purpose of
     #: withholding it: the bottom two of six strength classes.
     BLUFF_STRENGTH = 1
+    #: The shove-call rule fires only at this effective stack or deeper. It
+    #: was written for 100bb three-bet shoves, and on 15 September v4's burst
+    #: showed it firing 70 times against Blueprint, 60 of them preflop at short
+    #: stacks where that bot shoves any two cards: against the revealed hands
+    #: calling was better in 48 of the 70, worth about 184,000 chips over the
+    #: burst, and every one of those below 20bb. At 20bb and deeper the rule
+    #: was neutral. The solver's short rungs know the calling ranges; the rule
+    #: does not.
+    SHOVE_RULE_MIN_BB = 20.0
+    #: Pot odds beyond which a fold to an all-in opponent is never sent: the
+    #: outstanding call is at most a tenth of what is already in the pot.
+    POT_ODDS_FLOOR = 10
+    #: The three-bet-into-a-folder read fires only this deep, so a four-bet
+    #: can be folded to without having committed the stack.
+    THREE_BET_MIN_BB = 30.0
 
     def solver_for(self, effective_bb: float) -> Solver:
         """Nearest rung in ratio, so 70bb goes to 100 rather than to 50 by a hair."""
@@ -166,6 +247,17 @@ class ArenaPlayer:
             self.stats.miss_depths[depth] = self.stats.miss_depths.get(depth, 0) + 1
 
         hole, board = cards(state)
+        # The strength class is read by up to four rules per decision, each of
+        # which built a fresh generator to seed the bucket the way the lookup
+        # does; one memo per decision answers them all from a single call.
+        classes: Dict[int, int] = {}
+
+        def strength(of_solver) -> int:
+            key = id(of_solver)
+            if key not in classes:
+                classes[key] = self._bucket(of_solver, hole, board)
+            return classes[key]
+
         mask = legal_mask(node, valid_actions, solver.schedule)
         arena = legal_mask(node, valid_actions, tree=False)
         to_call = int(state.get("to_call") or 0)
@@ -193,22 +285,106 @@ class ArenaPlayer:
                     # jacks. A shove from the companion is taken as "raise",
                     # and only the top bucket gets to make it a shove.
                     if choice == ALL_IN and arena[CHECK_CALL] and \
-                            self._bucket(deep, hole, board) < self._top(deep):
+                            strength(deep) < self._top(deep):
                         choice = CHECK_CALL
                         self.stats.shoves_softened += 1
             if companion_used is None:
                 fell_back = True
                 choice = self._fallback(solver, hole, board, arena, state)
+        river = None
+        if self.river and len(board) == 5:
+            try:
+                posted = next((a.get("seat") for a in state.get("action_history") or []
+                               if a.get("action") == "post_small_blind"), None)
+                decision = decide_river(
+                    state, hole, board, node.history, solver.strategy, solver.abstraction,
+                    solver.schedule, we_are_small_blind=(posted == seat), rng=self.rng,
+                    legal=arena, budget_s=self.river_budget_s, purify=(self.purify != "none"))
+                choice, missed, fell_back, companion_used = decision.choice, False, False, None
+                river = {"iterations": decision.iterations, "ms": round(decision.ms, 1),
+                         "hands": decision.hands,
+                         "strategy": {str(a): round(p, 3) for a, p in decision.distribution.items()}}
+                self.stats.river_solves += 1
+            except Exception as error:          # the blueprint's answer stands
+                river = {"error": f"{type(error).__name__}: {error}"[:200]}
+                self.stats.river_failures += 1
         adjusted = None
+        if self.profiles is not None and choice == FOLD and not board and node.history == "" \
+                and arena[RAISE_HALF] and self.profiles.folds_blind(self.opponent):
+            # First to act preflop against a big blind that folds to most
+            # opens: the minimum raise (half the pot after the call is the
+            # 2x open) wins the blind outright far more often than it costs.
+            choice = RAISE_HALF
+            adjusted = "opened into a folding blind"
+            self.stats.blinds_opened += 1
+        if self.profiles is not None and choice == FOLD and not board and len(node.history) == 1 \
+                and node.history in "2345" and arena[RAISE_HALF] \
+                and hand.effective_bb >= self.THREE_BET_MIN_BB \
+                and self.profiles.folds_to_three_bet(self.opponent):
+            # Facing an open from a bot that folds to most three-bets, and the
+            # solver was folding: the small three-bet replaces an action worth
+            # nothing with one that shows a profit at any fold rate above two
+            # thirds. Deep only, so a four-bet is folded to at a bearable price.
+            choice = RAISE_HALF
+            adjusted = "three-bet into a folder"
+            self.stats.three_bets_into_folders += 1
+        if self.profiles is not None and choice == CHECK_CALL and to_call > 0 and len(board) == 5 \
+                and arena[FOLD] and hand.effective_bb >= self.SHOVE_RULE_MIN_BB \
+                and self.profiles.never_bluffs(self.opponent) \
+                and strength(solver) < self._top(solver) - 1:
+            # A river bet from a bot whose river bets are never bluffs is paid
+            # off only by the top two strength classes. Deep only, and river
+            # only: the same shape of rule folded good hands short in v4.
+            choice = FOLD
+            adjusted = "river bet believed"
+            self.stats.river_bets_believed += 1
+        pot_before = int(state.get("pot") or 0) - to_call
+        if self.profiles is not None and to_call > 0 and board and pot_before > 0 \
+                and hand.effective_bb >= self.SHOVE_RULE_MIN_BB \
+                and self.profiles.big_bets_are_value(self.opponent):
+            size = to_call / pot_before
+            cls = strength(solver)
+            if size >= 0.7 and choice != FOLD and arena[FOLD] and cls < self._top(solver) - 1:
+                # Its big bets were never air: below the top two classes, fold.
+                choice = FOLD
+                adjusted = "big bet believed"
+                self.stats.big_bets_believed += 1
+            elif size <= 0.6 and choice == FOLD and arena[CHECK_CALL] and cls >= 3:
+                # Its small bets were air two times in five: a middling hand calls.
+                choice = CHECK_CALL
+                adjusted = "small bet called"
+                self.stats.small_bets_called += 1
         if choice in RAISE_ACTIONS and arena[CHECK_CALL] and self.profiles is not None \
                 and self.profiles.never_folds(self.opponent) \
-                and self._bucket(solver, hole, board) <= self.BLUFF_STRENGTH:
-            # A measured station: bluffing it only builds a pot we are behind in.
-            choice = CHECK_CALL
+                and strength(solver) <= self.BLUFF_STRENGTH:
+            # A measured station: bluffing it only builds a pot we are behind
+            # in. Facing a bet, the alternative to the bluff-raise is the fold,
+            # not a call with the bottom class: 114 of 286 firings had turned a
+            # bluff into a call before 15 September.
+            choice = FOLD if to_call > 0 and arena[FOLD] else CHECK_CALL
             adjusted = "bluff withheld"
             self.stats.bluffs_withheld += 1
+        big_bet = to_call > 0 and to_call >= int(state.get("pot") or 0) - to_call
+        if choice == CHECK_CALL and big_bet and arena[FOLD] and self.profiles is not None \
+                and hand.effective_bb >= self.SHOVE_RULE_MIN_BB \
+                and self.profiles.never_calls(self.opponent) \
+                and strength(solver) < self._top(solver):
+            # A fold-or-raise bot's bet of the pot or more is a made hand.
+            choice = FOLD
+            adjusted = "shove call declined"
+            self.stats.shove_calls_declined += 1
+        opponent_stack = int((state.get("opponent_stacks") or [0])[0])
+        if to_call > 0 and opponent_stack <= 0 and arena[CHECK_CALL] and choice == FOLD \
+                and to_call * self.POT_ODDS_FLOOR <= int(state.get("pot") or 0) - to_call:
+            # An opponent all in for a fraction of a blind: the 5bb blueprint
+            # prices "all-in" at several blinds and folded T5o at 33 to 1 on
+            # 14 September. Any two cards call at these odds.
+            choice = CHECK_CALL
+            adjusted = "called for pot odds"
         if not arena[choice]:
-            choice = int(np.flatnonzero(arena)[0])
+            # The last-resort legality guard keeps the passive action, not the
+            # fold that happens to sit at index 0.
+            choice = CHECK_CALL if arena[CHECK_CALL] else int(np.flatnonzero(arena)[0])
 
         outgoing = to_chipzen(choice, node, state)
         elapsed = (time.perf_counter() - started) * 1000.0
@@ -230,60 +406,47 @@ class ArenaPlayer:
             "to_call": to_call, "history": node.history,
             "effective_bb": round(hand.effective_bb, 1), "solver": key,
             "miss": missed, "companion": companion_used, "fallback": fell_back,
-            "adjusted": adjusted, "opponent": self.opponent,
+            "adjusted": adjusted, "opponent": self.opponent, "river": river,
             "legal": [int(m) for m in mask], "choice": int(choice),
             "sent": outgoing, "ms": round(elapsed, 2),
         }
         return {"action": outgoing["action"], "params": outgoing["params"],
                 "record": record}
 
-    @staticmethod
-    def _bucket(solver: Solver, hole, board) -> int:
+    #: Strength classes by (solver, hole, board) across decisions: a hand's
+    #: cards come back on every street, and each read cost a generator (9 µs)
+    #: plus a 200-sample rollout. Seeded per key exactly as the lookup seeds,
+    #: so the memo changes nothing but the time. Cleared at the cap.
+    _CLASS_MEMO_CAP = 20_000
+
+    def _bucket(self, solver: Solver, hole, board) -> int:
         """
         The hand's strength class, 0 to 5, as the solver itself would read it.
 
         With a texture-aware abstraction the stored bucket also carries the
-        board's class; only the strength part is wanted for a threshold.
+        board's class, and with a lossless preflop it is the hand's own index
+        out of 169; only the strength part, one of six classes, is wanted for
+        a threshold.
         """
-        key = (tuple(c.index for c in hole), tuple(c.index for c in board))
-        bucket = solver.abstraction.bucket(
-            hole, board, np.random.default_rng(hash(key) % (2 ** 32)))
-        if board and hasattr(solver.abstraction, "strength_of"):
-            street = {3: "flop", 4: "turn", 5: "river"}[len(board)]
-            return solver.abstraction.strength_of(bucket, street)
-        return bucket
+        key = (id(solver), tuple(c.index for c in hole), tuple(c.index for c in board))
+        memo = self.__dict__.setdefault("_class_memo", {})
+        found = memo.get(key)
+        if found is not None:
+            return found
+        found = strength_class(solver.abstraction, hole, board)
+        if len(memo) >= self._CLASS_MEMO_CAP:
+            memo.clear()
+        memo[key] = found
+        return found
 
     @staticmethod
     def _top(solver: Solver) -> int:
         return int(getattr(solver.abstraction, "postflop_buckets", 6)) - 1
 
     def _fallback(self, solver: Solver, hole, board, mask, state) -> int:
-        """
-        A policy for a node the strategy never stored. Crude on purpose.
-
-        Buckets run from 0 (weakest) to 5 (strongest). The price of a call is
-        measured against the pot as the arena reports it, bet included.
-        """
-        bucket = self._bucket(solver, hole, board)
-        top = self._top(solver)
-        to_call = int(state.get("to_call") or 0)
-        pot = int(state.get("pot") or 0)
-
-        def first_legal(*preferred):
-            for action in preferred:
-                if mask[action]:
-                    return int(action)
-            return int(np.flatnonzero(mask)[0])
-
-        if bucket >= top:
-            return first_legal(RAISE_POT, ALL_IN, CHECK_CALL)
-        if bucket >= top - 1:
-            return first_legal(CHECK_CALL, FOLD)
-        if bucket >= top - 2:
-            return first_legal(CHECK_CALL, FOLD) if to_call <= pot * 0.5 \
-                else first_legal(FOLD, CHECK_CALL)
-        return first_legal(CHECK_CALL, FOLD) if to_call <= pot * 0.15 \
-            else first_legal(FOLD, CHECK_CALL)
+        """A policy for a node the strategy never stored; see `fallback_choice`."""
+        return fallback_choice(self._bucket(solver, hole, board), self._top(solver), mask,
+                               int(state.get("pot") or 0), int(state.get("to_call") or 0))
 
     def warm_up(self) -> float:
         """

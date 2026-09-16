@@ -11,6 +11,8 @@ import pytest
 
 from abstraction.betting import ALL_IN, CHECK_CALL, FOLD, RAISE_HALF, RAISE_POT, RAISE_TWO
 from chipzen.bridge import cards, legal_mask, replay, to_chipzen
+from abstraction.betting import ALL_IN, RAISE_POT  # noqa: E402,F811
+from chipzen.bridge import Node  # noqa: E402
 
 SB = {"seat": 0, "action": "post_small_blind", "amount": 5, "phase": "preflop", "is_timeout": False}
 BB = {"seat": 1, "action": "post_big_blind", "amount": 10, "phase": "preflop", "is_timeout": False}
@@ -73,8 +75,9 @@ def test_a_pot_sized_open_reads_as_the_pot_raise(rng):
 
 # Message 11: the flop, seat 1 (big blind) to act first.
 def test_a_new_street_clears_committed_keeps_the_pot_and_adds_a_slash(rng):
+    # A call's amount is what it adds: the big blind calls 20 to match a raise to 30.
     hand = replay(state(1, "flop", [entry(0, "raise", 30, "preflop"),
-                                    entry(1, "call", 30, "preflop")],
+                                    entry(1, "call", 20, "preflop")],
                         970, 970, 60, 0, 10, 970, board=("Qs", "7h", "3d")), 1, rng)
     assert hand.node.pot == 60
     assert hand.node.committed == [0, 0]
@@ -95,7 +98,7 @@ def test_the_phase_field_advances_a_street_the_history_has_not_reached(rng):
 # Message 17: seat 1 facing a 40 bet on the flop after checking.
 def test_a_bet_into_an_unopened_pot_is_a_fraction_of_that_pot(rng):
     hand = replay(state(1, "flop", [entry(0, "raise", 30, "preflop"),
-                                    entry(1, "call", 30, "preflop"),
+                                    entry(1, "call", 20, "preflop"),
                                     entry(1, "check", 0, "flop"),
                                     entry(0, "raise", 40, "flop")],
                         970, 930, 100, 40, 80, 970, board=("Qs", "7h", "3d")), 1, rng)
@@ -211,3 +214,56 @@ def test_the_schedule_removes_raises_the_solver_never_saw(rng):
     node = replay(s, 0, rng, schedule=(4, 2)).node
     mask = legal_mask(node, ["fold", "call", "raise"], schedule=(4, 2))
     assert not mask[2:].any(), "two raises in, (4, 2) is exhausted too"
+
+
+
+# --- the call convention, and the short-stack technicalities (15 September) ---
+
+def test_a_call_s_amount_is_the_increment_not_the_level(rng):
+    """
+    Hand 4 against hoops on 14 September: blinds 50/100, they raise to 260, we
+    call 160. Every one of 3,128 logged calls carries the increment. Read as a
+    level, the pot was 420 instead of 520 and the flop's pot-sized bet was
+    keyed as two times pot: a line never taken, in a quarter of decisions.
+    """
+    from chipzen.bridge import _contributions
+    history = [{"seat": 1, "action": "post_small_blind", "amount": 50, "phase": "preflop"},
+               {"seat": 0, "action": "post_big_blind", "amount": 100, "phase": "preflop"},
+               {"seat": 1, "action": "raise", "amount": 260, "phase": "preflop"},
+               {"seat": 0, "action": "call", "amount": 160, "phase": "preflop"},
+               {"seat": 0, "action": "raise", "amount": 520, "phase": "flop"}]
+    st = {"hand_number": 4, "phase": "flop", "board": ["Ad", "8s", "Qs"], "your_hole_cards": ["9d", "Qc"],
+          "pot": 1040, "your_stack": 9740, "opponent_stacks": [9220], "to_call": 520,
+          "min_raise": 1040, "max_raise": 9740, "action_history": history}
+    hand = replay(st, 1, rng)
+    assert _contributions(history) == [780, 260]
+    assert hand.node.pot == 1040 and hand.node.to_call == 520
+    assert hand.node.history.startswith("31/3")       # a pot-sized bet reads as pot, not 2x
+    assert hand.effective_bb == pytest.approx(min(9740 + 260, 9220 + 780) / 100)
+
+
+def test_a_short_blind_post_does_not_set_the_level(rng):
+    """35 logged hands had a big blind posted short; the depth read collapsed to 1bb."""
+    st = state(1, "preflop", [], 24, 5000, 74, 26)
+    st["action_history"] = [{"seat": 0, "action": "post_small_blind", "amount": 50, "phase": "preflop"},
+                            {"seat": 1, "action": "post_big_blind", "amount": 24, "phase": "preflop"}]
+    hand = replay(st, 1, rng)
+    assert hand.big_blind == 100
+
+
+def test_the_raise_ceiling_wins_over_the_floor():
+    """Short, min_raise can exceed max_raise; sending min_raise was more than our stack."""
+    node = Node(pot=300, committed=[0, 100], to_act=0)
+    out = to_chipzen(RAISE_POT, node, {"pot": 300, "to_call": 100, "min_raise": 200, "max_raise": 150})
+    assert out == {"action": "raise", "params": {"amount": 150}}
+    out = to_chipzen(ALL_IN, node, {"pot": 300, "to_call": 100, "min_raise": 0, "max_raise": 0})
+    assert out == {"action": "call", "params": {}}
+
+
+def test_an_unknown_post_is_dead_money_and_an_unknown_verb_is_passive(rng):
+    st = state(1, "preflop", [], 990, 990, 20, 0)
+    st["action_history"] = st["action_history"] + [{"seat": 0, "action": "post_ante_x", "amount": 5, "phase": "preflop"},
+                                                   {"seat": 0, "action": "timeout", "amount": 0, "phase": "preflop"}]
+    hand = replay(st, 1, rng)                      # no TranslationError
+    assert hand.node.pot == 20
+    assert hand.node.history.endswith(str(CHECK_CALL))

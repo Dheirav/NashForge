@@ -68,14 +68,20 @@ def _config():
     }
 
 
-async def _main(args, config):
-    rng = np.random.default_rng(args.seed) if args.seed is not None else np.random.default_rng()
-    ladder_dir = args.ladder_dir or LADDER_DIR
+def ladder_paths(ladder_dir, deep_primary=False, ladder=None, companions=None):
+    """
+    Which pickles play at which depth, from a ladder directory.
+
+    Shared with `scripts/chipzen_replay.py`, which asks a ladder that has never
+    played what it would have done in the logged hands: the two must pick the
+    same rung for the same depth or the replay answers a different question.
+    """
+    ladder_dir = ladder_dir or LADDER_DIR
     # A ladder directory's own 100bb rung replaces the shipped solver, so a
     # 200-sample or texture-aware set is complete on its own; the shipped
     # solvers only fill in what the directory lacks.
     own = sorted(glob.glob(os.path.join(ladder_dir, "nolimit_*bb.pkl")))
-    ladder = list(args.ladder) if args.ladder else \
+    ladder = list(ladder) if ladder else \
         own + [p for p in DEFAULT_LADDER
                if not any(os.path.basename(p).replace("nolimit_strategy", "nolimit_100bb") ==
                           os.path.basename(o) or (p.endswith("200bb_250k.pkl") and o.endswith("nolimit_200bb.pkl"))
@@ -88,8 +94,8 @@ async def _main(args, config):
               if os.path.basename(p).split("_")[1] not in cap2_depths]
     if ladder_dir == LADDER_DIR:
         tapers = [p for p in DEFAULT_COMPANIONS if os.path.exists(p) and "100bb" not in cap2_depths] + tapers
-    companions = list(args.companions) if args.companions is not None else cap2 + tapers
-    if args.deep_primary:
+    companions = list(companions) if companions is not None else cap2 + tapers
+    if deep_primary:
         # The full-size raise-cap-2 solvers play first at the depths they exist
         # for, and the one-raise solver only where none exists. This is the
         # direct answer to the deep-stack losses of 13 September: the main
@@ -99,9 +105,18 @@ async def _main(args, config):
         # A depth whose main solver has the full tree needs no companion, and
         # loading the same 2-million-set pickle twice cost 1.2 GB on 14 Sept.
         companions = [p for p in companions if p not in deep.values()]
-        logging.info("deep-primary: %s", ", ".join(os.path.basename(p) for p in deep.values()) or "no cap2 solvers found")
-    player = ArenaPlayer(ladder, rng, companions=companions)
-    player.profiles = Profiles(os.path.join(ROOT, "results", "chipzen", "opponents.json")) \
+    return ladder_dir, ladder, companions
+
+
+async def _main(args, config):
+    rng = np.random.default_rng(args.seed) if args.seed is not None else np.random.default_rng()
+    ladder_dir, ladder, companions = ladder_paths(args.ladder_dir, args.deep_primary,
+                                                  args.ladder, args.companions)
+    player = ArenaPlayer(ladder, rng, companions=companions, purify=args.purify,
+                         river=args.river_solve, river_budget_s=args.river_budget)
+    player.profiles = Profiles(os.path.join(ROOT, "results", "chipzen", "opponents.json"),
+                               sequential=args.sequential_triggers, bankroll=args.exploit_bankroll,
+                               scout_reads=args.scout_reads) \
         .rebuild(args.matches_dir, os.path.join(args.log_dir, "matches"))
     player.profiles.save()
     for name, row in sorted(player.profiles.rows.items(), key=lambda kv: -kv[1]["bets_faced"])[:6]:
@@ -116,6 +131,9 @@ async def _main(args, config):
     version = {
         "commit": _commit(), "label": args.label,
         "ladder_dir": os.path.relpath(ladder_dir, ROOT), "deep_primary": bool(args.deep_primary),
+        "purify": args.purify, "river_solve": bool(args.river_solve),
+        "sequential_triggers": bool(args.sequential_triggers), "scout_reads": bool(args.scout_reads),
+        "exploit_bankroll": bool(args.exploit_bankroll),
         "ladder": [os.path.basename(p) for p in ladder],
         "companions": [os.path.basename(p) for p in companions],
     }
@@ -266,6 +284,23 @@ def main():
     parser.add_argument("--bot-id")
     parser.add_argument("--ladder", nargs="*", help="solver pickles; default is the shipped "
                         "100bb and 200bb solvers plus results/cfr/ladder/*.pkl")
+    parser.add_argument("--purify", default="none", choices=["none", "postflop", "all"],
+                        help="play the most probable action instead of sampling (postflop: "
+                             "preflop stays mixed). Off by default; see evaluation.benchmark.cfr_agent")
+    parser.add_argument("--river-solve", action="store_true",
+                        help="re-solve every river on the exact hand from the blueprint's ranges "
+                             "(cfr/river.py); off by default, unmeasured")
+    parser.add_argument("--river-budget", type=float, default=8.0,
+                        help="seconds a river solve may take before the blueprint's answer stands")
+    parser.add_argument("--sequential-triggers", action="store_true",
+                        help="fire the opponent rules as soon as the 95%% interval excludes the "
+                             "equilibrium baseline (from 40 bets) rather than at a fixed 100; off by default")
+    parser.add_argument("--scout-reads", action="store_true",
+                        help="use the two reads that need scouted counts: open into a blind that folds "
+                             "to 70%% of opens, and believe the river bets of a bot that never bluffs")
+    parser.add_argument("--exploit-bankroll", action="store_true",
+                        help="fire the opponent rules only while our net against that opponent is "
+                             "not negative (risk what you have won); off by default")
     parser.add_argument("--deep-primary", action="store_true",
                         help="play the cap2_*bb.pkl solvers as the main solver at their depths")
     parser.add_argument("--ladder-dir", help="use this directory's nolimit_*bb.pkl, cap2_*bb.pkl "
@@ -320,7 +355,7 @@ def main():
                 when = f"{t.astimezone(ist):%a %d %b %H:%M IST} [{t.astimezone(datetime.timezone.utc):%H:%M} UTC]"
             except ValueError:
                 pass
-            print(f"{when}  vs {row.get('opponent') or row.get('opponent_name') or '?'}  "
+            print(f"{when}  vs {row.get('opponent_bot_name') or row.get('opponent') or row.get('opponent_name') or '?'}  "
                   f"clock {row.get('decision_clock_seconds', '?')}s  "
                   f"{row.get('stage') or row.get('round') or ''}  {row.get('status') or ''}")
         return

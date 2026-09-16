@@ -522,3 +522,63 @@ def test_a_texture_aware_abstraction_keeps_the_strength_part_recoverable():
     assert composite == strength + 6 * 4
     assert aware.strength_of(composite, "river") == strength
     assert aware.num_buckets("river") == 36 and plain.num_buckets("river") == 6
+
+
+# ----------------------------------------------------------------------
+# Lossless preflop
+#
+# Six Chen classes put KQo, T9s and 77 in one bucket, and on the arena that
+# bucket called a three-bet shove 97 percent of the time because it also holds
+# TT and AQ. 169 classes cost the tree almost nothing, because the postflop
+# key carries only the postflop bucket.
+
+
+@pytest.fixture(scope="module")
+def lossless():
+    return CardAbstraction(preflop_buckets=169, postflop_buckets=6,
+                           samples=60, equity_samples=8).fit(np.random.default_rng(0))
+
+
+def test_a_lossless_preflop_keeps_every_starting_hand_apart(lossless):
+    classes = {lossless.bucket([Card(h, "h"), Card(l, "h" if s else "d")], [])
+               for h, l, s in canonical_preflop_hands()}
+    assert len(classes) == 169 and classes == set(range(169))
+    assert lossless.num_buckets("preflop") == 169
+
+
+def test_a_lossless_preflop_still_numbers_weakest_first(lossless):
+    aces = lossless.bucket([C("Ah"), C("Ad")], [])
+    kings = lossless.bucket([C("Kh"), C("Kd")], [])
+    kq = lossless.bucket([C("Kh"), C("Qd")], [])
+    junk = lossless.bucket([C("7h"), C("2d")], [])
+    assert aces == 168 and aces > kings > kq > junk == 0
+
+
+def test_a_lossless_preflop_reports_a_coarse_strength_class(lossless):
+    """
+    The arena player's thresholds are written for six classes, so the hand's
+    own index must not leak through `strength_of`: with 169 preflop classes
+    every hand would read as the top class and the rules would shove with it.
+    """
+    for h, l, s in canonical_preflop_hands():
+        bucket = lossless.bucket([Card(h, "h"), Card(l, "h" if s else "d")], [])
+        assert 0 <= lossless.strength_of(bucket, "preflop") < 6
+    top = lossless.strength_of(lossless.bucket([C("Ah"), C("Ad")], []), "preflop")
+    bottom = lossless.strength_of(lossless.bucket([C("7h"), C("2d")], []), "preflop")
+    assert top == 5 and bottom == 0
+
+
+def test_a_clustered_preflop_is_its_own_strength_class(fitted):
+    bucket = fitted.bucket([C("Kh"), C("Qd")], [])
+    assert fitted.strength_of(bucket, "preflop") == bucket
+
+
+def test_a_lossless_abstraction_survives_pickling_and_an_older_pickle_does_not_break(lossless, fitted):
+    import pickle
+    revived = pickle.loads(pickle.dumps(lossless))
+    assert revived.strength_of(168, "preflop") == 5
+    aged = fitted.__dict__.copy()
+    aged.pop("_preflop_strength", None)
+    old = CardAbstraction.__new__(CardAbstraction)
+    old.__setstate__(aged)
+    assert old.strength_of(3, "preflop") == 3

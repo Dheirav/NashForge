@@ -1,0 +1,156 @@
+{
+ "summary": {
+  "name": "v003",
+  "matches": 2,
+  "hands": 44,
+  "platform": {
+   "rating": 1890.099642544185,
+   "matches_played": 2,
+   "wins": 2,
+   "losses": 0,
+   "bb_per_100": null,
+   "bb_hands_counted": 44,
+   "llm_author_model": null,
+   "bot_kind": "sandboxed"
+  },
+  "vpip": 0.5454545454545454,
+  "pfr": 0.4318181818181818,
+  "three_bet": 0.18181818181818182,
+  "fold_to_three_bet": 0.75,
+  "fold_to_bet": 0.5,
+  "call_share_of_answers": 0.5333333333333333,
+  "bets_faced": 30,
+  "raise_sizes": {
+   "1-2": 0.61,
+   "4+": 0.14,
+   "<\u00bd": 0.11,
+   "\u00bd-1": 0.14
+  },
+  "showdown_rate": 0.22727272727272727,
+  "showdown_win": 0.9,
+  "river_bets": 3,
+  "river_bluff_rate": 0.0,
+  "big_bets": 4,
+  "big_bet_air_rate": 0.0,
+  "small_bets": 6,
+  "small_bet_air_rate": 0.0,
+  "bb_fold_to_open": 0.625,
+  "bb_opens_faced": 8,
+  "shown_chen_mean": 6.6,
+  "station": false,
+  "fold_or_raise": false,
+  "top_opponents": [
+   [
+    "PoetAndCoder",
+    1
+   ],
+   [
+    "Shadow",
+    1
+   ]
+  ]
+ },
+ "counts": {
+  "name": "v003",
+  "matches": 2,
+  "hands": 44,
+  "bets_faced": 30,
+  "folds": 15,
+  "calls": 8,
+  "raises": 7,
+  "by_history": {
+   "preflop:": {
+    "raise": 16,
+    "fold": 2,
+    "call": 4
+   },
+   "preflop:TrUr": {
+    "fold": 3,
+    "call": 1
+   },
+   "preflop:Uc": {
+    "check": 6,
+    "raise": 1
+   },
+   "flop:": {
+    "raise": 5,
+    "check": 4
+   },
+   "turn:": {
+    "check": 3,
+    "raise": 3
+   },
+   "turn:TcUr": {
+    "call": 1
+   },
+   "river:": {
+    "raise": 2,
+    "check": 2
+   },
+   "flop:Ur": {
+    "fold": 3,
+    "raise": 1
+   },
+   "flop:TcUr": {
+    "fold": 2,
+    "call": 1
+   },
+   "flop:Uc": {
+    "raise": 1
+   },
+   "river:TcUr": {
+    "fold": 1
+   },
+   "flop:TrUr": {
+    "raise": 1,
+    "call": 1
+   },
+   "flop:TrUrTrUr": {
+    "raise": 1
+   },
+   "preflop:TcUr": {
+    "raise": 2,
+    "fold": 1
+   },
+   "preflop:Ur": {
+    "call": 3,
+    "fold": 5
+   },
+   "turn:Ur": {
+    "raise": 1
+   },
+   "river:Uc": {
+    "raise": 1
+   },
+   "turn:TrUr": {
+    "raise": 1,
+    "call": 1
+   }
+  },
+  "vpip": 24,
+  "pfr": 19,
+  "three_bet": 2,
+  "three_bet_chances": 11,
+  "fold_to_three_bet": 3,
+  "three_bets_faced": 4,
+  "showdowns": 10,
+  "showdowns_won": 9,
+  "raise_sizes": {
+   "1-2": 22,
+   "\u00bd-1": 5,
+   "<\u00bd": 4,
+   "4+": 5
+  },
+  "opponents": {
+   "PoetAndCoder": 1,
+   "Shadow": 1
+  },
+  "net_chips": 0,
+  "river_bets": 3,
+  "river_bluffs": 0,
+  "big_bets": 4,
+  "big_bets_air": 0,
+  "small_bets": 6,
+  "small_bets_air": 0
+ }
+}

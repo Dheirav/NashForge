@@ -59,6 +59,7 @@ def test_discounted_decays_positive_and_negative_differently():
     """
     node = InfoSetNode(2)
     node.regret_sum[:] = [100.0, -100.0]
+    node.last_discounted = 9                  # touched last iteration: one step
     DISCOUNTED.discount(node, iteration=10)
 
     positive_scale = 10 ** 1.5 / (10 ** 1.5 + 1)
@@ -69,9 +70,36 @@ def test_discounted_decays_positive_and_negative_differently():
 def test_discounted_decays_the_strategy_sum():
     node = InfoSetNode(2)
     node.strategy_sum[:] = [8.0, 4.0]
+    node.last_discounted = 2
     DISCOUNTED.discount(node, iteration=3)
     expected = (3 / 4) ** 2
     assert node.strategy_sum.tolist() == pytest.approx([8.0 * expected, 4.0 * expected])
+
+
+def test_a_discount_covers_every_iteration_since_the_node_was_last_touched():
+    """
+    Schedules are per iteration of the algorithm, but a sampled node is only
+    touched when the sampler reaches it. One factor per visit left a node
+    visited at 1 and at 1,000 with a factor of 1000/1001 instead of 2/1001, so
+    at rarely reached nodes every rule collapsed to vanilla: the 169-class
+    preflop's shove nodes stayed at their early 50/50 for three million
+    iterations. The product must cover the gap.
+    """
+    node = InfoSetNode(2)
+    node.strategy_sum[:] = [1.0, 1.0]
+    node.regret_sum[:] = [1.0, -1.0]
+    node.last_discounted = 1
+    LINEAR.discount(node, iteration=1000)
+    assert node.strategy_sum.tolist() == pytest.approx([2 / 1001, 2 / 1001])
+    assert node.regret_sum.tolist() == pytest.approx([2 / 1001, -2 / 1001])
+    # The long-gap approximation for a non-unit exponent stays close to the
+    # exact product, and a short gap is exact.
+    exact = 1.0
+    for u in range(2, 1001):
+        exact *= u ** 1.5 / (u ** 1.5 + 1)
+    assert DISCOUNTED.cumulative(1.5, 1, 1000) == pytest.approx(exact, rel=2e-3)
+    assert DISCOUNTED.cumulative(1.5, 9, 10) == pytest.approx(10 ** 1.5 / (10 ** 1.5 + 1))
+    assert DISCOUNTED.cumulative(0.0, 1, 11) == pytest.approx(0.5 ** 10)
 
 
 def test_vanilla_discount_is_a_no_op():

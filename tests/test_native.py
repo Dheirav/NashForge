@@ -234,3 +234,50 @@ def test_board_texture_agrees_between_python_and_the_native_core():
         picked = [int(i) for i in rng.choice(52, size=n, replace=False)]
         cards = [FULL_DECK[i] for i in picked]
         assert board_texture(cards) == pokerbot_native.board_texture([c.index for c in cards])
+
+
+def test_the_native_preflop_table_holds_a_lossless_class_index():
+    """
+    The preflop table was int8_t and the lossless preflop numbers hands to
+    168, so aces would have wrapped to a negative bucket and keyed as one.
+    """
+    solver = native.NoLimitSolver([168] * (52 * 52), [0.3, 0.6], [0.3, 0.6], [0.3, 0.6],
+                                  8, 200, 1, 2, [4], 0)
+    solver.train(50)
+    preflop_keys = [k for k in solver.average_strategy() if "/" not in k]
+    assert preflop_keys and all(k.startswith("168|") for k in preflop_keys)
+
+
+def test_the_native_solver_takes_an_update_rule_by_name():
+    """
+    The rule was hardcoded to vanilla, whose unweighted average left a rarely
+    reached node at its early near-uniform visits. The four names are the ones
+    `cfr/updates.py` defines, so a rule means the same thing on both paths.
+    """
+    table = [0] * (52 * 52)
+    for rule in ("vanilla", "linear", "cfr+", "dcfr"):
+        solver = native.NoLimitSolver(table, [0.3, 0.6], [0.3, 0.6], [0.3, 0.6],
+                                      8, 200, 1, 2, [4], 0, rule=rule)
+        solver.train(20)
+        assert solver.iterations() == 20
+    with pytest.raises(Exception):
+        native.NoLimitSolver(table, [0.3, 0.6], [0.3, 0.6], [0.3, 0.6], 8, 200, 1, 2, [4], 0, rule="nope")
+
+
+def test_the_native_solver_reproduces_its_golden_output():
+    """
+    The reference every engineering change is measured against: the same
+    small solve, the same seed, every average-strategy entry identical to the
+    last bit. A change that alters this file either has a bug or changes the
+    path, and a path change is re-baselined only with `make_golden.py --force`
+    after its own convergence tests. See `scripts/cfr/make_golden.py`.
+    """
+    import json
+    from scripts.cfr.make_golden import GOLDEN, solve
+    with open(GOLDEN) as handle:
+        golden = json.load(handle)
+    strategy = solve(golden["spec"])
+    assert len(strategy) == golden["entries"]
+    assert set(strategy) == set(golden["strategy"])
+    mismatched = [k for k, v in golden["strategy"].items() if strategy[k] != v]
+    assert not mismatched, f"{len(mismatched)} entries differ, e.g. {mismatched[:3]}"

@@ -36,7 +36,7 @@ import numpy as np  # noqa: E402
 from abstraction.betting import STREETS, measure  # noqa: E402
 from abstraction.buckets import CardAbstraction, preflop_key
 from abstraction.equity import FULL_DECK  # noqa: E402
-from cfr import MCCFRSolver, VANILLA  # noqa: E402
+from cfr import ALL_RULES, MCCFRSolver  # noqa: E402
 from cfr.play import (always_call_policy, play_hands, strategy_policy,
                       uniform_policy)  # noqa: E402
 from games.nolimit import NoLimitHoldem  # noqa: E402
@@ -47,6 +47,9 @@ def parse_args():
                                      formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--iterations", type=int, default=3000)
     parser.add_argument("--buckets", type=int, default=6)
+    parser.add_argument("--preflop-buckets", type=int, default=None,
+                        help="preflop classes; defaults to --buckets. 169 keeps every "
+                             "starting hand apart (abstraction.buckets.PREFLOP_HANDS)")
     #: An int is the uniform schedule (N raises, all four sizes). Two or more
     #: values taper: `--raise-cap 4 1` allows four sizes for the opening bet and
     #: only all-in for the raise, which buys a re-raise for 347,136 information
@@ -58,6 +61,11 @@ def parse_args():
     parser.add_argument("--big-blind", type=int, default=2)
     parser.add_argument("--abstraction-samples", type=int, default=800)
     parser.add_argument("--equity-samples", type=int, default=40)
+    parser.add_argument("--update-rule", default="vanilla",
+                        choices=["vanilla", "linear", "cfr+", "dcfr"],
+                        help="regret and averaging schedule (cfr/updates.py). vanilla weighs "
+                             "every iteration's strategy equally, which leaves a rarely "
+                             "reached node's average at its early near-uniform visits")
     parser.add_argument("--texture", action="store_true",
                         help="fold the board's flush and straight texture into the "
                              "postflop bucket (abstraction.buckets.board_texture)")
@@ -140,7 +148,8 @@ def _train_native(args, abstraction, projected):
     solver = pokerbot_native.NoLimitSolver(
         preflop, flop, turn, river, args.equity_samples, args.stack,
         args.big_blind // 2, args.big_blind, schedule, args.seed,
-        texture=bool(getattr(abstraction, "texture", False)))
+        texture=bool(getattr(abstraction, "texture", False)),
+        rule=args.update_rule)
     start = time.perf_counter()
 
     # Trained in chunks so the run reports progress.
@@ -189,8 +198,11 @@ def main():
     args.raise_cap = (args.raise_cap[0] if len(args.raise_cap) == 1
                       else tuple(args.raise_cap))
     rng = np.random.default_rng(args.seed)
+    if args.preflop_buckets is None:
+        args.preflop_buckets = args.buckets
 
-    projected = measure({street: args.buckets for street in STREETS},
+    projected = measure({street: (args.preflop_buckets if street == "preflop" else args.buckets)
+                         for street in STREETS},
                         raise_cap=args.raise_cap)
     print(f"Abstract game: {projected.summary()}")
     print(f"  (raise cap is the parameter that decides feasibility — see "
@@ -199,7 +211,7 @@ def main():
     print(f"Fitting card abstraction ({args.abstraction_samples} situations/street)...")
     start = time.perf_counter()
     abstraction = CardAbstraction(
-        preflop_buckets=args.buckets, postflop_buckets=args.buckets,
+        preflop_buckets=args.preflop_buckets, postflop_buckets=args.buckets,
         samples=args.abstraction_samples, equity_samples=args.equity_samples,
         texture=args.texture,
     ).fit(rng)
@@ -214,7 +226,8 @@ def main():
         return _train_native(args, abstraction, projected)
 
     print(f"\nTraining MCCFR for {args.iterations:,} iterations...")
-    solver = MCCFRSolver(game, rule=VANILLA, seed=args.seed)
+    rule = next(r for r in ALL_RULES if r.name == args.update_rule)
+    solver = MCCFRSolver(game, rule=rule, seed=args.seed)
     start = time.perf_counter()
 
     def checkpoint(done, total, live):

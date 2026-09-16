@@ -1,0 +1,40 @@
+{
+  "args": {
+    "iterations": 250000,
+    "buckets": 6,
+    "raise_cap": 1,
+    "stack": 36,
+    "big_blind": 2,
+    "abstraction_samples": 800,
+    "equity_samples": 200,
+    "texture": true,
+    "eval_hands": 2000,
+    "seed": 0,
+    "output": "results/cfr/ladder200t/nolimit_18bb.pkl",
+    "native": true
+  },
+  "results": {
+    "uniform random": {
+      "chips_per_hand": 1.9105,
+      "stderr": 0.20960250828828447,
+      "ci95": [
+        1.4996790837549625,
+        2.3213209162450377
+      ],
+      "bb_per_100": 95.525,
+      "separated_from_zero": true
+    },
+    "always call": {
+      "chips_per_hand": 3.0295,
+      "stderr": 0.19371584289596566,
+      "ci95": [
+        2.6498169479239073,
+        3.409183052076093
+      ],
+      "bb_per_100": 151.475,
+      "separated_from_zero": true
+    }
+  },
+  "information_sets_reached": 64637,
+  "seconds": 254.4656138860155
+}

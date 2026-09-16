@@ -95,6 +95,11 @@ class HandState:
         it wrong is rejected by the server rather than silently reinterpreted --
         which is the one mercy in this protocol.
         """
+        if not self.action and self.client_pos == 1:
+            # The blinds are not in the string: the small blind opens the hand
+            # owing half a blind, so "k" there is an illegal check. The 16
+            # September calibration lost all 500 of its button hands to that.
+            return True
         current = self.action.split("/")[-1]
         return bool(current) and current[-1].isdigit()
 
@@ -186,6 +191,18 @@ def play_hand(policy: Policy, token: Optional[str] = None,
             return state
         state = act(state, policy(state))
     raise SlumbotError(f"hand did not terminate: {state.action!r}")
+
+
+def always_fold(state: HandState) -> str:
+    """
+    Folds every decision. Heads-up that loses 750 mbb/hand against an opponent
+    who never folds a blind, and about 700 against Slumbot, which folds its
+    small blind roughly a fifth of the time: measured 16 September 2026 over
+    1,000 hands at −699 ± 21, button hands −500 exactly and big-blind hands
+    −900 on average. So the raw column is trustworthy to its interval, and the
+    baseline-differenced column, −646 ± 1,193 on the same hands, is not.
+    """
+    return "f" if state.facing_bet else "k"
 
 
 def call_station(state: HandState) -> str:

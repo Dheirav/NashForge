@@ -42,6 +42,8 @@ CLIENT_VERSION = "0.1.0"
 BOT_TOKEN_SUBPROTOCOL = "chipzen-bot-token"
 #: The executor's mid-match reconnect budget, per the transport spec.
 MATCH_RECONNECTS = 3
+#: Wall-clock budget for re-dialling a dropped match, inside the platform's grace window.
+MATCH_REDIAL_BUDGET_S = 25.0
 #: The server pings the lobby every 15 s. A socket that has gone this long
 #: without any frame is dead whatever the OS says: on 14 September the machine
 #: slept, the server closed us, and the client sat "connected" on a socket
@@ -195,18 +197,29 @@ class Arena:
         self._event("match starting")
         result = None
         attempts = 0
+        # Re-dial until the match has an end or the platform's grace window
+        # (about 30 s before a walkover) is spent, whichever first. A clean
+        # server-side close before match_end used to end the loop without an
+        # exception and abandon the match; three attempts a second apart used
+        # up the budget in four seconds.
+        deadline = time.monotonic() + MATCH_REDIAL_BUDGET_S
         with open(log_path, "a") as log:
-            while attempts <= MATCH_RECONNECTS:
+            while True:
                 try:
                     result = await self._match_session(gateway, match_id, log)
-                    break
+                    if result is not None:
+                        break
+                    reason = "closed before match_end"
                 except (OSError, websockets.exceptions.WebSocketException,
                         asyncio.TimeoutError) as error:
-                    attempts += 1
-                    logger.warning("match %s: %s; re-dialling (%d/%d)",
-                                   match_id, error, attempts, MATCH_RECONNECTS)
-                    self._event(f"match dropped: {error}")
-                    await asyncio.sleep(1.0)
+                    reason = str(error)
+                attempts += 1
+                if time.monotonic() > deadline or attempts > MATCH_RECONNECTS * 4:
+                    logger.warning("match %s: giving up after %d re-dials (%s)", match_id, attempts, reason)
+                    break
+                logger.warning("match %s: %s; re-dialling (%d)", match_id, reason, attempts)
+                self._event(f"match dropped: {reason}")
+                await asyncio.sleep(1.0)
         self.status.matches_active -= 1
         self.status.matches_finished += 1
         summary = {"match_id": match_id, "rated": matched.get("rated"),
@@ -242,6 +255,8 @@ class Arena:
             self._event("match handshake done")
 
             seat: Optional[int] = None
+            stacks_before = None
+            rejections_this_turn = 0
             while True:
                 try:
                     raw = await asyncio.wait_for(ws.recv(), timeout=MATCH_SILENCE)
@@ -273,9 +288,11 @@ class Arena:
                                           "turn_timeout_ms": msg.get("turn_timeout_ms")}) + "\n")
                     self._event("match started")
                 elif kind == "round_start":
+                    stacks_before = (msg.get("state") or {}).get("stacks")
                     self.status.current["hands"] = (msg.get("state") or {}).get("hand_number")
                     log.write(json.dumps({"frame": "round_start", "state": msg.get("state")}) + "\n")
                 elif kind == "turn_request":
+                    rejections_this_turn = 0
                     acting = int(msg.get("seat", seat if seat is not None else 0))
                     if seat is None:
                         # A resumed match re-sends no match_start; the turn
@@ -305,8 +322,8 @@ class Arena:
                                 f"{decision['action']} {decision['params'] or ''}")
                 elif kind == "action_rejected":
                     self.status.rejected += 1
-                    valid = msg.get("valid_actions") or ["check", "fold"]
-                    fallback = "check" if "check" in valid else ("call" if "call" in valid else "fold")
+                    rejections_this_turn += 1
+                    fallback = _rejection_fallback(msg.get("valid_actions"), rejections_this_turn)
                     logger.warning("match %s: action rejected (%s); sending %s",
                                    match_id, msg.get("reason"), fallback)
                     log.write(json.dumps({"frame": "rejected", "reason": msg.get("reason"),
@@ -321,7 +338,9 @@ class Arena:
                     self.status.hands += 1
                     profiles = getattr(self.player, "profiles", None)
                     if profiles is not None and seat is not None and self.player.opponent:
-                        profiles.observe(result, seat, self.player.opponent)
+                        after = result.get("stacks")
+                        net = after[seat] - stacks_before[seat] if stacks_before and after else 0
+                        profiles.observe(result, seat, self.player.opponent, net)
                         profiles.save()
                     log.write(json.dumps({"frame": "round_result", "result": result}) + "\n")
                     log.flush()
@@ -329,6 +348,7 @@ class Arena:
                     log.write(json.dumps({"frame": "match_end", "reason": msg.get("reason"),
                                           "results": msg.get("results")}) + "\n")
                     log.flush()
+                    self._record_rating(match_id)
                     return msg
                 elif kind == "error":
                     logger.warning("match %s: error [%s] %s", match_id,
@@ -343,6 +363,46 @@ class Arena:
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
+
+    def _record_rating(self, match_id: str) -> None:
+        """
+        Our platform rating after a match, appended beside the match logs.
+
+        The platform keeps no rating history the API will show, so the trace
+        of what each version did to the rating is built here, one line per
+        match, stamped with the version label. Best effort: a failed request
+        must not touch the match.
+        """
+        try:
+            stats = _http(self.base, self.token, "GET", f"/api/bots/{self.bot_id}")
+            row = {"at": time.time(), "match_id": match_id, "label": self.version.get("label"),
+                   "rating": stats.get("rating"), "rating_deviation": stats.get("rating_deviation"),
+                   "matches_played": stats.get("matches_played"), "wins": stats.get("wins"),
+                   "losses": stats.get("losses"), "bb_per_100": stats.get("bb_per_100")}
+            with open(os.path.join(self.matches_dir, "..", "rating_history.jsonl"), "a") as handle:
+                handle.write(json.dumps(row) + "\n")
+        except Exception as error:               # noqa: BLE001
+            logger.debug("rating record skipped: %s", error)
+
+
+def _rejection_fallback(valid, rejections: int) -> str:
+    """
+    What to send when the platform rejects an action.
+
+    Check if it is free; otherwise fold before call, because a rejected raise
+    at three big blinds turning into a call of the whole outstanding bet is the
+    stack, and a fold is at most the blind. A second rejection on the same
+    turn goes straight to the cheapest legal action rather than looping until
+    the clock folds us anyway.
+    """
+    valid = list(valid or ["check", "fold"])
+    if "check" in valid:
+        return "check"
+    if rejections >= 2:
+        return "fold" if "fold" in valid else (valid[0] if valid else "fold")
+    if "fold" in valid:
+        return "fold"
+    return "call" if "call" in valid else (valid[0] if valid else "fold")
 
 
 def _normalise_base(base_url: str) -> str:

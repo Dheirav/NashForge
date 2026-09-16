@@ -1,0 +1,18 @@
+{
+ "first": "results/cfr/experiments/nolimit_100bb_169_1m_linear.pkl",
+ "second": "results/cfr/experiments/nolimit_100bb_6_1m_linear.pkl",
+ "hands": 40000,
+ "seeds": [
+  0,
+  1,
+  2
+ ],
+ "bb_per_100": [
+  -3.9843749999999996,
+  -5.2425,
+  -0.06
+ ],
+ "mean": -3.095625,
+ "stderr": 1.5606605422464552,
+ "measured": "2026-09-15 02:50"
+}

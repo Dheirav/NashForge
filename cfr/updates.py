@@ -52,23 +52,62 @@ class UpdateRule:
 
     # ------------------------------------------------------------------
 
+    @staticmethod
+    def cumulative(exponent: float, last: int, now: int) -> float:
+        """
+        The product of u^e / (u^e + 1) over the iterations (last, now].
+
+        The schedules are defined per iteration of the algorithm, but a sampled
+        node is only touched when the sampler reaches it. Applying one
+        iteration's factor per visit left a node visited at 1 and at 1,000,000
+        with a factor of 0.999999 instead of 0.000002, so at rarely reached
+        nodes every rule collapsed to vanilla. That is exactly where the
+        169-class preflop stayed at 50/50 facing a shove. Exact for e = 1, where
+        the product telescopes; for other exponents the log of the product is
+        the integral of -u^-e, within 1e-3 for e >= 1. Mirrored bit for bit in
+        `native/src/mccfr.hpp`.
+        """
+        if now <= last:
+            return 1.0
+        if exponent == 1.0:
+            return (last + 1) / (now + 1)
+        if exponent == 0.0:
+            return 0.5 ** (now - last)
+        # Exact over the first 64 iterations of the gap, which is the whole gap
+        # for every node a dense traversal touches; the tail, where only the
+        # sampled rare nodes go, uses the integral of log(u^e / (u^e + 1)) to
+        # second order, within 1e-3 of the product for e >= 1.
+        product = 1.0
+        head = min(now, last + 64)
+        for u in range(last + 1, head + 1):
+            scale = u ** exponent
+            product *= scale / (scale + 1.0)
+        if head < now:
+            a, b = head + 0.5, now + 0.5
+            first = (a ** (1.0 - exponent) - b ** (1.0 - exponent)) / (exponent - 1.0)
+            second = (a ** (1.0 - 2 * exponent) - b ** (1.0 - 2 * exponent)) / (2 * exponent - 1.0)
+            product *= float(np.exp(-first + second / 2.0))
+        return product
+
     def discount(self, node, iteration: int) -> None:
         """
-        Decay the accumulators in place, before this iteration's contribution.
+        Decay the accumulators in place, before this iteration's contribution,
+        by every iteration since the node was last touched.
 
-        ``iteration`` is 1-indexed, matching the t in the published schedules.
+        ``iteration`` is 1-indexed, matching the t in the published schedules;
+        ``node.last_discounted`` is the iteration of the previous touch, 0 for
+        never.
         """
+        last = getattr(node, "last_discounted", 0)
         if self.alpha is not None or self.beta is not None:
             regret = node.regret_sum
             if self.alpha is not None:
-                scale = iteration ** self.alpha
-                regret[regret > 0] *= scale / (scale + 1.0)
+                regret[regret > 0] *= self.cumulative(self.alpha, last, iteration)
             if self.beta is not None:
-                scale = iteration ** self.beta
-                regret[regret < 0] *= scale / (scale + 1.0)
+                regret[regret < 0] *= self.cumulative(self.beta, last, iteration)
 
         if self.gamma is not None:
-            node.strategy_sum *= (iteration / (iteration + 1.0)) ** self.gamma
+            node.strategy_sum *= self.cumulative(1.0, last, iteration) ** self.gamma
 
     def add_regret(self, node, instantaneous: np.ndarray) -> None:
         """Accumulate this iteration's counterfactual regret."""

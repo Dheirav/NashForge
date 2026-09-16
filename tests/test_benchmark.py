@@ -187,3 +187,47 @@ def test_a_short_run_still_checkpoints():
         assert checkpoint_every(total) >= 1, total
     assert checkpoint_every(0) == 1
     assert checkpoint_every(3) <= 3, "cannot checkpoint less often than never running"
+
+
+# ---------------------------------------------------------------------------
+# Purification
+# ---------------------------------------------------------------------------
+
+def test_purification_plays_the_most_probable_action_postflop_and_samples_preflop():
+    """
+    Purification takes the argmax of the stored average rather than sampling
+    it; the ACPC record credits it with +17 to +25 mbb/h for an unconverged
+    blueprint. Postflop mode leaves preflop mixed, as Baby Tartanian8 did. Off
+    by default, so every panel figure keeps its meaning.
+    """
+    from types import SimpleNamespace
+    from abstraction.buckets import CardAbstraction
+    from engine.cards import Card
+    from evaluation.benchmark import cfr_agent
+
+    abstraction = CardAbstraction(preflop_buckets=2, postflop_buckets=2,
+                                  samples=20, equity_samples=4).fit(np.random.default_rng(0))
+    hole = [Card("A", "h"), Card("K", "h")]
+    board = [Card("Q", "s"), Card("7", "d"), Card("2", "c")]
+    pre = abstraction.bucket(hole, [])
+    post = abstraction.bucket(hole, board, np.random.default_rng(
+        hash((tuple(c.index for c in hole), tuple(c.index for c in board))) % (2 ** 32)))
+    # Nothing to call: the solver's action list is check/call and the raises.
+    mixed = np.array([0.4, 0.3, 0.2, 0.1, 0.0])
+    strategy = {f"{pre}|": mixed, f"{post}|11/": mixed}
+    mask = np.array([0.0, 1.0, 1.0, 1.0, 1.0, 1.0])
+
+    def game(board_cards):
+        actor = SimpleNamespace(hole_cards=hole, bet=0)
+        return SimpleNamespace(players=[actor, SimpleNamespace(hole_cards=[], bet=0)],
+                               state=SimpleNamespace(community_cards=board_cards), current_bet=0)
+
+    sampled = cfr_agent(strategy, abstraction, np.random.default_rng(1), raise_cap=1)
+    assert len({sampled(game(board), 0, mask, "11/") for _ in range(60)}) > 1
+    postflop = cfr_agent(strategy, abstraction, np.random.default_rng(1), raise_cap=1, purify="postflop")
+    assert {postflop(game(board), 0, mask, "11/") for _ in range(30)} == {1}
+    assert len({postflop(game([]), 0, mask, "") for _ in range(60)}) > 1
+    everywhere = cfr_agent(strategy, abstraction, np.random.default_rng(1), raise_cap=1, purify="all")
+    assert {everywhere(game([]), 0, mask, "") for _ in range(30)} == {1}
+    with pytest.raises(ValueError):
+        cfr_agent(strategy, abstraction, np.random.default_rng(1), purify="sometimes")

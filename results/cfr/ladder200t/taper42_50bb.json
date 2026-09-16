@@ -1,0 +1,43 @@
+{
+  "args": {
+    "iterations": 1000000,
+    "buckets": 6,
+    "raise_cap": [
+      4,
+      2
+    ],
+    "stack": 100,
+    "big_blind": 2,
+    "abstraction_samples": 800,
+    "equity_samples": 200,
+    "texture": true,
+    "eval_hands": 2000,
+    "seed": 0,
+    "output": "results/cfr/ladder200t/taper42_50bb.pkl",
+    "native": true
+  },
+  "results": {
+    "uniform random": {
+      "chips_per_hand": 3.196,
+      "stderr": 0.5153135608860071,
+      "ci95": [
+        2.1859854206634264,
+        4.206014579336574
+      ],
+      "bb_per_100": 159.8,
+      "separated_from_zero": true
+    },
+    "always call": {
+      "chips_per_hand": 5.60175,
+      "stderr": 0.4562722357818002,
+      "ci95": [
+        4.707456417867672,
+        6.496043582132328
+      ],
+      "bb_per_100": 280.0875,
+      "separated_from_zero": true
+    }
+  },
+  "information_sets_reached": 266364,
+  "seconds": 1312.8315016899724
+}

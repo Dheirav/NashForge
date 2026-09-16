@@ -1,0 +1,229 @@
+{
+ "summary": {
+  "name": "Shadow",
+  "matches": 49,
+  "hands": 1469,
+  "platform": {
+   "rating": 1661.7634341038197,
+   "matches_played": 54,
+   "wins": 21,
+   "losses": 33,
+   "bb_per_100": -85.0671619805777,
+   "bb_hands_counted": 1355,
+   "llm_author_model": null,
+   "bot_kind": "sandboxed"
+  },
+  "vpip": 0.4996596324029952,
+  "pfr": 0.4091218515997277,
+  "three_bet": 0.1529051987767584,
+  "fold_to_three_bet": 0.6166666666666667,
+  "fold_to_bet": 0.5122349102773246,
+  "call_share_of_answers": 0.46488294314381273,
+  "bets_faced": 613,
+  "raise_sizes": {
+   "1-2": 0.61,
+   "2-4": 0.16,
+   "4+": 0.0,
+   "<\u00bd": 0.01,
+   "\u00bd-1": 0.21
+  },
+  "showdown_rate": 0.27297481279782165,
+  "showdown_win": 0.5261845386533666,
+  "river_bets": 48,
+  "river_bluff_rate": 0.4791666666666667,
+  "big_bets": 260,
+  "big_bet_air_rate": 0.3038461538461538,
+  "small_bets": 142,
+  "small_bet_air_rate": 0.352112676056338,
+  "bb_fold_to_open": 0.628482972136223,
+  "bb_opens_faced": 323,
+  "shown_chen_mean": 5.046134663341646,
+  "station": false,
+  "fold_or_raise": true,
+  "top_opponents": [
+   [
+    "wsp",
+    9
+   ],
+   [
+    "max1mum_eff0rt",
+    9
+   ],
+   [
+    "LazerTank",
+    7
+   ],
+   [
+    "PoetAndCoder",
+    4
+   ],
+   [
+    "TrUfFlLe",
+    2
+   ]
+  ]
+ },
+ "counts": {
+  "name": "Shadow",
+  "matches": 49,
+  "hands": 1469,
+  "bets_faced": 613,
+  "folds": 314,
+  "calls": 139,
+  "raises": 160,
+  "by_history": {
+   "preflop:": {
+    "fold": 230,
+    "raise": 421,
+    "call": 63
+   },
+   "preflop:Ur": {
+    "fold": 203,
+    "call": 70,
+    "raise": 50
+   },
+   "preflop:Uc": {
+    "raise": 130,
+    "check": 31
+   },
+   "flop:": {
+    "raise": 145,
+    "check": 51
+   },
+   "turn:": {
+    "raise": 81,
+    "check": 15
+   },
+   "flop:Uc": {
+    "raise": 94,
+    "check": 23
+   },
+   "turn:Ur": {
+    "raise": 13,
+    "fold": 10,
+    "call": 5
+   },
+   "turn:Uc": {
+    "raise": 44,
+    "check": 5
+   },
+   "river:": {
+    "raise": 25,
+    "check": 4
+   },
+   "river:Uc": {
+    "raise": 16,
+    "check": 1
+   },
+   "preflop:TrUr": {
+    "call": 20,
+    "fold": 31,
+    "raise": 2
+   },
+   "flop:Ur": {
+    "call": 13,
+    "raise": 52,
+    "fold": 33
+   },
+   "flop:TcUr": {
+    "raise": 10,
+    "call": 9,
+    "fold": 7
+   },
+   "river:Ur": {
+    "raise": 5,
+    "call": 5,
+    "fold": 3
+   },
+   "preflop:UrTrUr": {
+    "fold": 2,
+    "call": 3
+   },
+   "flop:UrTrUr": {
+    "raise": 3,
+    "fold": 2
+   },
+   "flop:TcUrTrUr": {
+    "raise": 1
+   },
+   "turn:TcUr": {
+    "raise": 5,
+    "fold": 1,
+    "call": 1
+   },
+   "preflop:UcTrUr": {
+    "fold": 6,
+    "call": 1
+   },
+   "turn:UrTrUr": {
+    "call": 1,
+    "fold": 1
+   },
+   "preflop:TcUr": {
+    "fold": 4
+   },
+   "river:UrTrUr": {
+    "raise": 1
+   },
+   "flop:TrUr": {
+    "raise": 10,
+    "call": 5,
+    "fold": 8
+   },
+   "turn:TrUr": {
+    "call": 2,
+    "raise": 3,
+    "fold": 2
+   },
+   "flop:UcTrUr": {
+    "call": 4,
+    "raise": 4,
+    "fold": 1
+   },
+   "river:TrUr": {
+    "raise": 1
+   }
+  },
+  "vpip": 734,
+  "pfr": 601,
+  "three_bet": 50,
+  "three_bet_chances": 327,
+  "fold_to_three_bet": 37,
+  "three_bets_faced": 60,
+  "showdowns": 401,
+  "showdowns_won": 211,
+  "raise_sizes": {
+   "1-2": 685,
+   "\u00bd-1": 235,
+   "2-4": 178,
+   "4+": 2,
+   "<\u00bd": 16
+  },
+  "opponents": {
+   "TrUfFlLe": 2,
+   "mr_hide": 2,
+   "bigboy2": 1,
+   "wsp": 9,
+   "max1mum_eff0rt": 9,
+   "PoetAndCoder": 4,
+   "qwentom-leap": 2,
+   "Fabulous": 2,
+   "LazerTank": 7,
+   "Fold-ver-3": 1,
+   "G5-Poker-Bot-v1": 1,
+   "hunk_o_junk": 1,
+   "DeepStack": 2,
+   "MercuryRetrograde": 2,
+   "PluriBot": 2,
+   "PokerGoddess": 1,
+   "Rockford": 1
+  },
+  "net_chips": 0,
+  "river_bets": 48,
+  "river_bluffs": 23,
+  "big_bets": 260,
+  "big_bets_air": 79,
+  "small_bets": 142,
+  "small_bets_air": 50
+ }
+}

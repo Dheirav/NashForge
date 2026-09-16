@@ -25,12 +25,12 @@ sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..",
 
 import numpy as np  # noqa: E402
 
+from cfr.flat import load_strategy  # noqa: E402
 from evaluation.benchmark import benchmark, cfr_agent  # noqa: E402
 
 
 def load(path, seed, raise_cap):
-    with open(path, "rb") as handle:
-        saved = pickle.load(handle)
+    saved = load_strategy(path)
     args = saved.get("args") or {}
     cap = args.get("raise_cap", raise_cap) if isinstance(args, dict) else raise_cap
     cap = tuple(cap) if isinstance(cap, (list, tuple)) else int(cap)

@@ -1,0 +1,225 @@
+{
+ "summary": {
+  "name": "Blueprint",
+  "matches": 75,
+  "hands": 4468,
+  "platform": {
+   "rating": 1462.6716406984965,
+   "matches_played": 1352,
+   "wins": 673,
+   "losses": 679,
+   "bb_per_100": -1.9950518144269045,
+   "bb_hands_counted": 54232,
+   "llm_author_model": null,
+   "bot_kind": "external_api"
+  },
+  "vpip": 0.2365711727842435,
+  "pfr": 0.211727842435094,
+  "three_bet": 0.15203761755485892,
+  "fold_to_three_bet": 0.640625,
+  "fold_to_bet": 0.7053864168618267,
+  "call_share_of_answers": 0.47217806041335453,
+  "bets_faced": 2135,
+  "raise_sizes": {
+   "1-2": 0.35,
+   "2-4": 0.15,
+   "4+": 0.2,
+   "<\u00bd": 0.09,
+   "\u00bd-1": 0.21
+  },
+  "showdown_rate": 0.0837063563115488,
+  "showdown_win": 0.606951871657754,
+  "shown_chen_mean": 5.78475935828877,
+  "station": false,
+  "fold_or_raise": true,
+  "top_opponents": [
+   [
+    "NashForge",
+    35
+   ],
+   [
+    "hoops",
+    17
+   ],
+   [
+    "mr_hide",
+    12
+   ],
+   [
+    "r0ckGarden",
+    10
+   ],
+   [
+    "mellyy",
+    1
+   ]
+  ]
+ },
+ "counts": {
+  "name": "Blueprint",
+  "matches": 75,
+  "hands": 4468,
+  "bets_faced": 2135,
+  "folds": 1506,
+  "calls": 297,
+  "raises": 332,
+  "by_history": {
+   "preflop:": {
+    "raise": 652,
+    "fold": 1559,
+    "call": 25
+   },
+   "preflop:Ur": {
+    "call": 88,
+    "fold": 989,
+    "raise": 192
+   },
+   "flop:": {
+    "check": 571,
+    "raise": 89
+   },
+   "turn:": {
+    "check": 305,
+    "raise": 76
+   },
+   "river:": {
+    "raise": 121,
+    "check": 139
+   },
+   "river:TrUr": {
+    "fold": 12,
+    "call": 5,
+    "raise": 3
+   },
+   "preflop:Uc": {
+    "check": 533,
+    "raise": 100
+   },
+   "flop:TcUr": {
+    "call": 41,
+    "fold": 201,
+    "raise": 34
+   },
+   "turn:TcUr": {
+    "fold": 79,
+    "call": 32,
+    "raise": 10
+   },
+   "preflop:TrUr": {
+    "fold": 39,
+    "call": 16,
+    "raise": 7
+   },
+   "flop:Ur": {
+    "fold": 60,
+    "raise": 38,
+    "call": 24
+   },
+   "flop:Uc": {
+    "check": 102,
+    "raise": 94
+   },
+   "turn:Uc": {
+    "check": 86,
+    "raise": 33
+   },
+   "river:Ur": {
+    "raise": 12,
+    "fold": 22,
+    "call": 17
+   },
+   "flop:TrUr": {
+    "fold": 10,
+    "call": 6,
+    "raise": 4
+   },
+   "preflop:UcTrUr": {
+    "fold": 2
+   },
+   "river:TcUr": {
+    "fold": 34,
+    "call": 19,
+    "raise": 3
+   },
+   "turn:TrUr": {
+    "call": 4,
+    "fold": 5,
+    "raise": 4
+   },
+   "turn:Ur": {
+    "call": 26,
+    "raise": 16,
+    "fold": 39
+   },
+   "river:Uc": {
+    "raise": 37,
+    "check": 37
+   },
+   "preflop:TcUr": {
+    "call": 1,
+    "raise": 2,
+    "fold": 4
+   },
+   "preflop:TrUrTrUr": {
+    "call": 2,
+    "fold": 1
+   },
+   "river:TrUrTrUr": {
+    "fold": 1
+   },
+   "flop:UcTrUr": {
+    "fold": 5,
+    "call": 1,
+    "raise": 1
+   },
+   "preflop:UrTrUr": {
+    "call": 12,
+    "fold": 1,
+    "raise": 3
+   },
+   "turn:UrTrUr": {
+    "call": 1
+   },
+   "river:UcTrUr": {
+    "fold": 1,
+    "call": 1
+   },
+   "turn:TrUrTrUr": {
+    "raise": 1
+   },
+   "flop:TcUrTrUr": {
+    "call": 1,
+    "raise": 1
+   },
+   "flop:UrTrUr": {
+    "raise": 1
+   },
+   "turn:TcUrTrUr": {
+    "fold": 1
+   }
+  },
+  "vpip": 1057,
+  "pfr": 946,
+  "three_bet": 194,
+  "three_bet_chances": 1276,
+  "fold_to_three_bet": 41,
+  "three_bets_faced": 64,
+  "showdowns": 374,
+  "showdowns_won": 227,
+  "raise_sizes": {
+   "2-4": 235,
+   "<\u00bd": 143,
+   "\u00bd-1": 315,
+   "1-2": 533,
+   "4+": 308
+  },
+  "opponents": {
+   "NashForge": 35,
+   "hoops": 17,
+   "mr_hide": 12,
+   "mellyy": 1,
+   "r0ckGarden": 10
+  },
+  "net_chips": 0
+ }
+}

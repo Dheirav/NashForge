@@ -24,8 +24,9 @@ namespace pokerbot {
 /// that could silently disagree with the one every existing strategy was built
 /// against.
 struct Abstraction {
-    /// bucket for each unordered hole pair, indexed [card][card].
-    std::vector<int8_t> preflop;            // 52 * 52
+    /// bucket for each unordered hole pair, indexed [card][card]. 16 bits
+    /// because the lossless preflop numbers hands 0 to 168, past int8_t.
+    std::vector<int16_t> preflop;           // 52 * 52
     /// Sorted centroids for flop, turn, river.
     std::array<std::vector<double>, 3> centroids;
     int equity_samples = 40;
@@ -68,7 +69,10 @@ struct Abstraction {
 
 //: Entries the hole-and-board bucket memo keeps before clearing. Matches
 //: `games.nolimit.BUCKET_CACHE_LIMIT`; see the note at the clear site.
-constexpr size_t BUCKET_CACHE_LIMIT = 500000;
+// Measured 15 September: 267 lookups an iteration collapse to 72 distinct
+// situations, and across iterations the hit rate is zero, so a memo of a few
+// thousand covers every repeat within an iteration and holds no dead weight.
+constexpr size_t BUCKET_CACHE_LIMIT = 4096;
 
 
 class NoLimitGame {

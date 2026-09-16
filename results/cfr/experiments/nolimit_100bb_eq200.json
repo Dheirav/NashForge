@@ -1,0 +1,39 @@
+{
+  "args": {
+    "iterations": 250000,
+    "buckets": 6,
+    "raise_cap": 1,
+    "stack": 200,
+    "big_blind": 2,
+    "abstraction_samples": 800,
+    "equity_samples": 200,
+    "eval_hands": 2000,
+    "seed": 0,
+    "output": "results/cfr/experiments/nolimit_100bb_eq200.pkl",
+    "native": true
+  },
+  "results": {
+    "uniform random": {
+      "chips_per_hand": 4.9185,
+      "stderr": 0.6322344613211471,
+      "ci95": [
+        3.6793204558105517,
+        6.157679544189448
+      ],
+      "bb_per_100": 245.92499999999998,
+      "separated_from_zero": true
+    },
+    "always call": {
+      "chips_per_hand": 12.983,
+      "stderr": 0.7359212053679763,
+      "ci95": [
+        11.540594437478767,
+        14.425405562521235
+      ],
+      "bb_per_100": 649.15,
+      "separated_from_zero": true
+    }
+  },
+  "information_sets_reached": 23438,
+  "seconds": 328.88097343198024
+}

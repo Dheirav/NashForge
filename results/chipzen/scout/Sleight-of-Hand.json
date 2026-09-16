@@ -1,0 +1,185 @@
+{
+ "summary": {
+  "name": "Sleight-of-Hand",
+  "matches": 4,
+  "hands": 89,
+  "platform": {
+   "rating": 1350.9007634159507,
+   "matches_played": 3,
+   "wins": 0,
+   "losses": 3,
+   "bb_per_100": null,
+   "bb_hands_counted": 87,
+   "llm_author_model": null,
+   "bot_kind": "sandboxed"
+  },
+  "vpip": 0.651685393258427,
+  "pfr": 0.30337078651685395,
+  "three_bet": 0.3333333333333333,
+  "fold_to_three_bet": 1.0,
+  "fold_to_bet": 0.24615384615384617,
+  "call_share_of_answers": 0.6530612244897959,
+  "bets_faced": 65,
+  "raise_sizes": {
+   "1-2": 0.53,
+   "2-4": 0.24,
+   "<\u00bd": 0.01,
+   "\u00bd-1": 0.23
+  },
+  "showdown_rate": 0.23595505617977527,
+  "showdown_win": 0.23809523809523808,
+  "river_bets": 14,
+  "river_bluff_rate": 0.42857142857142855,
+  "big_bets": 40,
+  "big_bet_air_rate": 0.25,
+  "small_bets": 1,
+  "small_bet_air_rate": 0.0,
+  "bb_fold_to_open": 0.15384615384615385,
+  "bb_opens_faced": 13,
+  "shown_chen_mean": 4.0,
+  "station": false,
+  "fold_or_raise": false,
+  "top_opponents": [
+   [
+    "runner1",
+    2
+   ],
+   [
+    "wsp",
+    1
+   ],
+   [
+    "mellyy",
+    1
+   ]
+  ]
+ },
+ "counts": {
+  "name": "Sleight-of-Hand",
+  "matches": 4,
+  "hands": 89,
+  "bets_faced": 65,
+  "folds": 16,
+  "calls": 32,
+  "raises": 17,
+  "by_history": {
+   "preflop:Ur": {
+    "raise": 5,
+    "call": 6,
+    "fold": 2
+   },
+   "flop:": {
+    "raise": 9,
+    "check": 19
+   },
+   "flop:TrUr": {
+    "raise": 1,
+    "call": 1
+   },
+   "flop:TcUr": {
+    "fold": 3,
+    "call": 5
+   },
+   "preflop:": {
+    "call": 25,
+    "raise": 14,
+    "fold": 5
+   },
+   "flop:Ur": {
+    "raise": 6,
+    "call": 6,
+    "fold": 2
+   },
+   "turn:": {
+    "check": 12,
+    "raise": 8
+   },
+   "river:": {
+    "check": 7,
+    "raise": 7
+   },
+   "flop:Uc": {
+    "raise": 9,
+    "check": 8
+   },
+   "turn:Ur": {
+    "raise": 2,
+    "fold": 3,
+    "call": 3
+   },
+   "turn:Uc": {
+    "check": 9,
+    "raise": 3
+   },
+   "river:Uc": {
+    "check": 5,
+    "raise": 5
+   },
+   "preflop:TrUr": {
+    "fold": 1
+   },
+   "turn:TcUr": {
+    "fold": 3,
+    "call": 1
+   },
+   "preflop:UrTrUr": {
+    "call": 1
+   },
+   "flop:UrTrUr": {
+    "call": 3
+   },
+   "preflop:Uc": {
+    "raise": 8,
+    "check": 13
+   },
+   "river:TrUr": {
+    "raise": 1
+   },
+   "river:TcUr": {
+    "call": 1,
+    "fold": 1
+   },
+   "river:Ur": {
+    "raise": 1,
+    "call": 1
+   },
+   "river:UrTrUr": {
+    "call": 1
+   },
+   "turn:TrUr": {
+    "raise": 1,
+    "call": 1,
+    "fold": 1
+   },
+   "preflop:TcUr": {
+    "call": 2
+   }
+  },
+  "vpip": 58,
+  "pfr": 27,
+  "three_bet": 5,
+  "three_bet_chances": 15,
+  "fold_to_three_bet": 1,
+  "three_bets_faced": 1,
+  "showdowns": 21,
+  "showdowns_won": 5,
+  "raise_sizes": {
+   "2-4": 19,
+   "\u00bd-1": 18,
+   "1-2": 42,
+   "<\u00bd": 1
+  },
+  "opponents": {
+   "wsp": 1,
+   "mellyy": 1,
+   "runner1": 2
+  },
+  "net_chips": 0,
+  "river_bets": 14,
+  "river_bluffs": 6,
+  "big_bets": 40,
+  "big_bets_air": 10,
+  "small_bets": 1,
+  "small_bets_air": 0
+ }
+}

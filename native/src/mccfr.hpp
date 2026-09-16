@@ -8,8 +8,10 @@
 // stronger test than comparing against our own Python, because it checks the
 // algorithm rather than the translation.
 #pragma once
+#include <algorithm>
 #include <cstdint>
 #include <array>
+#include <stdexcept>
 #include <string>
 #include <unordered_map>
 #include <vector>
@@ -66,20 +68,69 @@ struct UpdateRule {
 
     static UpdateRule vanilla() { return {}; }
     static UpdateRule linear()  { UpdateRule r; r.alpha = 1; r.beta = 1; r.gamma = 1; return r; }
+    // The other two schedules `cfr/updates.py` defines, with its parameters, so
+    // a rule chosen on the Python path means the same thing on this one.
+    static UpdateRule cfr_plus() { UpdateRule r; r.floor_regret = true; r.linear_strategy = true; return r; }
+    static UpdateRule dcfr()     { UpdateRule r; r.alpha = 1.5; r.beta = 0.0; r.gamma = 2.0; return r; }
+
+    /// By the names `cfr/updates.py` uses. Exposed because the vanilla average
+    /// strategy is unweighted: at a node its owner rarely reaches, the early
+    /// near-uniform visits weigh as much as the converged ones, and a fine
+    /// preflop abstraction stayed at 50/50 facing a shove after 3M iterations.
+    static UpdateRule from_name(const std::string& name) {
+        if (name == "vanilla") return vanilla();
+        if (name == "linear")  return linear();
+        if (name == "cfr+")    return cfr_plus();
+        if (name == "dcfr")    return dcfr();
+        throw std::invalid_argument("unknown update rule: " + name + " (vanilla, linear, cfr+, dcfr)");
+    }
+
+    /// The product of the per-iteration factor u^e / (u^e + 1) over the
+    /// iterations this node was NOT visited, (last, now]. The schedules are
+    /// defined per iteration of the algorithm, but a sampled node is only
+    /// touched when the sampler reaches it; applying one iteration's factor
+    /// per visit left a node visited at 1 and at 1,000,000 with a factor of
+    /// 0.999999 instead of 0.000002, so at rarely reached nodes every rule
+    /// collapsed to vanilla. Exact for e = 1 (the product telescopes to
+    /// (last + 1) / (now + 1)); for other exponents the log of the product is
+    /// approximated by the integral of -u^-e, which is within 1e-3 for e >= 1.
+    static double cumulative(double exponent, int64_t last, int64_t now) {
+        if (now <= last) return 1.0;
+        if (exponent == 1.0)
+            return static_cast<double>(last + 1) / static_cast<double>(now + 1);
+        if (exponent == 0.0) return std::pow(0.5, static_cast<double>(now - last));
+        // Exact over the first 64 iterations of the gap, which is the whole gap
+        // for every node a dense traversal touches; the tail, where only the
+        // sampled rare nodes go, uses the integral of log(u^e / (u^e + 1)) to
+        // second order, within 1e-3 of the product for e >= 1.
+        double product = 1.0;
+        const int64_t head = std::min(now, last + 64);
+        for (int64_t u = last + 1; u <= head; ++u) {
+            const double p = std::pow(static_cast<double>(u), exponent);
+            product *= p / (p + 1.0);
+        }
+        if (head < now) {
+            const double a = static_cast<double>(head) + 0.5, b = static_cast<double>(now) + 0.5;
+            const double first = (std::pow(a, 1.0 - exponent) - std::pow(b, 1.0 - exponent)) / (exponent - 1.0);
+            const double second = (std::pow(a, 1.0 - 2.0 * exponent) - std::pow(b, 1.0 - 2.0 * exponent)) / (2.0 * exponent - 1.0);
+            product *= std::exp(-first + second / 2.0);
+        }
+        return product;
+    }
 
     void discount(InfoSetNode& node, int64_t iteration) const {
-        const double t = static_cast<double>(iteration);
+        const int64_t last = node.last_discounted;
         if (!std::isnan(alpha) || !std::isnan(beta)) {
+            const double up = std::isnan(alpha) ? 1.0 : cumulative(alpha, last, iteration);
+            const double down = std::isnan(beta) ? 1.0 : cumulative(beta, last, iteration);
             for (int i = 0; i < node.num_actions; ++i) {
                 double& r = node.regret_sum[static_cast<size_t>(i)];
-                if (r > 0.0 && !std::isnan(alpha))
-                    r *= std::pow(t, alpha) / (std::pow(t, alpha) + 1.0);
-                else if (r < 0.0 && !std::isnan(beta))
-                    r *= std::pow(t, beta) / (std::pow(t, beta) + 1.0);
+                if (r > 0.0) r *= up;
+                else if (r < 0.0) r *= down;
             }
         }
         if (!std::isnan(gamma)) {
-            const double factor = std::pow(t / (t + 1.0), gamma);
+            const double factor = std::pow(cumulative(1.0, last, iteration), gamma);
             for (int i = 0; i < node.num_actions; ++i)
                 node.strategy_sum[static_cast<size_t>(i)] *= factor;
         }
@@ -102,7 +153,8 @@ template <typename Game>
 class MCCFR {
 public:
     MCCFR(Game game, UpdateRule rule, uint64_t seed)
-        : game_(std::move(game)), rule_(rule), rng_(seed) {}
+        : game_(std::move(game)), rule_(rule), rng_(seed) {
+    }
 
     void train(int64_t iterations) {
         for (int64_t i = 0; i < iterations; ++i) {
@@ -152,10 +204,10 @@ private:
             value += strategy[i] * values[i];
         }
 
-        // Refetch: `nodes_` may have rehashed during the recursion above, which
-        // would leave the reference dangling. This is the kind of thing Python's
-        // dict hid for free and C++ does not.
-        InfoSetNode& current = nodes_.find(key)->second;
+        // No refetch: a rehash of `unordered_map` invalidates iterators, not
+        // references to elements, so `node` is still the node. The refetch
+        // hashed every key a second time per traverser visit.
+        InfoSetNode& current = node;
         discount_once(current, iterations_ + 1);
         double regret[MAX_ACTIONS];
         for (size_t i = 0; i < actions.size(); ++i) regret[i] = values[i] - value;
