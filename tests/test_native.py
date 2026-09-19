@@ -174,6 +174,15 @@ def test_the_cpp_solver_converges_to_kuhns_analytic_value():
     assert abs(mean - (-1 / 18)) < 0.002, (
         f"converged to {mean:+.5f}, expected {-1/18:+.5f}; seeds {values}")
 
+    # The same anchor with four worker threads sharing the table. A threaded
+    # run is not reproducible bit for bit (which worker takes which iteration
+    # is up to the scheduler), so this is the test of it: the algorithm still
+    # converges, with the per-node lock and the out-of-order discount stamp.
+    threaded = [game_value(native.solve_kuhn(200_000, seed, 0, 4)) for seed in range(3)]
+    mean = sum(threaded) / len(threaded)
+    assert abs(mean - (-1 / 18)) < 0.002, (
+        f"four threads converged to {mean:+.5f}, expected {-1/18:+.5f}; seeds {threaded}")
+
 
 def test_the_cpp_no_limit_solver_produces_a_usable_strategy():
     """
@@ -281,3 +290,193 @@ def test_the_native_solver_reproduces_its_golden_output():
     assert set(strategy) == set(golden["strategy"])
     mismatched = [k for k, v in golden["strategy"].items() if strategy[k] != v]
     assert not mismatched, f"{len(mismatched)} entries differ, e.g. {mismatched[:3]}"
+
+
+def _kuhn_value(strategy):
+    """Kuhn's game value to the first player under `strategy`, as the anchor test computes it."""
+    import itertools
+
+    def probability(key, action):
+        entry = strategy.get(key)
+        return entry[action] if entry else 0.5
+
+    total = 0.0
+    for mine, theirs in itertools.permutations(range(3), 2):
+        showdown = 1.0 if mine > theirs else -1.0
+        value = probability(f"{mine}|", 0) * (
+            probability(f"{theirs}|p", 0) * showdown
+            + probability(f"{theirs}|p", 1) * (
+                probability(f"{mine}|pb", 0) * -1.0
+                + probability(f"{mine}|pb", 1) * 2.0 * showdown))
+        value += probability(f"{mine}|", 1) * (
+            probability(f"{theirs}|b", 0) * 1.0
+            + probability(f"{theirs}|b", 1) * 2.0 * showdown)
+        total += value / 6.0
+    return total
+
+
+def test_warm_start_keeps_and_recovers_kuhns_value():
+    """
+    The warm start (MCCFR::warm_start) in the two cases that matter.
+
+    Seeded from a converged solve and given the same weight in iterations as
+    the run itself, the solver must stay at -1/18: the prior is right and the
+    schedule must not throw it away. Seeded from a deliberately wrong prior
+    (always bet, always call) it must still get there, because a warm start is
+    a starting point and the regrets have to be able to overrule it; the run
+    is four times the prior's weight so the correction has room. Written
+    because the use is a cap-2 rung seeded from the one-raise rung, whose
+    strategy is a good guess at the shared nodes and wrong in the details,
+    and the two properties together are what make that safe.
+    """
+    converged = native.solve_kuhn(200_000, 0)
+    prior = [(key, list(map(float, probs))) for key, probs in converged.items()]
+    kept = [_kuhn_value(native.solve_kuhn(200_000, seed, 0, 1, prior, 200_000, 1.0))
+            for seed in range(3)]
+    mean = sum(kept) / len(kept)
+    assert abs(mean - (-1 / 18)) < 0.002, (
+        f"warm start from the converged solve drifted to {mean:+.5f}; seeds {kept}")
+
+    # The wrong prior, under the linear rule the trainer uses, whose discount
+    # is what lets a run outgrow its start: the vanilla average carries the
+    # iterations spent overruling the prior forever (4k of weight over 1M
+    # iterations still read -0.048). Weight times scale is a regret
+    # magnitude, and Kuhn's per-visit regret is a fraction of a chip, so
+    # 4,000 at a scale of 1 is a prior worth tens of thousands of visits;
+    # 40,000 took 2M iterations to get within 0.002.
+    wrong = [(key, [0.0, 1.0]) for key in converged]        # bet or call everything
+    recovered = [_kuhn_value(native.solve_kuhn(400_000, seed, 0, 1, wrong, 4_000, 1.0, "linear"))
+                 for seed in range(3)]
+    mean = sum(recovered) / len(recovered)
+    assert abs(mean - (-1 / 18)) < 0.002, (
+        f"warm start from a wrong prior stayed at {mean:+.5f}; seeds {recovered}")
+
+    # Without entries the solver takes the old path exactly, which the golden
+    # test pins on the no-limit game; here the cheap form of the same claim.
+    assert native.solve_kuhn(50_000, 3) == native.solve_kuhn(50_000, 3, 0, 1, [], 0, 1.0)
+
+
+def test_pruning_keeps_kuhns_value_and_off_is_the_old_path():
+    """
+    Regret-based pruning (MCCFR::set_pruning) must not change where the run
+    converges: a pruned action is skipped only while its regret is far below
+    zero, and the unpruned iterations find it again if it recovers. Kuhn's
+    regrets are a few chips at most, so a threshold of -20 prunes the plainly
+    dominated actions after a short warm-up. With pruning off the call must be
+    the old path exactly, which the no-limit golden test also pins.
+    """
+    values = [_kuhn_value(native.solve_kuhn(200_000, seed, 0, 1, [], 0, 1.0, "vanilla", "proportional",
+                                            20_000, -20.0))
+              for seed in range(3)]
+    mean = sum(values) / len(values)
+    assert abs(mean - (-1 / 18)) < 0.003, f"with pruning converged to {mean:+.5f}; seeds {values}"
+    assert native.solve_kuhn(50_000, 3) == native.solve_kuhn(50_000, 3, 0, 1, [], 0, 1.0, "vanilla", "proportional", -1, 0.0)
+
+
+def test_skipping_the_early_average_still_reaches_kuhns_value():
+    """
+    With the average accumulated only from a quarter of the way in, Kuhn's
+    value must still be −1/18: the regret bound holds on any suffix window
+    (Brown and Sandholm 2019), and the early, uniform visits it drops are the
+    ones that kept rarely reached nodes near 50/50.
+    """
+    import itertools
+
+    def game_value(strategy):
+        def probability(key, action):
+            entry = strategy.get(key)
+            return entry[action] if entry else 0.5
+        total = 0.0
+        for mine, theirs in itertools.permutations(range(3), 2):
+            showdown = 1.0 if mine > theirs else -1.0
+            value = probability(f"{mine}|", 0) * (
+                probability(f"{theirs}|p", 0) * showdown
+                + probability(f"{theirs}|p", 1) * (
+                    probability(f"{mine}|pb", 0) * -1.0
+                    + probability(f"{mine}|pb", 1) * 2.0 * showdown))
+            value += probability(f"{mine}|", 1) * (
+                probability(f"{theirs}|b", 0) * 1.0
+                + probability(f"{theirs}|b", 1) * 2.0 * showdown)
+            total += value / 6.0
+        return total
+
+    values = [game_value(native.solve_kuhn(200_000, seed, average_from=50_000)) for seed in range(3)]
+    mean = sum(values) / len(values)
+    assert abs(mean - (-1 / 18)) < 0.002, f"converged to {mean:+.5f}; seeds {values}"
+
+
+def test_the_flat_export_matches_the_map_export():
+    """Three arrays instead of a tree, a dict and millions of small arrays; the same numbers."""
+    import numpy as np
+    from cfr.flat import FlatStrategy
+    solver = native.NoLimitSolver([0] * (52 * 52), [0.3, 0.6], [0.3, 0.6], [0.3, 0.6], 8, 200, 1, 2, [4, 4], 3)
+    solver.train(300)
+    as_map = solver.average_strategy()
+    key_bytes, offsets, values = solver.average_strategy_flat(32)
+    keys = np.asarray(key_bytes).view("S32").reshape(-1)
+    flat = FlatStrategy(keys, np.asarray(offsets), np.asarray(values))
+    assert len(flat) == len(as_map)
+    for key, row in as_map.items():
+        assert np.array_equal(flat[key], np.asarray(row))
+
+
+def test_one_deal_per_iteration_produces_a_usable_strategy_and_is_off_by_default():
+    """
+    With common random numbers on, every branch of an iteration sees the same
+    deal; the strategy must still be well formed and reach the same nodes.
+    The golden test covers the default (off) path, so this only pins the
+    switch and the shape; the head-to-head is its gate.
+    """
+    table = [0] * (52 * 52)
+    on = native.NoLimitSolver(table, [0.3, 0.6], [0.3, 0.6], [0.3, 0.6], 8, 200, 1, 2, [4, 4], 0)
+    on.set_common_random_numbers(True)
+    on.train(300)
+    strategy = on.average_strategy()
+    assert strategy and on.iterations() == 300
+    for key, probabilities in strategy.items():
+        assert abs(sum(probabilities) - 1.0) < 1e-9 and all(p >= 0.0 for p in probabilities)
+    # Every deal must be nine distinct cards: run through many iterations without a
+    # duplicate showing up as an impossible board (the solver would score nonsense).
+    on.train(2000)
+    assert on.information_sets() > len(strategy)
+
+
+def test_an_exact_all_in_terminal_equals_the_mean_of_sampled_runouts():
+    """
+    Both all in on the flop: the exact edge over the 990 runouts must be the
+    limit of the sampled runouts, and on the turn over the 44. Aces against
+    kings on a dry flop, and a flush draw against top pair, as the checks.
+    """
+    from abstraction.equity import card_index
+    from engine.cards import Card
+    def idx(*names):
+        return [card_index(Card(n[0].upper(), n[1].lower())) for n in names]
+    for mine, theirs, board in ((idx("As", "Ah"), idx("Kd", "Kc"), idx("2c", "7d", "9s")),
+                                (idx("Jh", "Th"), idx("Ad", "9c"), idx("9h", "4h", "2s")),
+                                (idx("Qs", "Qd"), idx("8c", "7c"), idx("6c", "5d", "Kc", "2h"))):
+        exact = native.allin_edge(mine, theirs, board, True)
+        sampled = native.allin_edge(mine, theirs, board, False, 40000, 9)
+        assert abs(exact - sampled) < 0.02, (exact, sampled)
+        assert -1.0 <= exact <= 1.0
+
+
+def test_the_current_strategy_replaces_only_the_empty_averages_when_asked():
+    """
+    The two exports may differ only at nodes whose average was a uniform, and
+    there the flagged export is regret matching's current strategy, which is
+    what the node actually plays. Everywhere else they are identical.
+    """
+    import numpy as np
+    table = [0] * (52 * 52)
+    solver = native.NoLimitSolver(table, [0.3, 0.6], [0.3, 0.6], [0.3, 0.6], 8, 200, 1, 2, [4, 4], 11)
+    solver.train(40)
+    plain = solver.average_strategy()
+    solver.set_current_when_empty(True)
+    flagged = solver.average_strategy()
+    assert set(plain) == set(flagged)
+    changed = [k for k in plain if not np.allclose(plain[k], flagged[k])]
+    assert changed, "a forty-iteration solve should hold nodes that were never averaged"
+    for k in changed:
+        n = len(plain[k])
+        assert np.allclose(plain[k], [1.0 / n] * n), "only a uniform average may be replaced"
+        assert abs(sum(flagged[k]) - 1.0) < 1e-9

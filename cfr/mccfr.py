@@ -39,7 +39,11 @@ from .vanilla import InfoSetNode
 class MCCFRSolver:
     """External-sampling MCCFR with a configurable regret update rule."""
 
-    def __init__(self, game: Game, rule: UpdateRule = VANILLA, seed: int | None = None):
+    def __init__(self, game: Game, rule: UpdateRule = VANILLA, seed: int | None = None,
+                 average_from: int = 0):
+        #: Accumulate the average only from this iteration on; see the native
+        #: solver's `set_average_from` for why. Zero is the classical average.
+        self.average_from = average_from
         self.game = game
         self.rule = rule
         self.rng = np.random.default_rng(seed)
@@ -103,7 +107,8 @@ class MCCFRSolver:
             # Opponent: sample one action, and accumulate their average
             # strategy here, where the reach weighting is correct.
             self._discount_once(node, self.iterations + 1)
-            node.strategy_sum += self.rule.strategy_weight(self.iterations + 1) * strategy
+            if self.iterations >= self.average_from:
+                node.strategy_sum += self.rule.strategy_weight(self.iterations + 1) * strategy
             index = self._sample(strategy)
             return self._walk(game.next_state(state, actions[index]), traverser)
 

@@ -1,0 +1,23 @@
+{
+ "first": "results/cfr/experiments/fw_cap2_8bb.pkl",
+ "second": "results/cfr/ladder169l/nolimit_8bb.pkl",
+ "hands": 40000,
+ "seeds": [
+  0,
+  1,
+  2
+ ],
+ "bb_per_100": [
+  -86.74625,
+  -59.519375,
+  -65.75375
+ ],
+ "mean": -70.673125,
+ "stderr": 8.235611055235976,
+ "on_miss": "call",
+ "miss_rate": [
+  0.12593554262396792,
+  0.09904075063768197
+ ],
+ "measured": "2026-09-19 15:11"
+}

@@ -4,7 +4,7 @@ One page, kept current. [`BACKLOG.md`](BACKLOG.md) holds the reasoning and every
 [`docs/training-plan.md`](docs/training-plan.md) holds the full phase plan and its results. This
 file is only the next thing to do.
 
-**Last updated:** 14 September 2026 · 338 tests (~7m with the machine shared; collection ~3m24s)
+**Last updated:** 19 September 2026, 13:50 IST · 338 tests (~7m with the machine shared; collection ~3m24s)
 
 ---
 
@@ -77,14 +77,375 @@ real improvement are compatible; the earlier phrasing denied the second.
 
 ## Now — the next thing to do
 
-**State on Monday 14 September, 21:15 IST.** NashForge is entered in Chipzen season 6 as a
-remote bot and is running on this machine as **v4** (`tools/chipzen-progress.sh`): the
-texture-aware 200-sample ladder (`results/cfr/ladder200t/`) with full-size raise-cap-2 solvers
-playing first at 50, 70 and 100bb, `(4,2)` companions at 12 to 35bb, and two measured opponent
-rules (bluffs withheld against a bot that folds to under 25% of bets; a fold-or-raise bot's
-pot-sized bet called only by the top strength class). Ledger: `results/chipzen/ledger.md`.
-Everything is pushed except the v4 rules (`chipzen/opponents.py`, `chipzen/player.py`,
-`tests/test_chipzen_player.py`): commit those first.
+**Season 3 (page pasted):** PoetAndCoder (the house LLM bot) champion over Blueprint; wsp 4-1
+lost the semi to Poet; half the fixtures were walkovers (three registered bots never showed).
+**Season 2 (page pasted):** qwentom-leap (house) champion over wsp; five of eight entrants
+were house bots. **Across seasons 2 to 5:** champions qwentom-leap and Poet (house bots, when
+the field was mostly house bots), then bigboy2 and mellyy (both cyn007's); **wsp reached two
+finals and two semis in four seasons and never won**, top-three in every round-robin; **Blueprint
+reached two finals and a semi** from 3-2, 1-3 and 2-2; the top seed won three of four (S2, S3,
+S4) and lost a semi once (S5). Same timetable every season: quarters Sat 18:00 UTC, semis Sun
+18:00 and 18:10 (or 18:30), final Sun 21:00 UTC.
+
+**Season 4 (page pasted):** bigboy2, by cyn007 (mellyy's builder), 4-0 in the round-robin and
+3-0 in the playoffs, beat Blueprint in the final; wsp 4-0 lost the semi to Blueprint, which had
+been 1-3; mr_hide reached a semi. Same slot pattern (quarters Sat 18:00 UTC, semis Sun 18:00
+and 18:10, final Sun 21:00 UTC). Across seasons 4 and 5: the top seed won once and lost a semi
+once; Blueprint reached a final and a semi from 1-3 and 2-2; wsp is top-two in the round-robin
+every season and has never won it; the same builder has won both seasons with different bots.
+
+**Saturday 19 September, 15:40 IST: the full-width prototype, first pass, and a retraction.**
+`cfr/fullwidth.py` (vectorised CFR+ over the explicit abstract game, chance factorised per
+player given the board texture, keys as the pickles) and `scripts/cfr/fullwidth_solve.py` are
+built; 8bb chance tables in `results/cfr/chance/nolimit_8bb.npz`. Lane FW (14:28 to 15:15):
+full-width one-raise against the sampled one-raise rung, which should tie, read **−12.0 ± 0.7**;
+full-width cap-2 −70.7 ± 8.2 against the sampled one-raise and −61.6 ± 4.2 against a sampled
+cap-2 (20M warm, pruned; itself −21.9 ± 4.3 against the one-raise). So the factorised abstract
+game is not faithful at 8bb, where the preflop all-in is the game and the factorisation prices
+AA against 72 as a strong class against a weak one on an average board. Fix: a preflop all-in
+margin table between the 169 classes (`scripts/cfr/preflop_allin.py`, Python evaluator, 1,200
+runouts a pair, antisymmetric by construction; `nolimit_8bb_preflop_allin.npy`), which the
+solver uses for a preflop all-in instead of the factorised runout. Lane FW2 re-solves with it.
+**Retracted:** I logged the native `allin_edge` sampled branch as biased; it is not. Exact and
+sampled agree to 0.002 on a fixed flop, both orderings. My driver drew 12 random flops per
+pair and 20 per check, and the flop-to-flop variance of an all-in margin is large (a king on
+the flop turns AA against KK from +0.63 to −0.9), so the asymmetry I saw was sampling noise.
+The defect row is removed.
+
+**Saturday 19 September, 13:50 IST: lane AB is in, and the recipe stalls short of zero.** 100M
+iterations, frozen 100k warm start, pruning at −300 stacks, three threads each, against the
+one-raise rung (check/call on a miss): **18bb −8.0 ± 2.2** (5.4 h; cold 50M read −8.1, warm 10M
+−11 to −14), +7.5 ± 3.0 against its own 20M warm solve; **12bb −3.7 ± 3.1** (3.5 h; +4.2 ± 3.9
+at warm 20M), +12.2 ± 7.0 against its 20M. So the solves keep improving on their own tree and
+the cross-tree gap keeps narrowing, but on a log scale it is flattening: 18bb went −35 (3M), −26
+(10M), −13 (warm 10M), −8 (100M warm and pruned), and 12bb sits level with its one-raise rung at
+two budgets. **Convergence of the sampled solver alone does not take a cap-2 rung past the
+one-raise rung at budgets we can afford**; the 100M warm-pruned solves are the best companions
+we have (they beat the 20M ones same-tree at 2.5 SE and 1.7 SE) and are candidates for a burst,
+but the cap-2-primary plan needs the full-width solver, a better abstraction, or both. Post-season
+order updated accordingly: the 8bb full-width prototype first.
+
+**Saturday 19 September, 12:10 IST: the season 6 bracket (season page, pasted).** Quarters
+Sat 18:00 UTC onward: **NashForge v mellyy** (18:00 = 23:30 IST), v003 v wsp, Blueprint v
+PoetAndCoder, Shadow v Fold-ver-3. **Our semi-final opponent is the winner of v003 v wsp**, the
+two bots with wins over the season-5 champion and finalist; the other half is Blueprint, Poet,
+Shadow and Fold-ver-3. v003 is being scouted and seeded now (its row held 3 hands; it has played
+five fixtures since), paced at 3 s a request. Standings: NashForge 4-1, then Blueprint, Shadow,
+v003, wsp, Fold-ver-3 at 3-2 (seeded 2 to 6 in that order), Poet and mellyy 2-3.
+
+**Saturday 19 September, 12:00 IST: season 5, read from the season page (pasted by the user).**
+8 bots, 4 round-robin rounds, an 8-bot bracket (everyone qualified). Quarters Sat 18:00 to
+18:30 UTC, semis Sun 18:00 and 18:10 UTC, **final Sun 21:00 UTC = 02:30 IST Monday**. The
+champion, mellyy, was **1-3 in the round-robin** (lost to Maxwell, RoboPoker, OmegaBot) and won
+three playoff matches; the top seed Maxwell (4-0) lost the semi to wsp (2-2); Blueprint (2-2)
+reached the semi; PoetAndCoder was 1-3. So the seeding predicted nothing and the bracket was
+three coin flips with a lean, which is what this week's 100-hand matches look like too. Season
+5's playoff slot pattern says our semi, if we win tonight, is Sunday 23:30 or 23:40 IST and the
+final 02:30 IST Monday; timers to be armed after tonight's result, each dry-run. **Season 7 is
+open for entries now** (registration closes Mon 23:59 UTC = Tue 22 Sept 05:29 IST); enter after
+the final.
+
+**Saturday 19 September, 08:17 IST: lane AB, a cap-2 rung taken all the way.** 18bb and 12bb
+at **100M** with the week's levers on (frozen 100k warm start, pruning at −300 stacks from 10%),
+three threads each (`~/pokerbot-scratch/ladder169/laneAB.sh`, watch
+`tools/exp-progress.sh ~/pokerbot-scratch/ladder169/laneAB_100m.log --watch`). Gates at the end:
+cross-tree against the one-raise rung (`results/cfr/xtree/`), same-tree against the 20M warm
+solve. The question is whether a finished cap-2 rung crosses zero (18bb: cold 50M −8.1, warm 10M
+−13; 12bb: +4.2 at warm 20M). If it does, the post-season retrain is a known recipe and the
+promotion rule (cap-2 primary at a depth once it beats the one-raise rung) has its first
+candidates. Nothing from it plays this weekend.
+
+**Saturday 19 September, 09:40 IST: the river-shove override, built, replayed, not shipped.**
+v7b's losses decomposed (`review_v7b.md` in the session): 650 ordinary hands +217,286; 198 folds
+−55,853 (the price of playing); 141 companion hands −42,385, 129 of them small folds to
+re-raises; **7 river calls against shoves −28,088**; one fallback call at a third raise −8,775 (Q9
+into KK; the rule is net positive over the record and stays). The river calls looked like the
+one-raise primary's known bias, so the fix was built: `ArenaPlayer(river_shove_companion=True)`
+(`--river-shove-companion` on the runner; facing an all-in on the river the cap-2 companion
+answers even though the primary has a node; logged as `adjusted: "river shove: ..."`; test in
+`tests/test_chipzen_player.py`), and `chipzen_replay.py --river-shove-companion` reports every
+such decision with the primary's and the companion's call probability. **Over the whole record
+(56 river-shove decisions with a primary node: 35 in v7/v7b's bursts, 9 in v6's, 12 in v5's)
+the companion would have folded calls worth 3,842 chips of the 108,308 lost on river calls.**
+The big losing calls (QJ with a straight into kings full, 78 with a straight into nines full,
+A9 top pair, 98) are called at 1.00 by both; the companion folds K3 (0.53 → 0.14) and AK on a
+paired board (0.49 → 0.10) but calls K8 *more* (0.47 → 0.65). So the leak is mostly coolers with
+strong hands, the override buys about 4,000 chips over 2,000 hands and moves some calls the wrong
+way; **not worth a label, flag stays off**, the converged cap-2 primary is still the fix. Against
+mellyy, wsp, Fold-ver-3 and Poet the `never_bluffs` read already folds these.
+
+**Saturday 19 September, 06:30 IST: v7b's burst, and v7b plays the quarter-final.** 05:29 to
+06:15, 20 matches, 12 won, +27 ± 30 chips/hand; **Blueprint 12 of 18 at +42** (v7: 9 of 15 at
++29), hoops 0 of 2. Decomposed on the Blueprint hands, v7b against v7: overall +101 against +103
+a hand (indistinguishable, two bursts at ±30 each); **deep +74 against +51; the companion hands,
+the one thing that changed, 149 at −313 against 109 at −423**; short +136 against +170 (noise-level,
+the short companions changed from tapers to 20M cap-2); river calls against shoves 4 at −2,719
+(the one-raise primary's own leak, unchanged). So v7b is at least v7 overall and better exactly
+where it was changed, with every gate behind it (cross-tree at every depth, replay, burst).
+`fixture_set` now says v7b, flags empty; the mellyy timer reads it at 23:15. The burst's ledger
+label says "(50/70/100bb)" because the script was written before the short rungs went in; the
+set that played had all seven, per `ladder_paths` on `ladder169l_v5c`.
+
+**Saturday 19 September, 05:50 IST: the bracket. Quarter-final Saturday 23:30 against mellyy**
+(the 8th seed; we are the 1st at 4-1; wsp, v003, Fold-ver-3, Shadow and Blueprint are 3-2,
+mellyy and PoetAndCoder 2-3, runner1 and Sleight-of-Hand out). Round 5: Fold-ver-3 beat runner1,
+Sleight-of-Hand beat mellyy (84 hands, the house bot bet into a 76%-folder), Shadow beat wsp
+(QQ three-bet, turn shove called by a pair and a gutshot), Blueprint beat v003 (v003 raised
+three times with two pair into a made flush on a three-club board). Timer armed for mellyy on
+the fixed script (connect 23:15; `fixture_set` read at connect time, so v7 or v7b is chosen after
+the burst). v7b's burst started 05:29.
+
+**Friday 18 September, 23:50 IST: PoetAndCoder won, 8 hands, +10,000, v7's first fixture.**
+Connected 23:25 with empty flags (one-raise primary), paired at 23:40, over at 23:41. The
+match was hand 4: K3 suited against JT, the opponent re-raised the flop, the 100bb cap-2
+companion answered the turn and the river (both misses on the one-raise primary), called
+3,060 and then 5,090, and the 19,900 pot came to us. Round-robin **4 and 1**, the loss the
+Shadow walkover. Playoffs Saturday and Sunday, slots to be read by the poller from 00:15.
+
+**Friday 18 September, 16:00 IST: v7b is v7 with every companion retrained warm at 20M.** Lane
+AA (08:26 to 15:44, two rungs at a time on two threads) did the short cap-2 rungs the way lane Y
+did the deep ones; on the check/call instrument, against the one-raise rung and against the
+`(4,2)` taper each replaces as v7's companion: 35bb −18.3 ± 0.8 and **+13.5 ± 1.6**; 25bb
+−22.5 ± 1.4 and **+13.2 ± 5.0, +16.0 ± 2.6** on three more seeds (about +14.6 over six); 18bb
+−12.1 ± 3.6 and **+34.0 ± 1.5**; 12bb **+4.2 ± 3.9** (the first cap-2 rung not losing to its
+one-raise rung) and **+21.4 ± 1.3**. All four join `results/cfr/ladder169l_v5c/`, so v7b's
+companions are the seven 20M-warm cap-2 solves and no tapers (`ladder_paths` drops a taper where
+a cap-2 rung exists). The burst script already points at that directory. The change under
+Saturday's gate is therefore "the companions", all of them, rather than the deep three; cleaner
+attribution was traded for the stronger set, deliberately. Replay of the full v7b on v7's
+burst hands: `replay_v7b_full_on_v7.md`. **Tonight: v7 against PoetAndCoder**, `fixture_set`
+line 3 empty; the fixture script's hard-coded `--deep-primary` (which would have played v7's
+directory as v5b) is fixed and was dry-run at 08:25 (connected with empty flags, stopped after
+its deadline) before re-arming. Playoff slots not listed yet; a poller reads `--fixtures` every
+half hour from 00:15 and writes them to `~/pokerbot-scratch/chipzen/playoffs.txt`.
+
+**Friday 18 September, 08:20 IST.** Round-robin after four rounds: NashForge 3-1 (the loss a
+walkover, below), wsp 3-1, v003 3-1 (beat wsp and PoetAndCoder; a 2013 rating on 129 hands),
+then five at 2-2; eight of ten go through. PoetAndCoder tonight 23:40 (timer armed on the fixed
+script, self-checked). Our platform rating fell to 1497 after v6's burst; cosmetic for the season.
+
+**v7's burst (05:29 to 06:49): 12 of 20, +31 ± 32 chips/hand** (`ledger.md`; Blueprint 9 of 15
+at +29, mr_hide 3 of 3, hoops 0 of 2; 167 of 1,771 decisions missed the one-raise primary, the
+cap-2 companion answered 160, the rule 7). Between v4's +62 and v6's −54, so inconclusive on the
+headline. **Decomposed over the Blueprint hands** (the same script over v3, v4, v6, v7; chips per
+decision-hand): v7 +103 overall, +51 deep, +170 short; v6 −32, −40 deep, −17 short, with 15
+preflop jams at −2,545 each (most of its loss); v4 +163. **v7's whole leak is the 109 hands (16%)
+where the opponent re-raised and the 10M cap-2 companion took over: −423 each, about 46,000
+chips; the other 582 hands ran at +200.** v4 with the same companions: 92 hands at −501. Plus
+three river calls against shoves at −2,450 (the one-raise tree's known bias: shoves look
+bluff-heavier in a game nobody can re-raise). **v5b's deep play is v6's deep play** (same 10M
+rungs, same primary role, measured −40 a hand over 506 hands), so reconstructed against Blueprint
+v5b sits near +40 against v7's +103. Recommendation moved from v5b to **v7 for PoetAndCoder**,
+with the reasoning in the session: Poet re-raises rarely (companion asked less), a station
+punishes bad jams more than it rewards three-bets. The user decides; `fixture_set` says v5b
+until told otherwise. Lesson, mine: decompose a burst before recommending on it; the headline
+alone put v5b forward this morning and v5b forward for Shadow yesterday.
+
+**Lane Y: the deep cap-2 rungs warm-started (frozen 100k) at 20M**, two threads each, 00:24 to
+06:54, on the check/call cross-tree gate against the one-raise rung, before and after:
+50bb −21.1 ± 3.6 → **−14.2 ± 2.4**; 70bb −18.5 ± 0.8 → **−8.5 ± 1.4**; 100bb −12.8 ± 2.4 →
+**−7.9 ± 1.7**. Same-tree 20M-warm against 10M: +6.1 ± 2.2, +2.8 ± 0.9, +4.7 ± 1.3. Every rung
+better, all but 50bb past three standard errors. Assembled as `results/cfr/ladder169l_v5c/`
+(v5b's files with the three 20M rungs), which serves two candidates: **v7b** = that directory
+without `--deep-primary` (v7 with better companions, the direct fix for v7's leak) and **v5c** =
+with it. **Saturday's 05:30 burst candidate: v7b**, armed 08:30 (`~/pokerbot-scratch/chipzen/v7b_burst.sh`,
+log `v7b_burst.log`; same shape as the v7 burst script, which has run twice). Its replay on v7's
+own burst hands (`replay_v7b_on_v7.md`): the primary's lines identical (0% differ, same primary);
+of the 167 primary misses the 20M companions answer 85 (the replay cannot ask the tapers), and on
+those lines the KQ hand that shoved 12,075 into aces becomes a fold to the three-bet (0.98), while
+AQ still calls the three-bet (0.86). Pruning: built (`MCCFR::set_pruning`, `--prune-after`,
+`--prune-stacks`; Kuhn converges with it on, off is the old path, 4 tests). **Lane Z measured it
+at the Pluribus threshold (−30,000 stacks) and it pruned nothing that mattered**: 903,739 action
+visits skipped of roughly 10^10, 4,056 s against 4,085 s unpruned (0.406 vs 0.409 ms/it), so no
+speed gain; the gates read −14.3 ± 3.0 pruned against −21.2 ± 3.2 cold, which with 0.015% of
+visits skipped is run-to-run variance (the pruning coin also shifts the random stream), not an
+effect. Under the linear discount our cumulative regrets never reach that magnitude; the
+threshold has to be scaled to the run (a fraction of the current iteration times the stack) and
+re-measured. **Lane Z2 (15:44 to 16:41), thresholds our regrets reach:** at −300 stacks, 157.5M visits
+skipped (about 1.5%), **2,685 s against the unpruned 4,085 s, 0.268 vs 0.409 ms/it, a third
+faster**, gate −18.2 ± 5.3 against cold's −21.2 ± 3.2 (no measured cost); at −3,000 stacks,
+42M skipped, 3,256 s, gate −13.7 ± 2.1. Same seed, same three threads, same side-by-side
+arrangement as lane Z, so the wall times are comparable within the noise of a shared machine.
+So pruning at −300 stacks is worth about 1.5x on the sampled solver at no strength cost on this
+rung; default stays off until it is re-measured on a deep rung post-season.
+
+**Friday 18 September, 00:10 IST: the Shadow fixture was lost by walkover, and it was my
+script.** `fixture.sh` computed its stop window with `date -d "$SLOT +40 min"`, which GNU date
+rejects; the function returned an empty string, every comparison against it read as "already
+past", and the only guard left was "lobby quiet three minutes", which at 23:40 to 23:43 it was
+because the match had not started. The script stopped the bot at 23:43; the fixture opened at
+23:50 to an empty lobby. Noticed 23:58, reconnected at once, too late: Shadow is gone from
+`--fixtures`. Fixed: `date -d "$SLOT 40 minutes"`, an arm-time self-check that refuses to arm if
+the arithmetic returns empty or is not monotonic, the window and deadline overridable
+(`STOP_AFTER`, `DEADLINE`, `STATUS_AFTER`) so the script can be dry-run against a slot minutes
+away, which it now has been. Lesson, into the standing rules: **a timer script is exercised end
+to end against a fake slot before it is armed**; a syntax check is not a test. Record: 3 and 1
+in the round-robin (the loss a walkover, not a match). The message to the organisers is the
+user's call.
+
+**State on Thursday 17 September, 09:05 IST.** Three fixtures of three won (runner1, mellyy,
+v003). Standings after three rounds, from the platform's match records: **NashForge 3-0, wsp
+3-0**, Fold-ver-3 2-1, v003 2-1, Blueprint 2-1, Shadow 1-2, mellyy 1-2, PoetAndCoder 1-2 (lost to
+mellyy and v003), runner1 0-3, Sleight-of-Hand 0-3. Eight of ten go to the playoffs (Sat and
+Sun, three rounds), so the remaining fixtures decide seeding, not qualification. **Tonight
+Shadow at 23:50 is played by v5b, unchanged** (`fixture_set` says so; `fixture.sh` connects at
+23:35). Friday PoetAndCoder 23:40, same script.
+
+**What Thursday morning measured, in the order it happened.**
+
+1. **Lane Q (short cap-2 rungs at 10M, gated same-tree against their 3M solves):** 35bb +3.7 ±
+   2.7, 25bb +12.8 ± 1.4, 18bb +8.0 ± 3.1, 12bb +15.6 ± 7.5 (`ladder169l_v6/gate_10m_vs_3m_*`).
+   Only 25bb clears three standard errors. Same direction as the deep rungs.
+2. **v6's burst, 05:30 to 06:10: 20 matches, all Blueprint, 7 won, −54 ± 41 chips/hand**,
+   showdowns 35 won / 48 lost. v4 played the same bot 20 times at 15 won and +62. The review
+   (`chipzen_review.py --opponent Blueprint --last 20`): the biggest pots were preflop stack-offs
+   on the deep cap-2 rungs (44 jammed for 63bb into QQ, JJ for 97bb into AA, TT four-bet into
+   KK), two of the eight worst were the fallback rule calling a third raise it has no node for
+   (TT 7,750, Q5 9,450; 33 misses, 20 at three raises; Blueprint re-raised 115 times in 1,121
+   hands), and the short cap-2 rungs played the small stacks worse (Q7 raised a river 2x and
+   called a shove at 35bb). **v6 is closed.** Its short cap-2 rungs and the 10M ones stay out.
+3. **The cross-tree gate that was never run before deep-primary was adopted:** each cap-2 rung
+   against the one-raise rung at the same depth, 40k x 3 (`ladder169l_v6/xtree_*.json`). **Every
+   cap-2 rung loses**: 10M short rungs 35bb −26.0 ± 2.7, 25bb −27.6 ± 1.5, 18bb −26.0 ± 0.4, 12bb
+   −29.6 ± 3.1; the 10M deep rungs v5b plays tonight 100bb −19.1 ± 2.3, 70bb −23.8 ± 1.1, 50bb
+   −24.6 ± 2.3; the 3M short rungs 25bb −31.4 ± 2.4, 18bb −35.1 ± 6.0. The one-raise strategy
+   is a legal strategy inside the cap-2 game, so a converged cap-2 solve cannot lose to it; these
+   are the measure of how unconverged the cap-2 solves are. 3M to 10M closed 4 to 9 points of a
+   30-point gap.
+4. **Roughly 40% of that gap is lines the cap-2 tree has never visited, not its play.** The
+   miss rate reads 0.9% of decisions but that is about 4.5% of hands, and the big ones (a 2x-pot
+   bet called on three streets); `play_pickles` answers a miss with a uniform random action,
+   including the shove. Re-run at 25bb with check/call on a miss: −29.6 became −17.5 (one seed,
+   30k hands). So the honest "cap-2 plays worse where it was trained" figure is nearer 17 than
+   27, and the rest is holes, which the arena answers with the fallback rule instead (the TT and
+   Q5 hands above). An earlier note in this file said the misses were negligible; that was wrong.
+5. **Lane R, started 08:55** (`~/pokerbot-scratch/ladder169/laneR.sh`, watch
+   `tools/exp-progress.sh ~/pokerbot-scratch/ladder169/laneR_50m.log --watch`): cap2 18bb at
+   **50M** on six threads, then the cross-tree gate against the one-raise 18bb rung and a same-tree
+   gate against the 10M solve. The question is whether iterations alone can close the gap in the
+   time there is. Near zero: iterations are the answer, and a warm-started retrain (cap-2 nodes
+   initialised from the one-raise pickle at the histories they share; needs a native entry point
+   and a Kuhn test, about half a day of code, then 8 to 10 h of training on six threads for the
+   ladder) is worth building. Still around −15: the problem is elsewhere (sizes, averaging, the
+   abstraction under a re-raise) and the one-raise-primary v7 is the playoff bot. The chess bot
+   shares the machine, so the ETA the trainer prints is the honest one.
+6. **wsp and Fold-ver-3 seeded** into `opponents.json` from the scout cache (wsp 2,157 hands, 0
+   river bluffs of 161; Fold-ver-3 1,803 hands, 0 of 164), so "river bet believed" fires against
+   both from hand one. Neither is a station, a folder to opens or a folder to three-bets by the
+   thresholds, so nothing else fires. **wsp vs mellyy, read from the platform record** (103 hands,
+   wsp 67 of them): mellyy folded 61 of 94 preflop, wsp opened 43 buttons (min-raise, 3x once the
+   blinds rose), called mellyy's three-bets and folded the flop when it missed (9 of 15), barely
+   bluffed, and the match was one preflop pot: AJ called a 4,777 three-bet from KT, board A-K-x,
+   10,754. Against us the blind-stealing runs into the solver's big-blind defence, and the river
+   read covers the rest. No new rule.
+7. **The platform rate-limited us** (`RATE_001`, blocked 15 min, 60 violations) after the index
+   refresh plus follow-ups at 00:30; the bot was off. Anything that walks the API now goes at one
+   request every 3 to 4 s (`scratchpad/seed_top_half.py` shows the pacing).
+
+**Thursday afternoon: lanes R, S and T.** Lane R, the 18bb cap-2 rung at **50M** (six threads,
+3 h): **−12.7 ± 0.8** against the one-raise rung (3M −35.1, 10M −26.0), +2.9 ± 0.2 against its
+own 10M on the same tree. The gap closes on a log scale, 8 to 13 points per tripling, no floor
+seen; zero is somewhere around 150M to 250M for a short rung. The tree was fully reached from 4M
+on (235k infosets, flat), and check/call-on-miss now moves the number by one point where at 10M
+it moved twelve, so what remains is play at reached nodes, not holes. **The cap-2 solves are
+unfinished, not broken; finishing them cold is days of machine time.**
+**Warm start built** (`MCCFR::warm_start`, `train_nolimit.py --warm-start PICKLE --warm-weight N
+--warm-scale C`; regrets at a node are seeded from a coarser game's strategy when the node is
+first created, the average is not; `key_from_string` on both games; Kuhn keeps −1/18 from a
+converged prior and recovers from a wrong one under linear; golden test untouched; 15 native
+tests pass). Lane S, 18bb at 10M warm from `nolimit_18bb` (70,756 of 71,208 entries landed):
+**−21.9 ± 1.0** against the one-raise rung, cold 10M −26.0, so worth about 6M cold iterations,
+**a 1.6x speed-up**. Lane T, heavier priors: weight 5M −21.5 ± 3.7, scale 10 −25.4 ± 3.1, no
+better. The plain proportional prior is the limit, not its weight; the Brown and Sandholm form
+(regrets from each node's counterfactual values) is the next step and is post-season work.
+**Thursday evening: the warm start is a real lever after all, at a light setting.** A second
+form, `--warm-mode frozen` (Brown and Sandholm's substitute regrets, sampled: every node plays
+the one-raise prior for N iterations while regrets accumulate, then regret matching takes over),
+was worse than cold at N = 1M and 3M (−30.6, −29.2 against −26.0) and much better at N = 100k
+(−16.4). Replicated on the new instrument (`tools/xtree-gate.sh`: cross-tree against the
+one-raise rung, check/call on a miss, both miss rates in the JSON): frozen 100k at three seeds
+−11.4 ± 1.4, −13.7 ± 2.2, −14.1 ± 2.2; cold 10M at two seeds −21.6 ± 2.0, −17.8 ± 3.6; cold 50M
+−8.1 ± 2.7. **About 3x in iterations.** A long frozen phase measures regret against an opponent
+who never re-raises and stores wrong lessons about aggression; a short one gives the direction
+without the bias (the paper's "T matches the prior's quality"). Two instrument lessons:
+random-on-miss inflated every gap (cold 10M read −26.0 there, −21.6 here), and single training
+runs vary about 4 points seed to seed, so a solver claim needs two seeds. Full account and
+sources: `docs/research/2026-09-17-cap2-convergence.md`. Also built: `scripts/cfr/chance_tables.py`
+(the abstract game's chance player as bucket-transition and showdown tables, from a million
+deals through the rung's own abstraction; `results/cfr/chance/nolimit_18bb.npz`;
+`tests/test_chance_tables.py`), the first piece of the full-width solver. Post-season order:
+warm-started 20M retrain of every cap-2 rung gated at two seeds (a night), replay, bursts; the
+full-width prototype at 8bb in parallel. Nothing from this goes into the playoffs.
+**v7 built and replayed** (`results/cfr/ladder169l_v7/`, v5b's rungs by symlink, played without
+`--deep-primary`; `chipzen_replay.py` gained `--baseline-deep-primary` and `--companions`, which
+answers the one-raise primary's misses with the cap-2 companion as the bot would):
+`replay_v7_on_v5.md`, `replay_v7_on_v6.md`. On re-raises v7 plays exactly v5b (same companion
+pickle); everywhere else it is the one-raise solver, most-likely action differing on 57% of
+preflop and 48% of turn decisions against Blueprint, the TT/JJ/44 stack-offs becoming calls.
+**A one-raise tree cannot re-raise**: v7 never three-bets, never raises a bet, never check-raises;
+its only three-bet is the `folds_to_three_bet` read. Unmeasured cost; Friday's burst measures it.
+
+**Friday's 05:30 burst is v7's gate** (armed 21:45: `~/pokerbot-scratch/chipzen/v7_burst.sh`, log `v7_burst.log`; starts v7 with the queue at 05:29, stops after 20 matches or 11:30): one-raise primary at every depth (no `--deep-primary`),
+cap-2 as the companion that answers re-raises, one label, replay pass first. It has to sit between
+v6's −54 and v4's +62 against Blueprint; near v4 or above it plays the playoffs, near v6 and v5b
+does. The cross-tree gate has a blind spot the arena does not: the one-raise agent never
+re-raises, so it never tests what the one-raise rung does when re-raised, which is the case
+deep-primary was adopted for and which v4 won 15 of 20 with. Assemble v7 today while the bot is
+off; `fixture_set` stays on v5b for Shadow.
+
+**Thursday 00:10 IST.** NashForge is entered in Chipzen season 6 as a
+remote bot from this machine, **three fixtures of three won** (runner1, mellyy, and v003 at
+00:01 Thursday: three hands, +10,000, A5s called a turn shove with top pair and the nut flush
+draw against AT and rivered two pair; 0 misses). The lobby-hours limit blocks the rated queue
+but **not a season fixture**, which was the open question. v5b played it: the 169-class linear ladder (`results/cfr/ladder169l_10m/`, v5's rungs
+with the 50, 70 and 100bb cap-2 solvers retrained at 10M iterations, which beat the 3M ones by
++3.0, +3.6 and +9.4 BB/100 on the same tree), `(4,2)` companions at 12 to 35bb, sequential
+triggers, scouted reads. The bot is **out of the lobby** until `fixture_v003.sh` reconnects it
+at 23:40 with inbound only: the free tier allows 8 lobby hours a day (resets 05:30 IST) and today
+used 10.6. Thursday 05:30 quota burst is **v6**'s gate (`ladder169l_v6/`: v5b plus cap-2 rungs at
+35, 25, 18, 12bb). Then Shadow Thu 23:50, PoetAndCoder Fri 23:40, playoffs Sat and Sun.
+**v6 is assembled with the 10M rungs and has its replay pass**
+(`results/chipzen/replay_v6.md`, re-run 22:53 on the set as it stands): 2,559 logged decisions,
+baseline misses 143 against 141 logged, new-set misses **126**, so the short cap-2 rungs reach
+17 of the lines v5's tree did not, which the 10M rungs alone did not (143 against 143).
+Preflop most-likely action differs on 46%, postflop 18 to 24%. Both remaining fixtures are scripted: `~/pokerbot-scratch/chipzen/fixture.sh` is armed for
+Shadow (connect 23:35 Thu, slot 23:50, log `fixture_shadow.log`) and PoetAndCoder (connect 23:25
+Fri, slot 23:40, `fixture_poet.log`); each connects inbound-only, prints the lobby at +5 min,
+and stops after the match. **The set it plays is read at connect time from
+`~/pokerbot-scratch/chipzen/fixture_set`** (line 1 ladder dir, line 2 label), currently v5b, so
+the morning's v6-or-v5b call is one edit to that file. **Lane Q, started 00:12 Thursday** (`~/pokerbot-scratch/ladder169/laneQ.sh`, watch
+`tools/exp-progress.sh ~/pokerbot-scratch/ladder169/laneQ_10m.log --watch`): v6's four short
+cap-2 rungs (35, 25, 18, 12bb) retrained at 10M, same recipe and seed, two threads each, then
+sequential gates against the 3M rung on the same tree into
+`ladder169l_v6/gate_10m_vs_3m_cap2_*.json`. Why: the deep rungs gained +3.0 to +9.4 from the
+same step, and these are the depths where most fixture hands are played once the blinds rise.
+Decision rule as before: a rung over three standard errors is symlinked into `ladder169l_v6`
+(`results/cfr/experiments/cap2_<rung>_10m.*`) and `fixture_set` points at v6 for Shadow. The
+native trainer has no checkpoint, so a Windows restart loses any unfinished rung. Thursday
+morning is scripted too:
+`~/pokerbot-scratch/chipzen/v6_burst.sh` (armed 22:54, log `v6_burst.log`) stops v5b from
+01:00 once the lobby has been quiet for three minutes, starts v6 with `--queue` at 05:29, and
+stops it after 20 matches or at 11:30, whichever is first, between matches, so at least two of
+the day's 8 lobby hours are left for Shadow. None of the scripts survives a Windows restart in the
+03:00 to 09:00 window; if the machine restarts, start v6 by hand at 05:30 with the command in
+the script. A fixture drops off `chipzen_run.py --fixtures` the moment it opens, and the platform paired
+us about a minute after the slot; a 0-active reading on the minute is normal.
+
+**What today settled.** Iterations are the lever and the four solver flags (CRN, exact
+terminals, current-when-empty, average-from) are not: same-recipe gate +0.12 ± 1.46, 10M gate
++9.4 ± 1.0. The native solver now runs on threads (`--threads N`, 4.0x at four, golden-identical
+at one), and a rebuild no longer kills running trainers, so a full 16-rung retrain fits in about
+three hours. Slumbot, 10,000 hands on the 200bb contender: −815 ± 357 mbb/hand, no better than
+folding; 41% of it in the 4% of hands with a lookup miss, the rest at river showdowns from the
+big blind. Post-season work, not this week's. Uncommitted since 4cb6900: everything from the
+C++ sitting on (items 1, 2, 4 to 10, 12, threads), the Slumbot report fix, the ledger, this file.
+Ledger: `results/chipzen/ledger.md`.
+
+**Standing rules for the rest of the season.** One change per `--label`; nothing goes live
+without a same-tree gate of more than three standard errors and a replay pass; the bot sits in
+the lobby only for the quota burst and the fixture windows; one heavy job at a time beside the
+bot unless `free -m` shows more than 3 GB available; no coding 09:00 to 12:00 on a day the user
+says so.
 
 **Read first: `docs/research/2026-09-15-what-moves-the-bot.md`**, the synthesis of four reviews
 run overnight on 14 to 15 September, with the four full reports beside it. The cause of the
@@ -105,6 +466,92 @@ the fix (`results/slumbot/calibration_always_fold_1k.json`; raw must read −750
 12bb); its replay waits for the Slumbot run to free the memory, then it takes Thursday's 05:30
 quota as its gate. Playoff picture from round 1: wsp, Fold-ver-3, mellyy and one of PoetAndCoder,
 v003 or us.
+**Wednesday 12:51 IST: v5's quota burst is in, 13 of 20.** 524 hands, +60,000 chips, +115 ± 84
+chips/hand, showdowns 86 won / 43 lost: mr_hide 6 of 8 (+233/hand), hoops 4 of 6 (+107),
+r0ckGarden 3 of 6 (0). Rating 1617 → 1601 ± 63 over the burst despite the chips, because the
+house bots sit far below us and a loss costs several wins; the season is decided by fixtures, so
+this number is not acted on. The two mr_hide losses were both cap-2 coverage: a third raise on
+the turn (K4s called TT's shove through the fallback at 2.8 to 1) and 16 misses in 39 hands, 7 of
+them at zero raises on the 70bb rung. That is what the v7 recipe (lane N) and v6's short cap-2
+rungs are for, not a new rule. The bot stays up as v5 for v003 at Thursday 00:00.
+**Wednesday 12:55 IST: the v7 gate is a tie, so v5's recipe stands.** Lane N trained the cap-2
+100bb rung with all four flagged solver changes on (CRN, exact terminals, current-when-empty,
+average from 0.1; `results/cfr/experiments/cap2_100bb_v7.*`) and played it against v5's rung on
+the same tree, 40k x 3: **+0.12 ± 1.46 BB/100** (`ladder169l/gate_v7_vs_v5_cap2_100bb.json`).
+Both reached the same 2.26M information sets, so none of the four changes widens coverage, which
+is what the arena misses need; they change what is written at a node, not which nodes exist.
+A same-recipe head-to-head is also nearly blind to this kind of change by construction (two
+near-equilibria score about zero against each other), so a tie here says "not worse", not
+"no effect"; the honest test of these flags is exploitability or the Slumbot column, later.
+**Decision: no retrain tonight.** v5 plays v003 at 00:00, v6 (short cap-2 rungs) takes the
+05:30 quota as its gate. The flags stay off by default. Lane N's 2,224 s for 3M is not a timing
+result either; v5's rung trained beside three other lanes.
+**Wednesday 14:27 IST: lane O, the coverage lever, queued behind the Slumbot run.**
+`~/pokerbot-scratch/ladder169/laneO.sh` (detached with nohup) waits for `slumbot_measure.py` to
+exit, then retrains v5's three deep cap-2 rungs with the same recipe and seed at **10M
+iterations instead of 3M** (`results/cfr/experiments/cap2_{100,70,50}bb_10m.pkl`), verifying
+each pickle loads and gating each same-tree against the v5 rung
+(`ladder169l/gate_10m_vs_v5_<rung>.json`, 40k x 3). Why this and not the flags: the v7 tie
+showed the flags do not add nodes, while the 169-class progression climbed steadily with
+iterations to 3M and the mr_hide losses were unreached nodes. Watch:
+`tools/exp-progress.sh --watch`. **Decision rule:** a rung whose gate wins by more than three
+standard errors replaces v5's in `ladder169l_v6` for Thursday's 05:30 burst and for Shadow; if
+the 100bb gate is in before 23:00 and wins that clearly it can also go live for v003 under a
+new label, otherwise v003 is played by v5 unchanged. A tie means iterations are not the lever
+either and the deep-rung work stops for the season.
+Wednesday 16:40 IST: lane O's sequential loop was replaced by lane P (`laneP.sh`, same log): the
+trainer is single-threaded and the machine was otherwise idle, so the 70bb and 50bb rungs now
+train beside the 100bb one instead of after it, three trainers at about 0.5 GB each beside the
+1 GB bot. All three gates should land this evening instead of after 02:00.
+**Wednesday 17:00 IST: item 11, threads, is done.** The native solver takes `--threads N` (see the
+defect table); one thread is bit-identical to before, four gave 4.0x on the golden game, and
+`native/build.sh` now installs by rename, so a rebuild no longer kills a running trainer (the
+three 10M trainers kept running through this one; the guard that refused to build is gone).
+The whole 16-rung retrain that took two lanes ten hours on Tuesday would take about three hours
+on six threads. That also changes the arithmetic of the v7 flags: lane N's recipe was 2.5x
+faster per iteration than v5's on the same rung on a quiet machine (0.74 vs 1.9 ms/it), most
+likely common random numbers sparing the bucket lookups, and threads multiply that. Nothing goes
+live from this before Thursday; what it buys is that tonight's decision can be followed by a
+full retrain of whichever recipe wins, on threads, in time for the playoffs.
+**Wednesday 21:35 IST: the 100bb gate wins, +9.4 ± 1.0 BB/100 to 10M over v5's 3M** (seeds
+7.4, 10.4, 10.4; `ladder169l/gate_10m_vs_v5_cap2_100bb.json`; 2,312,269 information sets against
+2,263,275, 22,445 s at 2.24 ms/it beside two other trainers). Nine standard errors, so by the
+rule above it goes in. Iterations are the lever, and the v7 flags were not. Assembled
+`results/cfr/ladder169l_10m/`: symlinks to v5's rungs with `cap2_100bb.*` pointing at the 10M
+solve, the 70bb and 50bb rungs to follow the same way if their gates (about 22:00 and 22:30)
+win. Then the replay check, and the bot restarts as **v5b: v5 with 10M deep cap-2 rungs** before
+23:30 for v003, one change under its own label. v6 for Thursday 05:30 takes the same rungs.
+**Wednesday 22:40 IST: all three deep rungs win; v5b assembled; a new platform limit.** 50bb
++3.0 ± 0.7, 70bb +3.6 ± 0.7 (4 and 5 standard errors; `gate_10m_vs_v5_cap2_{50,70}bb.json`), so
+`ladder169l_10m` carries all three 10M rungs. Replay (`results/chipzen/replay_10m.md`): the same
+143 misses as the v5 set on 2,559 logged decisions, so the 10M solves do not add coverage on the
+lines actually played; they play the reached nodes better (most likely action differs on 25% of
+preflop and 11 to 12% of postflop decisions). The bot was started as **v5b** at 22:35, reached
+the lobby, and was stopped again, because the platform now enforces **lobby_hours_per_day, 8 h
+on the free tier, resets 00:00 UTC (05:30 IST)**; we hit it at 20:02 (the queue has returned 429
+every 22 s since) and were at 10.6 h. Whether an over-limit bot can still receive its fixture is
+unknown, so exposure is cut: `~/pokerbot-scratch/chipzen/fixture_v003.sh` reconnects at 23:40
+with `--accept-inbound` only (no `--queue`) and prints the lobby status at 23:45. From Thursday
+the bot must not sit in the lobby outside the quota burst and the fixture windows, or the 8 hours
+run out before the evening's match. The 05:30 burst is v6's gate as planned, and v6 should take
+the 10M rungs too, so assemble it as v5b plus the short cap-2 rungs before then.
+**Wednesday 15:20 IST: the 10,000-hand Slumbot run is in: −815 ± 357 mbb/hand.**
+`results/slumbot/m1_cap2_200bb_fallback.json` (9,999 hands, one illegal-bet protocol error, 532
+min of play, seed 20260916, the fixed player throughout: 6,000 hands before the 09:00 pause and
+3,999 after, the two segments agree at −70 ± 44 and −98 ± 60 chips/hand). That is the raw
+column, the one the calibration validated; the differenced column read +130 and is not quoted.
+The fallback did not move it: the pre-fix player's 5,498-hand partial read −790 ± 540 on the
+same strategy. Split (`m1_cap2_200bb_fallback_split.md`): hands with a lookup miss are 4% of
+hands and 41% of the loss at −7,960 mbb each (stack-offs), and 168 of the 325 misses were at
+**zero raises on the street**, the same shape as the mr_hide losses: histories the 3M-iteration
+tree never visited. Hands without a miss still lose −499 ± 284, almost all of it at river
+showdowns (−7,040 per showdown) and from the big blind (−1,368 vs −261 on the button). So
+against a bot this strong the 200bb cap-2 contender has two problems: coverage (lane O is the
+test) and river play at showdown (the river solver, item 13, post-season). The report crashed
+once on the checkpoint's string keys (`miss_depths`), fixed, with `--report-partial` added so a
+run that finishes its hands and dies in the report is written from the checkpoint instead of
+replayed. For the season nothing changes: Slumbot is 200bb unlimited-raise against a far
+stronger opponent than any fixture; the arena is 100bb.
 
 **Wednesday 00:40 IST: runner1 won, a fifth read in for mellyy.** Fixture 1: NashForge beat
 runner1, 78 hands, +10,000; 21 bluffs withheld, one river bet believed, 10 misses, slowest
@@ -356,17 +803,17 @@ iterations at a fixed seed, `average_strategy()` byte-identical before and after
 
 | # | defect | where | fix | effort | gate |
 |---|---|---|---|---|---|
-| 1 | a never-averaged node is exported as an exact uniform: the 50/50 facing a shove, invisible to the miss counter | `native/src/mccfr.hpp` `average_strategy` | export regret matching's current strategy where the sum is zero, or mark the entry as a miss so the companion answers | 1 h | same-tree head-to-head |
-| 2 | the export builds a `std::map`, then a dict, then millions of numpy arrays: a 1 GB spike on every write, the memory-kill state twice on 15 Sept | `bindings.cpp:131-136`, `train_nolimit.py:180` | stream to flat arrays | 1.5 h | equality |
+| 1 | **done 16 Sept behind a flag**: `--current-when-empty` exports regret matching's current strategy where the average is empty (`strategy_for_export`); test pins that only uniform averages change. Gated 16 Sept in the v7 bundle: tie, +0.12 ± 1.46 BB/100 on the same tree; stays off | | | | |
+| 2 | **done 16 Sept**: `average_strategy_flat` in the bindings (three arrays via nanobind ndarrays), the trainer builds the pickle's dict as views and writes the flat pair beside it; golden identical, flat equals map entry for entry, end-to-end verified on a tiny run | | | | |
 | 3 | **done 16 Sept, ladders converted** (ladder169l, ladder169l_v6, contender: 3.2 GB to 263 MB): `cfr/flat.py` (`FlatStrategy`, `load_strategy`), `scripts/cfr/flatten_strategy.py`, `tests/test_flat.py` pins the chip series identical; the three loaders prefer a flat pair newer than its pickle. Convert the ladders (`flatten_strategy.py results/cfr/ladder169l/*.pkl`, one pickle in memory at a time) when the machine is free, then restart the bot on them | every `saved["strategy"]` site | sorted `uint64` keys, `int32` offsets, one `float32` array, behind a `Mapping` shim with `.get` | 6 to 8 h | equality: shim reproduces the dict entry for entry, `benchmark()` chip series identical at a fixed seed |
-| 4 | `street_actions` builds a string 4,052 times per iteration; `utility` and `who_folded` copy substrings 210 times | `nolimit.hpp:94-97`, `nolimit_game.hpp:152,185` | `string_view` or a cached street-start index in `State` | 2 h | equality |
+| 4 | **done 16 Sept**: `street_actions` and `who_folded` return views; golden output identical; the same cap-2 solve 1.646 to 1.501 ms per iteration with the bot and a Slumbot run sharing the machine | | | | |
 | 5 | **done 16 Sept**: refetch removed, golden output identical. The reserve was tried and taken out (1.62 with, 1.65 without, no difference). Speed effect of the refetch itself unmeasured: the audit's 1.43 ms baseline was a six-class-preflop tree, and the 169-class one times at 1.62; a proper A/B against the pre-change module is part of the Thursday sitting | | | | |
 | 6 | **done 16 Sept** (memo cap 4,096; golden output identical; `cache_size` still unbound) | | | | |
-| 7 | packed keys: 20-char strings hashed per visit | `nolimit_game.hpp:176-178` | `(bucket << 56) \| code` in a `uint64`, 3 bits per symbol, 50 bits of history | 3 h | equality (bijective) |
-| 8 | every traverser branch deals its own board: about 91 runouts per iteration, variance, 5x of wasted time | `mccfr.hpp:173-174`, `nolimit_game.hpp:112-148` | one deal per iteration, prefixes revealed | 4 to 6 h | Kuhn −1/18, Leduc exploitability, one same-tree head-to-head |
-| 9 | an all-in is scored by one sampled runout: the dominant noise at the shove nodes | `nolimit.hpp:117`, `nolimit_game.hpp:150-174` | preflop by a suit-aware 1,326 x 1,326 table (build once), turn by 44 runouts, flop by 990 | 4 h plus the table | convergence tests |
-| 10 | the average accumulates from iteration 1 | `mccfr.hpp` | skip the first part of the run (Pluribus, Modicum) | 0.5 h | Kuhn and Leduc |
-| 11 | one thread per solve | `mccfr.hpp` | after 7: pre-sized open-addressed table with CAS insert, per-thread RNG and game, relaxed atomic accumulation | 8 to 16 h | Kuhn with 8 threads; a head-to-head |
+| 7 | **done 16 Sept**: 64-bit packed keys (bucket in the top byte, 18 history symbols at 3 bits), decoded on export; golden identical. Timing inconclusive under a load average of 4 to 6 with the bot and Slumbot running (1.66 to 1.72 against 1.50 measured earlier at lower load); A/B on a quiet machine still owed | | | | |
+| 8 | **done 16 Sept behind a flag**: `--common-random-numbers` (one nine-card deal per iteration, revealed street by street, shared by both traversers; `set_common_random_numbers` on the solver), off by default so the golden output stands; shape test passes. Gate: a same-tree head-to-head against the same recipe without it, 16 Sept v7 bundle: tie, stays off | | | | |
+| 9 | **done 16 Sept behind a flag**: `--exact-terminals` scores flop and turn all-ins over every runout (990 or 44); test agrees with 40,000 sampled runouts within 0.02 on three boards; preflop all-ins still sampled (a table later). Gated 16 Sept in the v7 bundle: tie, +0.12 ± 1.46 BB/100 on the same tree; stays off | | | | |
+| 10 | **done 16 Sept as an option**: `--average-from 0.1` on the trainer (`set_average_from` in the native solver, mirrored in `cfr/mccfr.py`), default 0 so the golden output is unchanged; Kuhn reaches −1/18 with the first quarter skipped. Use it in the next retrain, which is then gated as a path change | | | | |
+| 11 | **done 16 Sept behind a flag**: `--threads N` on the trainer (`MCCFR::train(iterations, threads)`): a 256-shard node table locked per shard for insertion, a one-byte spinlock per node for the update, per-worker game copy and random stream, iterations handed out by an atomic counter. One thread is the exact old path (golden test: 0 mismatches). Measured on the golden 20bb cap-2 game beside three running trainers: 0.234 ms/it at 1 thread, 0.058 at 4 (4.0x); Kuhn converges at 4 threads; same-iteration head-to-heads are inside the seed-to-seed noise of ±10 BB/100 (−10.1 ± 4.5 and +9.2 ± 1.4 at two seeds) and 4x the iterations in the same wall time wins +29.2 ± 6.7 (`results/cfr/experiments/threads/`). Not deterministic above one thread. Pre-sized open addressing was not needed | | | | |
 | 12 | **done 16 Sept**: a per-decision memo in `decide` and a bounded memo across decisions in `ArenaPlayer._bucket` (the same cards come back every street), seeded per key as the lookup is; rule tests pass | `benchmark.py:196-198`, `chipzen/player.py:341-347` | memoise per decision | 1 h | equality |
 | 13 | **memo done 16 Sept** (`HandSet.build` and the per-board bucket arrays memoised, river tests pass, warm build 0 ms); the tree build outside the budget and the incidence matmul remain | `cfr/river.py:360-373,430-432` | memoise by board; move the build inside the budget; an incidence matmul in `showdown` | 1 to 2 h | equality |
 | 14 | **done 16 Sept**: always-fold read −699 ± 21 mbb/hand over 1,000 hands against an expectation of −700 (Slumbot folds its small blind a fifth of the time), so the raw column is honest; the baseline-differenced column read −646 ± 1,193 and is retired | | |
@@ -452,19 +899,28 @@ about −1,000 to a few hundred, and that a win needs steps 1 to 3 together, whi
 Free tier: 20 challenge or queue matches a day, reset 05:30 IST; season fixtures do not count.
 Every match log is stamped with the version; `results/chipzen/epochs.json` labels the older ones.
 
-### After the season, in this order
+### After the season, in this order (rewritten 19 September)
 
 - **Read `docs/arena-plan.md`** for the drawbacks and what each fix did; **`docs/chipzen.md`**
-  for the platform; **`docs/contender-plan.md`** for the deeper tree gated on Slumbot.
-- The container upload (a second rated record on the bigger ladder): drop numba from the play
-  path via the C++ equity function, load only reachable rungs under 256 MB, image under 200 MB.
-  The solver tables are dicts of small arrays at a few hundred bytes each; flat arrays would cut
-  the 2.4 GB the v3 set uses to a fifth.
-- The cap-2 solvers at 50, 70 and 100bb had 3M iterations over 1 to 2.2 million situations, so
-  the rare corners (three-bet shoves) are thinly trained: more iterations there is the cheapest
-  strength gain, about 2 hours per rung per 3M iterations.
-- Slumbot re-measurement on the contender set (12 h), then the miss-rate gate in the contender
-  plan; bet sizes (`NUM_ACTIONS`) last.
+  for the platform; `docs/research/2026-09-17-cap2-convergence.md` for the solver findings.
+- **The full-width solver on the explicit abstract game** (`cfr/fullwidth.py`), gated at 8bb
+  first: its one-raise solve must tie the sampled one-raise rung (the faithfulness check), then
+  its cap-2 solve against the same rung is the question lane AB could not answer. If the
+  factorised chance is not faithful past the preflop all-in table, joint chance is the next
+  build. Then the C++ port, if it passes.
+- **The abstraction**, if the full-width solve says the floor is the buckets: more postflop
+  strength classes, one rung retrained warm and pruned, gated cross-tree against a one-raise
+  rung on the same new abstraction.
+- **Promotion by the rule, rung by rung:** a cap-2 rung becomes primary at its depth when it
+  beats its one-raise rung on `tools/xtree-gate.sh` at two seeds, then replay, then a burst.
+  12bb is level already.
+- **Companions:** the 100M warm-pruned solves beat the 20M ones same-tree; a burst under its own
+  label is the arena test. The maniac read (fold one pair to a river shove when the opponent's
+  raise share is over half), gated on the replay.
+- **Pruning at −300 stacks on by default** once re-measured on a deep rung; warm start frozen
+  100k as the standard start. Iterations beyond 100M are not a lever (lane AB).
+- The container upload (a second rated record, run on their machines) and the Slumbot
+  re-measurement on whichever solver wins the above; bet sizes (`NUM_ACTIONS`) last.
 
 ### What was learned this week, briefly
 
@@ -762,19 +1218,22 @@ benchmark there, so the panel loses its only opponent from outside the lineage. 
 
 ## The solvers on disk
 
-Four now, and which one is `nolimit_strategy.pkl` has changed, so a figure without a named solver
-cannot be placed.
+The arena sets, newest first. Each rung is `<name>.pkl` plus a `.flat.npz`/`.flat.pkl` pair (the
+flat tables the bot loads; `cfr/flat.py`), and a `.json` stamp with the recipe.
 
-| file | iterations | game | role |
-|---|---|---|---|
-| `nolimit_strategy.pkl` | 250,000 | corrected (all-in terminates) | **the panel opponent** |
-| `nolimit_strategy_v2_250k.pkl` | 250,000 | corrected | same solver, kept under its own name |
-| `nolimit_strategy_250k.pkl` | 250,000 | pre-all-in-fix | superseded |
-| `nolimit_strategy_150k.pkl` | 150,000 | pre-all-in-fix | produced the −987 Slumbot figure |
-| `nolimit_strategy_4k.pkl` | 4,000 | pre-all-in-fix | the old panel; every pre-8-September figure |
+| set | what | role |
+|---|---|---|
+| `results/cfr/ladder169l_10m/` | v5's rungs; 50/70/100bb cap-2 at 10M (symlinks into `experiments/`) | **v5b, live for v003** |
+| `results/cfr/ladder169l_v6/` | v5b plus cap-2 at 35/25/18/12bb (`ladder169l_short/`) | v6, gated Thursday 05:30 |
+| `results/cfr/ladder169l/` | 169-class linear, 3M per rung, texture, 200 samples | v5 (won runner1, mellyy, 13 of 20 house) |
+| `results/cfr/ladder200t/` | six Chen classes, vanilla, texture | v3/v4; beaten by v5 at every rung |
+| `results/cfr/contender/cap2_200bb.*` | 200bb cap-2, 3M, 169 linear | the Slumbot instrument (−815 ± 357) |
+| `results/cfr/experiments/` | cap2_100bb_v7 (four flags; tie), *_10m (the wins), b20, 1M/3M tests, `threads/` | evidence, see the gates |
 
-All are tracked — `.gitignore` negates `*.pkl` under `results/`, because a solved strategy is a
-result and the 4,000-iteration one was once missing from the repository entirely.
+Gates live beside the sets they judge (`ladder169l/gate_*.json`, `h2h_*.json`). The solver
+pickles and flat tables are **not tracked** (hundreds of MB each); the JSON stamps and gates
+are. The older single solvers (`nolimit_strategy*.pkl`, the Phase 4 panel opponent at 250k) are
+unchanged and still tracked; `nolimit_strategy.pkl` is the corrected 250k one.
 
 ---
 

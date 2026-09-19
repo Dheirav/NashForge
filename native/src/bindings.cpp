@@ -1,4 +1,6 @@
 #include <string>
+#include <cstring>
+#include <algorithm>
 #include <nanobind/nanobind.h>
 #include <nanobind/stl/vector.h>
 #include <nanobind/stl/tuple.h>
@@ -9,6 +11,7 @@
 #include "mccfr.hpp"
 #include "kuhn.hpp"
 #include "nolimit_game.hpp"
+#include <nanobind/ndarray.h>
 #include <nanobind/stl/map.h>
 #include <nanobind/stl/string.h>
 #include <nanobind/stl/pair.h>
@@ -78,15 +81,26 @@ NB_MODULE(pokerbot_native, m) {
        "-2 at a chance node, -3 if an action was not legal.");
 
     // --- MCCFR, validated on Kuhn -------------------------------------------
-    m.def("solve_kuhn", [](int64_t iterations, uint64_t seed) {
-        MCCFR<KuhnPoker> solver(KuhnPoker{}, UpdateRule::vanilla(), seed);
-        solver.train(iterations);
+    m.def("solve_kuhn", [](int64_t iterations, uint64_t seed, int64_t average_from, int threads,
+                           const std::vector<std::pair<std::string, std::vector<double>>>& warm,
+                           int64_t warm_weight, double warm_scale, const std::string& rule,
+                           const std::string& warm_mode, int64_t prune_after, double prune_threshold) {
+        MCCFR<KuhnPoker> solver(KuhnPoker{}, UpdateRule::from_name(rule), seed);
+        solver.set_average_from(average_from);
+        if (!warm.empty()) solver.warm_start(warm, warm_weight, warm_scale, warm_mode);
+        if (prune_after >= 0) solver.set_pruning(prune_after, prune_threshold, 0.95);
+        solver.train(iterations, threads);
         std::map<std::string, std::vector<double>> out;
-        for (const auto& [key, node] : solver.nodes())
-            out[key] = node.average_strategy();
+        solver.for_each_node([&](const std::string& key, const InfoSetNode& node) {
+            out[solver.key_string(key)] = node.average_strategy();
+        });
         return out;
-    }, nb::arg("iterations"), nb::arg("seed"),
-       "Solve Kuhn poker. The game value to player 0 is -1/18 at equilibrium.");
+    }, nb::arg("iterations"), nb::arg("seed"), nb::arg("average_from") = 0, nb::arg("threads") = 1,
+       nb::arg("warm") = std::vector<std::pair<std::string, std::vector<double>>>{},
+       nb::arg("warm_weight") = 0, nb::arg("warm_scale") = 1.0, nb::arg("rule") = "vanilla",
+       nb::arg("warm_mode") = "proportional", nb::arg("prune_after") = -1, nb::arg("prune_threshold") = 0.0,
+       "Solve Kuhn poker. The game value to player 0 is -1/18 at equilibrium. `warm` seeds "
+       "the named information sets before training, see MCCFR::warm_start.");
 
     // --- the no-limit solver -----------------------------------------------
     //
@@ -94,6 +108,33 @@ NB_MODULE(pokerbot_native, m) {
     // over sampled equities is cheap and happens once, and refitting in C++
     // would be a second clustering that could silently disagree with the one
     // every existing strategy was built against.
+    m.def("allin_edge", [](const std::vector<int>& mine, const std::vector<int>& theirs,
+                           const std::vector<int>& board, bool exact, int samples, uint64_t seed) {
+        // For tests: P(win) - P(lose) of `mine` against `theirs` over the
+        // runouts of `board`, exactly or by sampling.
+        NoLimitGame game(Abstraction{}, 200, 1, 2, RaiseSchedule{});
+        game.set_exact_terminals(exact);
+        NoLimitGame::State s = game.initial_state();
+        s.hole[0] = {static_cast<int8_t>(mine[0]), static_cast<int8_t>(mine[1])};
+        s.hole[1] = {static_cast<int8_t>(theirs[0]), static_cast<int8_t>(theirs[1])};
+        s.bet.dealt = true;
+        for (size_t i = 0; i < board.size(); ++i) s.bet.board[i] = static_cast<int8_t>(board[i]);
+        s.bet.board_n = static_cast<int8_t>(board.size());
+        s.bet.street = static_cast<int8_t>(board.size() == 3 ? 1 : (board.size() == 4 ? 2 : 3));
+        s.bet.contributions = {100, 100};
+        s.bet.committed = {0, 0};
+        s.bet.stacks = {0, 0};
+        if (exact) return game.allin_edge(s, 0);
+        Rng rng(seed);
+        double total = 0.0;
+        for (int i = 0; i < samples; ++i) {
+            NoLimitGame::State r = s;
+            while (r.bet.board_n < 5) r = game.sample_chance(r, rng);
+            total += game.utility(r, 0) / 100.0;
+        }
+        return total / samples;
+    }, nb::arg("mine"), nb::arg("theirs"), nb::arg("board"), nb::arg("exact"), nb::arg("samples") = 0, nb::arg("seed") = 0);
+
     m.def("board_texture", [](const std::vector<int>& board) {
         return Abstraction::board_texture(board.data(), static_cast<int>(board.size()));
     }, nb::arg("board"), "Board texture class, mirroring abstraction.buckets.board_texture.");
@@ -123,15 +164,78 @@ NB_MODULE(pokerbot_native, m) {
            nb::arg("equity_samples"), nb::arg("starting_stack"),
            nb::arg("small_blind"), nb::arg("big_blind"), nb::arg("schedule"),
            nb::arg("seed"), nb::arg("texture") = false, nb::arg("rule") = "vanilla")
-        .def("train", &MCCFR<NoLimitGame>::train, nb::arg("iterations"),
+        .def("set_common_random_numbers", [](MCCFR<NoLimitGame>& s, bool on) { s.game().set_common_random_numbers(on); },
+             nb::arg("on"), "One deal per iteration shared across every branch (variance reduction); off by default.")
+        .def("set_exact_terminals", [](MCCFR<NoLimitGame>& s, bool on) { s.game().set_exact_terminals(on); },
+             nb::arg("on"), "Score flop and turn all-ins over every runout instead of one sample; off by default.")
+        .def("set_current_when_empty", &MCCFR<NoLimitGame>::set_current_when_empty, nb::arg("on"),
+             "Export the current strategy where the average is empty, instead of a uniform; off by default.")
+        .def("set_average_from", &MCCFR<NoLimitGame>::set_average_from, nb::arg("iteration"),
+             "Accumulate the average strategy only from this iteration on (0: from the start).")
+        .def("warm_start", &MCCFR<NoLimitGame>::warm_start, nb::arg("entries"), nb::arg("weight"), nb::arg("scale"),
+             nb::arg("mode") = "proportional",
+             "Seed nodes from a coarser game's strategy, [(key, probabilities)]: `proportional` sets regrets "
+             "to the prior at `weight` iterations of `scale` chips; `frozen` plays the prior for `weight` "
+             "iterations while regrets accumulate (sampled substitute regrets); see MCCFR::warm_start.")
+        .def("set_pruning", &MCCFR<NoLimitGame>::set_pruning, nb::arg("after"), nb::arg("threshold"), nb::arg("fraction") = 0.95,
+             "Regret-based pruning from iteration `after`: on `fraction` of iterations skip actions with "
+             "regret below `threshold` chips (never on the river, never an action that ends the hand).")
+        .def("pruned", &MCCFR<NoLimitGame>::pruned, "Action visits skipped so far.")
+        .def("warm_entries", &MCCFR<NoLimitGame>::warm_entries)
+        .def("warm_hits", &MCCFR<NoLimitGame>::warm_hits, "Nodes created so far that took a warm entry.")
+        .def("train", &MCCFR<NoLimitGame>::train, nb::arg("iterations"), nb::arg("threads") = 1,
              nb::call_guard<nb::gil_scoped_release>(),
-             "Run `iterations` passes, each traversing once per player.")
+             "Run `iterations` passes, each traversing once per player, over `threads` workers "
+             "sharing the table (1: the exact single-threaded path).")
         .def("iterations", &MCCFR<NoLimitGame>::iterations)
-        .def("information_sets", [](const MCCFR<NoLimitGame>& s) { return s.nodes().size(); })
+        .def("information_sets", [](const MCCFR<NoLimitGame>& s) { return s.size(); })
         .def("average_strategy", [](const MCCFR<NoLimitGame>& solver) {
             std::map<std::string, std::vector<double>> out;
-            for (const auto& [key, node] : solver.nodes())
-                out[key] = node.average_strategy();
+            solver.for_each_node([&](uint64_t key, const InfoSetNode& node) {
+                out[solver.key_string(key)] = solver.strategy_for_export(node);
+            });
             return out;
-        }, "Information-set key -> action probabilities, as the Python returns.");
+        }, "Information-set key -> action probabilities, as the Python returns.")
+        .def("average_strategy_flat", [](const MCCFR<NoLimitGame>& solver, int key_width) {
+            // The same strategy as three arrays: keys zero-padded to
+            // `key_width` bytes and sorted, row offsets, and one values array.
+            // The map export built a red-black tree of strings and vectors,
+            // then a dict, then millions of numpy arrays: about a gigabyte of
+            // transient memory per write on a big rung, which twice put this
+            // machine into the state where the harness kills jobs.
+            std::vector<std::pair<std::string, const InfoSetNode*>> keys;
+            keys.reserve(solver.size());
+            solver.for_each_node([&](uint64_t key, const InfoSetNode& node) {
+                keys.emplace_back(solver.key_string(key), &node);
+            });
+            std::sort(keys.begin(), keys.end(),
+                      [](const auto& a, const auto& b) { return a.first < b.first; });
+            const size_t n = keys.size();
+            size_t total = 0;
+            for (const auto& k : keys) {
+                if (static_cast<int>(k.first.size()) > key_width)
+                    throw std::invalid_argument("information-set key longer than key_width: " + k.first);
+                total += static_cast<size_t>(k.second->num_actions);
+            }
+            uint8_t* key_bytes = new uint8_t[n * static_cast<size_t>(key_width)]();
+            int64_t* offsets = new int64_t[n + 1];
+            double* values = new double[total];
+            size_t at = 0;
+            offsets[0] = 0;
+            for (size_t i = 0; i < n; ++i) {
+                const std::string& k = keys[i].first;
+                std::memcpy(key_bytes + i * static_cast<size_t>(key_width), k.data(), k.size());
+                const std::vector<double> row = solver.strategy_for_export(*keys[i].second);
+                for (double v : row) values[at++] = v;
+                offsets[i + 1] = static_cast<int64_t>(at);
+            }
+            nb::capsule own_keys(key_bytes, [](void* p) noexcept { delete[] static_cast<uint8_t*>(p); });
+            nb::capsule own_offsets(offsets, [](void* p) noexcept { delete[] static_cast<int64_t*>(p); });
+            nb::capsule own_values(values, [](void* p) noexcept { delete[] static_cast<double*>(p); });
+            return nb::make_tuple(
+                nb::ndarray<nb::numpy, uint8_t, nb::ndim<2>>(key_bytes, {n, static_cast<size_t>(key_width)}, own_keys),
+                nb::ndarray<nb::numpy, int64_t, nb::ndim<1>>(offsets, {n + 1}, own_offsets),
+                nb::ndarray<nb::numpy, double, nb::ndim<1>>(values, {total}, own_values));
+        }, nb::arg("key_width") = 32,
+           "The average strategy as (keys as an (n, key_width) uint8 array, sorted; int64 offsets; float64 values).");
 }

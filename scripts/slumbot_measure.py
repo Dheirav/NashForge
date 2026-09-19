@@ -191,6 +191,10 @@ def main():
                         help="play the most probable action instead of sampling; off by default")
     parser.add_argument("--no-fallback", action="store_true",
                         help="guess uniformly at random on a lookup miss, as before 15 September")
+    parser.add_argument("--report-partial", action="store_true",
+                        help="write the report from a checkpoint that already holds "
+                             "every hand, without playing; for a run that finished "
+                             "its hands and then failed in the report")
     parser.add_argument("--resume", action="store_true",
                         help="continue from the .partial.json beside --out")
     args = parser.parse_args()
@@ -220,9 +224,22 @@ def main():
         # Protocol health carries across the join, or the miss rate printed at
         # the end describes only the hands this process happened to play.
         for name, value in (saved.get("stats") or {}).items():
+            # The same JSON string-key trap as positions: the depth dicts are
+            # keyed by int and the report sorts them, and a "2" beside a 2
+            # crashed the report at the end of a nine-hour run on 16 Sept.
+            if isinstance(value, dict):
+                value = {int(k) if str(k).lstrip("-").isdigit() else k: v
+                         for k, v in value.items()}
             setattr(player.stats, name, value)
     elif args.resume:
         print(f"no checkpoint at {partial}; starting from hand 1\n", flush=True)
+    if args.report_partial:
+        if len(winnings) + len(errors) < args.hands:
+            raise SystemExit(f"{partial} holds {len(winnings)} hands of {args.hands}; "
+                             "not a finished run, resume it instead")
+        report(player, winnings, baseline, positions, errors, args, prior_elapsed, hands)
+        os.remove(partial)
+        return
 
     print(f"M1 — {args.hands:,} hands against Slumbot, seed {args.seed}")
     print(f"strategy: {os.path.basename(args.strategy)}")

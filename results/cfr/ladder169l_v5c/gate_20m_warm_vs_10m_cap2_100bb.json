@@ -1,0 +1,23 @@
+{
+ "first": "results/cfr/experiments/cap2_100bb_20m_warm.pkl",
+ "second": "results/cfr/ladder169l_10m/cap2_100bb.pkl",
+ "hands": 40000,
+ "seeds": [
+  0,
+  1,
+  2
+ ],
+ "bb_per_100": [
+  4.54375,
+  2.6168750000000003,
+  7.010624999999999
+ ],
+ "mean": 4.72375,
+ "stderr": 1.271555447162385,
+ "on_miss": "call",
+ "miss_rate": [
+  0.0017322523676250713,
+  0.0008680172143083843
+ ],
+ "measured": "2026-09-18 08:12"
+}

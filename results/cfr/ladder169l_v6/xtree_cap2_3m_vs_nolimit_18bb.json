@@ -1,0 +1,18 @@
+{
+ "first": "results/cfr/ladder169l_v6/cap2_18bb.pkl",
+ "second": "results/cfr/ladder169l/nolimit_18bb.pkl",
+ "hands": 40000,
+ "seeds": [
+  0,
+  1,
+  2
+ ],
+ "bb_per_100": [
+  -29.501250000000002,
+  -47.10375,
+  -28.648125
+ ],
+ "mean": -35.084375,
+ "stderr": 6.014731557029374,
+ "measured": "2026-09-17 08:46"
+}

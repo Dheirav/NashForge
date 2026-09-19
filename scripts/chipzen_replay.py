@@ -79,10 +79,11 @@ def lookup(solver, decision):
     return weights / weights.sum() if weights.sum() > 0 else None
 
 
-def answer(ladder_dir, deep_primary, decisions):
+def answer(ladder_dir, deep_primary, decisions, paths=None):
     """Distribution per decision id, loading one rung at a time."""
-    _, ladder, _ = ladder_paths(ladder_dir, deep_primary)
-    by_depth = {depth_of(p): p for p in ladder}
+    if paths is None:
+        _, paths, _ = ladder_paths(ladder_dir, deep_primary)
+    by_depth = {depth_of(p): p for p in paths}
     grouped = defaultdict(list)
     for d in decisions:
         grouped[rung_for(list(by_depth), d["effective_bb"])].append(d)
@@ -95,11 +96,49 @@ def answer(ladder_dir, deep_primary, decisions):
     return out
 
 
+def companion_answers(ladder_dir, deep_primary, decisions):
+    """
+    What the full-size cap-2 companions would say on the primary's misses.
+
+    The logged history key writes a re-raise with the same size symbols the
+    cap-2 tree uses ("345": pot, two-times, all-in), so a cap-2 companion is
+    a plain lookup on the primary's key. The (4, 2) taper is not: its second
+    raise has two sizes and the bridge re-maps the history onto them, which
+    the log does not hold, so tapers are left out here and a miss at their
+    depths stays a miss. Companion chosen as `ArenaPlayer.companion_for`
+    does: nearest in log-depth, within a ratio of two.
+    """
+    _, _, companions = ladder_paths(ladder_dir, deep_primary)
+    cap2 = [p for p in companions if os.path.basename(p).startswith("cap2_")]
+    if not cap2 or not decisions:
+        return {}
+    by_depth = {depth_of(p): p for p in cap2}
+    grouped = defaultdict(list)
+    for d in decisions:
+        depth = rung_for(list(by_depth), d["effective_bb"])
+        if d["effective_bb"] > 0 and abs(log(depth) - log(d["effective_bb"])) <= log(2.0):
+            grouped[depth].append(d)
+    out = {}
+    for depth, rows in sorted(grouped.items()):
+        solver = load_solver(by_depth[depth], np.random.default_rng(0))
+        for d in rows:
+            out[id(d)] = (lookup(solver, d), depth)
+        del solver
+    return out
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--ladder-dir", required=True)
     parser.add_argument("--baseline-dir", default=os.path.join(ROOT, "results", "cfr", "ladder200t"))
     parser.add_argument("--no-deep-primary", action="store_true")
+    parser.add_argument("--baseline-deep-primary", action="store_true",
+                        help="the baseline played with --deep-primary even though the new set does not")
+    parser.add_argument("--companions", action="store_true",
+                        help="answer the new set's primary misses with its cap-2 companions, as the bot would")
+    parser.add_argument("--river-shove-companion", action="store_true",
+                        help="also take the companion's answer where the primary faced an all-in on the river "
+                             "(the --river-shove-companion player flag), and report those decisions")
     parser.add_argument("--worst", type=int, default=8)
     parser.add_argument("--label-prefix", help="only matches whose version label starts with this, "
                         "e.g. v3: the baseline check is only clean on matches the baseline set played")
@@ -122,7 +161,22 @@ def main():
     decisions = [d for h, *_ in all_hands for d in h["decisions"]]
 
     new = answer(args.ladder_dir, deep, decisions)
-    old = answer(args.baseline_dir, deep, decisions)
+    old = answer(args.baseline_dir, deep or args.baseline_deep_primary, decisions)
+    primary_misses = [d for d in decisions if new[id(d)] is None]
+    comp = companion_answers(args.ladder_dir, deep, primary_misses) if args.companions else {}
+    answered = {k for k, (dist, _) in comp.items() if dist is not None}
+    for d in primary_misses:
+        if id(d) in answered:
+            new[id(d)] = comp[id(d)][0]
+    # River shoves: the primary has a node, the flag asks the companion anyway.
+    shoves = [d for d in decisions if args.river_shove_companion and d["phase"] == "river"
+              and d["to_call"] > 0 and d["history"].endswith("5") and new[id(d)] is not None]
+    shove_comp = companion_answers(args.ladder_dir, deep, shoves) if shoves else {}
+    primary_at_shove = {id(d): new[id(d)] for d in shoves}
+    for d in shoves:
+        dist = shove_comp.get(id(d), (None, None))[0]
+        if dist is not None:
+            new[id(d)] = dist
 
     lines = [f"# Replay: {os.path.relpath(args.ladder_dir, ROOT)} on the logged hands", "",
              f"{len(decisions)} decisions from {len(all_hands)} hands"
@@ -150,7 +204,10 @@ def main():
             changed[(ACTION[int(o.argmax())], ACTION[int(n.argmax())])] += 1
     lines += ["## Coverage", "",
               f"logged misses {cov['logged miss']}, baseline lookup misses {cov['baseline miss']} "
-              f"(these should match), new-set misses {cov['new miss']}; {cov['compared']} decisions compared.", "",
+              f"(these should match), new-set misses {cov['new miss']}"
+              + (f" after its cap-2 companions answered {len(answered)} of the primary's {len(primary_misses)}"
+                 if args.companions else "")
+              + f"; {cov['compared']} decisions compared.", "",
               "## Agreement with what was played", "",
               "Mean probability the set gives the action actually taken. The baseline played these, "
               "so its column is the check on the lookup; the new set's column is how differently it would play.", "",
@@ -176,6 +233,52 @@ def main():
     if big:
         lines += ["", f"Mean call probability over all {len(big)}: baseline "
                   f"{np.mean([old[id(d)][1] for d in big]):.2f}, new {np.mean([new[id(d)][1] for d in big]):.2f}."]
+
+    # ---- what the companion would do on the re-raises -----------------------
+    if args.companions:
+        rows = sorted((d for d in primary_misses if id(d) in answered), key=lambda d: -d["to_call"])
+        lines += ["", "## The primary's misses, answered by the cap-2 companion", "",
+                  "Every line the one-raise primary has no node for (an opponent's re-raise, mostly) and "
+                  "what the companion says there. Baseline is what the set that played gave at the same "
+                  "point (its own primary, or nothing if it fell to the rule).", "",
+                  "| hand | street | ours | board | to call | pot | played | companion | baseline |",
+                  "|---|---|---|---|---|---|---|---|---|"]
+        for d in rows[:25]:
+            dist, depth = comp[id(d)]
+            said = ", ".join(f"{ACTION[i]} {p:.2f}" for i, p in enumerate(dist) if p > 0.05)
+            o = old[id(d)]
+            base = ", ".join(f"{ACTION[i]} {p:.2f}" for i, p in enumerate(o) if p > 0.05) if o is not None else "no entry"
+            lines.append(f"| {d['hand']} | {d['phase']} | {' '.join(d['hole'])} | {' '.join(d['board'] or []) or '-'} "
+                         f"| {d['to_call']:,} | {d['pot']:,} | {ACTION.get(d['choice'])} | {depth:g}bb: {said} | {base} |")
+        big_calls = [d for d in rows if d["to_call"] > 0 and d["to_call"] >= d["pot"] - d["to_call"]]
+        if big_calls:
+            lines += ["", f"Facing a bet of the pot or more on those lines ({len(big_calls)}): the companion calls with "
+                      f"mean probability {np.mean([comp[id(d)][0][1] for d in big_calls]):.2f} and folds with "
+                      f"{np.mean([comp[id(d)][0][0] for d in big_calls]):.2f}."]
+
+    # ---- river shoves handed to the companion --------------------------------
+    if args.river_shove_companion:
+        hand_net = {id(d): net(h, seat) for h, seat, _, _ in all_hands for d in h["decisions"]}
+        rows = [d for d in shoves if shove_comp.get(id(d), (None, None))[0] is not None]
+        lines += ["", "## River shoves: the primary's answer against the companion's", "",
+                  f"{len(shoves)} river decisions faced an all-in with a primary node; the companion could answer "
+                  f"{len(rows)}. Net is the hand's result as played; a hand the companion would fold instead of "
+                  "calling loses only what was in before the shove.", "",
+                  "| hand | ours | board | to call | pot | played | net | primary call | companion call |",
+                  "|---|---|---|---|---|---|---|---|---|"]
+        called_lost = folded_by_companion = 0
+        for d in sorted(rows, key=lambda d: -d["to_call"]):
+            p_call = primary_at_shove[id(d)][1]
+            c_call = shove_comp[id(d)][0][1]
+            n = hand_net.get(id(d), 0)
+            if d["choice"] == 1 and n < 0:
+                called_lost += n
+                if c_call < 0.5:
+                    folded_by_companion += n + d["to_call"]     # the call itself, not the earlier chips
+            lines.append(f"| {d['hand']} | {' '.join(d['hole'])} | {' '.join(d['board'] or [])} | {d['to_call']:,} "
+                         f"| {d['pot']:,} | {ACTION.get(d['choice'])} | {n:+,} | {p_call:.2f} | {c_call:.2f} |")
+        lines += ["", f"Calls that lost: {called_lost:+,} chips in total; of that, the companion would have folded "
+                  f"calls worth {folded_by_companion:+,} (the losing calls' own size where its call probability is under 0.5)."]
 
     # ---- the expensive hands, re-asked -------------------------------------
     lost = sorted((x for x in all_hands if x[0]["result"] and net(x[0], x[1]) < 0),

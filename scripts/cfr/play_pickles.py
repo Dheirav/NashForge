@@ -29,13 +29,14 @@ from cfr.flat import load_strategy  # noqa: E402
 from evaluation.benchmark import benchmark, cfr_agent  # noqa: E402
 
 
-def load(path, seed, raise_cap):
+def load(path, seed, raise_cap, on_miss="random"):
     saved = load_strategy(path)
     args = saved.get("args") or {}
     cap = args.get("raise_cap", raise_cap) if isinstance(args, dict) else raise_cap
     cap = tuple(cap) if isinstance(cap, (list, tuple)) else int(cap)
+    misses = [0, 0]
     return cfr_agent(saved["strategy"], saved["abstraction"], np.random.default_rng(seed),
-                     raise_cap=cap), cap, len(saved["strategy"])
+                     misses=misses, raise_cap=cap, on_miss=on_miss), cap, len(saved["strategy"]), misses
 
 
 def main():
@@ -46,21 +47,27 @@ def main():
     parser.add_argument("--hands", type=int, default=40000)
     parser.add_argument("--seeds", type=int, nargs="+", default=[0, 1, 2])
     parser.add_argument("--raise-cap", type=int, default=1, help="if the pickle does not say")
+    parser.add_argument("--on-miss", default="random", choices=["random", "call"],
+                        help="what a lookup miss plays; `call` for a cross-tree gate, where a "
+                             "random shove on an unvisited line measures the fallback, not the solve")
     parser.add_argument("--output")
     args = parser.parse_args()
 
     scores = []
+    miss_rates = []
     for seed in args.seeds:
-        a, cap_a, n_a = load(args.first, seed, args.raise_cap)
-        b, cap_b, n_b = load(args.second, seed + 1000, args.raise_cap)
+        a, cap_a, n_a, miss_a = load(args.first, seed, args.raise_cap, args.on_miss)
+        b, cap_b, n_b, miss_b = load(args.second, seed + 1000, args.raise_cap, args.on_miss)
         if seed == args.seeds[0]:
             print(f"{os.path.basename(args.first)}: {n_a:,} infosets, cap {cap_a}; "
-                  f"{os.path.basename(args.second)}: {n_b:,} infosets, cap {cap_b}", flush=True)
+                  f"{os.path.basename(args.second)}: {n_b:,} infosets, cap {cap_b}; on miss: {args.on_miss}", flush=True)
         started = time.perf_counter()
         result = benchmark(a, b, os.path.basename(args.second), hands=args.hands, seed=seed)
         scores.append(result.bb_per_100)
+        miss_rates.append((miss_a[0] / max(1, miss_a[1]), miss_b[0] / max(1, miss_b[1])))
         print(f"  seed {seed}: {result.bb_per_100:+8.1f} BB/100 to the first, "
-              f"{args.hands:,} hands in {(time.perf_counter() - started) / 60:.1f} min", flush=True)
+              f"{args.hands:,} hands in {(time.perf_counter() - started) / 60:.1f} min; "
+              f"misses {100 * miss_rates[-1][0]:.2f}% / {100 * miss_rates[-1][1]:.2f}% of decisions", flush=True)
 
     mean = float(np.mean(scores))
     stderr = float(np.std(scores, ddof=1)) / len(scores) ** 0.5 if len(scores) > 1 else float("nan")
@@ -70,6 +77,9 @@ def main():
         with open(args.output, "w") as handle:
             json.dump({"first": args.first, "second": args.second, "hands": args.hands,
                        "seeds": args.seeds, "bb_per_100": scores, "mean": mean, "stderr": stderr,
+                       "on_miss": args.on_miss,
+                       "miss_rate": [float(np.mean([m[0] for m in miss_rates])),
+                                     float(np.mean([m[1] for m in miss_rates]))],
                        "measured": time.strftime("%Y-%m-%d %H:%M")}, handle, indent=1)
         print(f"wrote {args.output}")
 

@@ -1,0 +1,23 @@
+{
+ "first": "results/cfr/experiments/cap2_12bb_100m_warm_pruned.pkl",
+ "second": "results/cfr/experiments/cap2_12bb_20m_warm.pkl",
+ "hands": 40000,
+ "seeds": [
+  0,
+  1,
+  2
+ ],
+ "bb_per_100": [
+  0.5856250000000001,
+  11.185625,
+  24.841874999999998
+ ],
+ "mean": 12.204374999999999,
+ "stderr": 7.020679090788393,
+ "on_miss": "call",
+ "miss_rate": [
+  0.03288519778714915,
+  0.032479110761179146
+ ],
+ "measured": "2026-09-19 11:53"
+}

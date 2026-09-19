@@ -41,6 +41,9 @@ from typing import Dict, List, Optional, Sequence
 import numpy as np
 
 from abstraction.betting import ALL_IN, CHECK_CALL, FOLD, RAISE_ACTIONS, RAISE_HALF, RAISE_POT
+
+ACTION_NAMES = {FOLD: "fold", CHECK_CALL: "check/call", RAISE_HALF: "raise ½", RAISE_POT: "raise pot",
+                ALL_IN: "all-in"}       # for the log's `adjusted` field; other raises print as their index
 from cfr.flat import load_strategy
 from chipzen.bridge import Hand, cards, legal_mask, replay, to_chipzen
 from cfr.river import decide_river
@@ -67,6 +70,7 @@ class Stats:
     consulted: int = 0
     off_abstraction: int = 0
     companion_hits: int = 0
+    river_shoves_to_companion: int = 0
     shoves_softened: int = 0
     bluffs_withheld: int = 0
     shove_calls_declined: int = 0
@@ -171,9 +175,18 @@ class ArenaPlayer:
 
     def __init__(self, paths: Sequence[str], rng: Optional[np.random.Generator] = None,
                  companions: Sequence[str] = (), purify: str = "none",
-                 river: bool = False, river_budget_s: float = 8.0):
+                 river: bool = False, river_budget_s: float = 8.0,
+                 river_shove_companion: bool = False):
         self.rng = rng if rng is not None else np.random.default_rng()
         self.purify = purify
+        #: Facing an all-in on the river, ask the cap-2 companion even though
+        #: the one-raise primary has a node. The primary's river node was solved
+        #: in a game where nobody can re-raise, so a shove there is bluff-heavy
+        #: and its calling range is wide: K3 called 6,350 with a pair of threes
+        #: and K8 5,168 into jacks in v7b's burst (19 Sept), J7 with jack-high
+        #: in v7's. The companion's range comes from the game with re-raises.
+        #: Off by default; gated on the replay and a burst before it plays.
+        self.river_shove_companion = river_shove_companion
         #: River endgame solving (cfr/river.py), off by default: the river is
         #: re-solved on the exact hand from the blueprint's ranges, and the
         #: blueprint's own answer is kept only if the solve fails or overruns.
@@ -268,6 +281,21 @@ class ArenaPlayer:
         missed = solver.misses[0] > before[0]
         fell_back = False
         companion_used = None
+        river_shove = None
+        if self.river_shove_companion and not missed and len(board) == 5 and to_call > 0 \
+                and node.history.endswith("5"):
+            deep = self.companion_for(hand.effective_bb)
+            if deep is not None:
+                deep_hand = replay(state, seat, self.rng, schedule=deep.schedule)
+                deep_mask = legal_mask(deep_hand.node, valid_actions, deep.schedule)
+                deep_before = deep.misses[0]
+                answer = deep.agent(_shim(hole, board, to_call), 0, deep_mask, deep_hand.node.history)
+                if deep.misses[0] == deep_before:
+                    river_shove = f"river shove: {ACTION_NAMES.get(choice, choice)} -> companion "
+                    river_shove += f"{ACTION_NAMES.get(answer, answer)}"
+                    choice = answer
+                    companion_used = f"{deep.depth_bb:g}bb{deep.schedule}"
+                    self.stats.river_shoves_to_companion += 1
         if missed:
             deep = self.companion_for(hand.effective_bb)
             if deep is not None:
@@ -308,7 +336,7 @@ class ArenaPlayer:
             except Exception as error:          # the blueprint's answer stands
                 river = {"error": f"{type(error).__name__}: {error}"[:200]}
                 self.stats.river_failures += 1
-        adjusted = None
+        adjusted = river_shove
         if self.profiles is not None and choice == FOLD and not board and node.history == "" \
                 and arena[RAISE_HALF] and self.profiles.folds_blind(self.opponent):
             # First to act preflop against a big blind that folds to most

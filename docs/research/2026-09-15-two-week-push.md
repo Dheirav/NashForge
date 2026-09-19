@@ -18,6 +18,13 @@ is the Slumbot loss from about −1,000 to a few hundred and a turn solver that 
 Slumbot is the month. The arena rating is a separate problem, decided by exploiting a weak
 field, and the ledger is its only instrument.
 
+**Update, 16 September evening.** Tier 0 and most of Tier 1 are done and gated (see NEXT.md's
+defect table). The Tier 1 bundle tied its same-tree head-to-head (+0.12 ± 1.46) while 10M
+iterations of the unchanged recipe won +9.4 ± 1.0 on the same rung, which reorders the push:
+iterations first, on threads (item 11, done, 4.0x), recipe changes only under an exploitability
+or convergence-speed test after the season. The Slumbot column now exists for the contender
+(−815 ± 357 mbb/hand at 10,000 hands) and is the Tier 3 instrument.
+
 ## Tier 0: correctness-preserving, no gate, bit-identical strategy at a fixed seed
 
 These change how fast and how big, not what the solver computes. Guard each with a native

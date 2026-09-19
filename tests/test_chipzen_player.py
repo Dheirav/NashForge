@@ -461,3 +461,32 @@ def test_a_fold_to_an_open_becomes_a_small_three_bet_against_a_bot_that_folds_to
     finally:
         player.profiles = None
         player.opponent = None
+
+
+def test_a_river_shove_is_handed_to_the_companion_only_when_asked():
+    # v7b's burst, 19 September: K3 called 6,350 on the river with a pair of
+    # threes, K8 5,168 into jacks. The one-raise primary's river node was solved
+    # in a game where nobody can re-raise, so a shove there reads bluff-heavy
+    # and its calling range is wide. With the flag the companion answers a
+    # river all-in even though the primary has a node; without it nothing
+    # changes, and the record says which happened.
+    state = {"hand_number": 9, "phase": "river", "board": ["3s", "Jc", "8s", "8h", "Qd"],
+             "your_hole_cards": ["Kd", "3d"], "pot": 9550, "your_stack": 7950,
+             "opponent_stacks": [0], "to_call": 6350, "min_raise": 7950, "max_raise": 7950,
+             "action_history": blinds() + [entry(1, "raise", 200), entry(0, "call", 200),
+                                           entry(0, "check", 0, "flop"), entry(1, "check", 0, "flop"),
+                                           entry(0, "raise", 800, "turn"), entry(1, "call", 800, "turn"),
+                                           entry(0, "check", 0, "river"), entry(1, "raise", 6350, "river")]}
+    plain = ArenaPlayer([SHIPPED], np.random.default_rng(3), companions=[TAPER])
+    out = plain.decide(state, ["fold", "call"], 0)
+    assert out["record"]["adjusted"] is None and out["record"]["companion"] is None
+    handed = ArenaPlayer([SHIPPED], np.random.default_rng(3), companions=[TAPER],
+                         river_shove_companion=True)
+    seen = set()
+    for _ in range(20):
+        out = handed.decide(state, ["fold", "call"], 0)
+        assert out["action"] in ("fold", "call")
+        if out["record"]["companion"]:
+            assert out["record"]["adjusted"].startswith("river shove:")
+            seen.add(out["action"])
+    assert handed.stats.river_shoves_to_companion > 0, "the companion was never asked"

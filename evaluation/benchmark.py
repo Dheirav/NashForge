@@ -144,10 +144,13 @@ def _solver_actions(history: str, to_call: int, raise_cap: int):
 PURIFY_MODES = ("none", "postflop", "all")
 
 
+ON_MISS_MODES = ("random", "call")
+
+
 def cfr_agent(strategy: Dict[Hashable, np.ndarray], abstraction,
               rng: np.random.Generator, misses: Optional[List[int]] = None,
               raise_cap: int = 1, probe: Optional[List] = None,
-              purify: str = "none") -> Agent:
+              purify: str = "none", on_miss: str = "random") -> Agent:
     """
     A solved strategy, playing in the engine.
 
@@ -172,6 +175,13 @@ def cfr_agent(strategy: Dict[Hashable, np.ndarray], abstraction,
     ``misses`` is a two-slot counter, [missed, consulted], so a benchmark that
     has quietly become a second random opponent shows up as a number.
 
+    ``on_miss`` is what a lookup miss plays: ``random`` (the panel's uniform
+    draw over legal actions, the default every panel figure was measured with)
+    or ``call``, check/call where legal else fold. The second exists for the
+    cross-tree gate: a cap-2 solve against a one-raise one misses on lines the
+    bigger tree never visited, and a random shove there measured the fallback
+    rather than the solve (25bb read −29.6 random, −17.5 call, 17 September).
+
     ``probe`` is the same idea for the viewer: it receives the distribution
     actually sampled from, or ``None`` where no entry existed and the choice
     was a guess. The GUI shows the policy, and re-deriving it alongside the
@@ -188,6 +198,8 @@ def cfr_agent(strategy: Dict[Hashable, np.ndarray], abstraction,
     # it plays was fitted, and adding noise to every measurement.
     if purify not in PURIFY_MODES:
         raise ValueError(f"purify must be one of {PURIFY_MODES}, got {purify!r}")
+    if on_miss not in ON_MISS_MODES:
+        raise ValueError(f"on_miss must be one of {ON_MISS_MODES}, got {on_miss!r}")
     buckets: dict = {}
 
     def bucket_for(hole, board):
@@ -214,6 +226,8 @@ def cfr_agent(strategy: Dict[Hashable, np.ndarray], abstraction,
                 misses[0] += 1
             if probe is not None:
                 probe[:] = [None]        # no entry: the choice is not a policy
+            if on_miss == "call":
+                return CHECK_CALL if mask[CHECK_CALL] else (FOLD if mask[FOLD] else int(legal[0]))
             return int(rng.choice(legal))
 
         if probabilities is None:

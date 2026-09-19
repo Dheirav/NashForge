@@ -26,6 +26,7 @@ public:
     State initial_state() const { return State{}; }
 
     bool is_chance(const State& s) const { return !s.dealt; }
+    bool is_final_street(const State&) const { return false; }   // one street; pruning may apply
 
     bool is_terminal(const State& s) const {
         const std::string& h = s.history;
@@ -70,6 +71,11 @@ public:
         if (h == "pp") return wins ? 1.0 : -1.0;            // showdown for the antes
         return wins ? 2.0 : -2.0;                           // "bb" or "pbb"
     }
+
+    using Key = std::string;
+    void begin_iteration(Rng&) {}          // one card each; nothing to share across branches
+    static std::string key_to_string(const Key& key) { return key; }
+    static Key key_from_string(const std::string& key) { return key; }
 
     std::string information_set(const State& s, int player) const {
         return std::to_string(static_cast<int>(s.cards[player])) + "|" + s.history;

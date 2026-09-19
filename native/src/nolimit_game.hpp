@@ -9,7 +9,9 @@
 #pragma once
 #include <cstdint>
 #include <array>
+#include <stdexcept>
 #include <string>
+#include <string_view>
 #include <unordered_map>
 #include <vector>
 #include "nolimit.hpp"
@@ -100,7 +102,22 @@ public:
         return betting_.current_player(s.bet) == CHANCE && !is_terminal(s);
     }
 
-    bool is_terminal(const State& s) const { return betting_.is_terminal(s.bet); }
+    /// Exact all-in terminals: once both players are all in on the flop or
+    /// turn, the hand is scored as the average over every remaining runout
+    /// (990 or 44 of them) rather than one sampled board. Unbiased, and it
+    /// removes the single-runout noise at exactly the shove nodes. Preflop
+    /// all-ins keep the sampled runout (1.7 million boards; a table later).
+    /// Off by default until its convergence check and head-to-head.
+    void set_exact_terminals(bool on) { exact_terminals_ = on; }
+
+    /// Pluribus's pruning exemption: the river is never pruned, because its
+    /// subtrees are cheap and end the hand.
+    bool is_final_street(const State& s) const { return s.bet.board_n >= 5; }
+
+    bool is_terminal(const State& s) const {
+        if (betting_.is_terminal(s.bet)) return true;
+        return exact_terminals_ && s.bet.dealt && betting_.all_in(s.bet) && s.bet.board_n >= 3;
+    }
     int current_player(const State& s) const { return betting_.current_player(s.bet); }
     std::vector<int8_t> legal_actions(const State& s) const {
         return betting_.legal_actions(s.bet);
@@ -112,8 +129,44 @@ public:
         return next;
     }
 
+    /// Common random numbers: one nine-card deal per iteration, revealed
+    /// street by street on every branch, instead of a fresh draw at each
+    /// chance node of each branch (about 91 runouts an iteration, so that
+    /// `values[i] - value` compared actions on different boards). Each
+    /// branch's estimate keeps its expectation; only the variance drops. Off
+    /// by default until its head-to-head passes; see `set_common_random_numbers`.
+    void set_common_random_numbers(bool on) { crn_ = on; }
+    bool common_random_numbers() const { return crn_; }
+
+    void begin_iteration(Rng& rng) {
+        if (!crn_) return;
+        int8_t deck[52];
+        for (int i = 0; i < 52; ++i) deck[i] = static_cast<int8_t>(i);
+        for (int i = 0; i < 9; ++i) {
+            const int j = i + static_cast<int>(rng.below(static_cast<uint32_t>(52 - i)));
+            const int8_t t = deck[i]; deck[i] = deck[j]; deck[j] = t;
+        }
+        for (int i = 0; i < 9; ++i) deal_[static_cast<size_t>(i)] = deck[i];
+    }
+
     State sample_chance(const State& s, Rng& rng) const {
         State next = s;
+        if (crn_) {
+            if (!s.bet.dealt) {
+                next.hole[0] = {deal_[0], deal_[1]};
+                next.hole[1] = {deal_[2], deal_[3]};
+                next.bet.dealt = true;
+                return next;
+            }
+            const int street = s.bet.street + 1;
+            const int needed = STREET_BOARD_SIZE[static_cast<size_t>(street)] - s.bet.board_n;
+            int8_t board[5];
+            for (int i = 0; i < s.bet.board_n; ++i) board[i] = s.bet.board[static_cast<size_t>(i)];
+            for (int i = 0; i < needed; ++i)
+                board[s.bet.board_n + i] = deal_[static_cast<size_t>(4 + s.bet.board_n + i)];
+            next.bet = betting_.advance_street(s.bet, board, s.bet.board_n + needed);
+            return next;
+        }
         if (!s.bet.dealt) {
             int8_t deck[52];
             for (int i = 0; i < 52; ++i) deck[i] = static_cast<int8_t>(i);
@@ -160,31 +213,117 @@ public:
                  :  static_cast<double>(s.bet.contributions[static_cast<size_t>(opponent)]);
         }
 
+        // Only the matched portion is at risk; anything beyond what the
+        // opponent could cover is returned, so it nets to nothing.
+        const double at_risk = static_cast<double>(
+            std::min(s.bet.contributions[0], s.bet.contributions[1]));
+        if (s.bet.board_n < 5)
+            return at_risk * allin_edge(s, player);      // exact terminals only reach here
+
         int8_t mine_r[7], mine_s[7], theirs_r[7], theirs_s[7];
         fill_cards(s, player, mine_r, mine_s);
         fill_cards(s, opponent, theirs_r, theirs_s);
         const int n = 2 + s.bet.board_n;
         const int32_t mine = score_hand_7(mine_r, mine_s, n);
         const int32_t theirs = score_hand_7(theirs_r, theirs_s, n);
-
-        // Only the matched portion is at risk; anything beyond what the
-        // opponent could cover is returned, so it nets to nothing.
-        const double at_risk = static_cast<double>(
-            std::min(s.bet.contributions[0], s.bet.contributions[1]));
         if (mine > theirs) return at_risk;
         if (mine < theirs) return -at_risk;
         return 0.0;
     }
 
-    std::string information_set(const State& s, int player) const {
-        return std::to_string(bucket_for(s, player)) + "|" + s.bet.history;
+    /// P(win) - P(lose) for `player` over every runout of the board, exactly.
+    double allin_edge(const State& s, int player) const {
+        const int opponent = 1 - player;
+        bool used[52] = {false};
+        for (int p = 0; p < 2; ++p)
+            for (int i = 0; i < 2; ++i) used[s.hole[static_cast<size_t>(p)][static_cast<size_t>(i)]] = true;
+        for (int i = 0; i < s.bet.board_n; ++i) used[s.bet.board[static_cast<size_t>(i)]] = true;
+        int8_t pool[52];
+        int pool_n = 0;
+        for (int c = 0; c < 52; ++c) if (!used[c]) pool[pool_n++] = static_cast<int8_t>(c);
+        const int needed = 5 - s.bet.board_n;
+        int8_t mine_r[7], mine_s[7], theirs_r[7], theirs_s[7];
+        fill_cards(s, player, mine_r, mine_s);
+        fill_cards(s, opponent, theirs_r, theirs_s);
+        long wins = 0, losses = 0, total = 0;
+        auto score = [&](int8_t a, int8_t b) {
+            const int base = 2 + s.bet.board_n;
+            mine_r[base] = theirs_r[base] = static_cast<int8_t>(deck_rank(a));
+            mine_s[base] = theirs_s[base] = static_cast<int8_t>(deck_suit(a));
+            if (needed == 2) {
+                mine_r[base + 1] = theirs_r[base + 1] = static_cast<int8_t>(deck_rank(b));
+                mine_s[base + 1] = theirs_s[base + 1] = static_cast<int8_t>(deck_suit(b));
+            }
+            const int32_t m = score_hand_7(mine_r, mine_s, 7);
+            const int32_t t = score_hand_7(theirs_r, theirs_s, 7);
+            wins += m > t; losses += m < t; ++total;
+        };
+        if (needed == 1) {
+            for (int i = 0; i < pool_n; ++i) score(pool[i], 0);
+        } else {
+            for (int i = 0; i < pool_n; ++i)
+                for (int j = i + 1; j < pool_n; ++j) score(pool[i], pool[j]);
+        }
+        return static_cast<double>(wins - losses) / static_cast<double>(total);
+    }
+
+    /// The information-set key packed into 64 bits: the bucket in the top
+    /// eight, the history in the low 54 as 18 symbols of three bits ('0' to
+    /// '5' as 1 to 6, '/' as 7, 0 ending it). A string key was built and
+    /// hashed on every visit, about a fifth of an iteration; the packed key
+    /// decodes back to the same string for the export, so nothing downstream
+    /// changes. The deepest history a cap-2 tree reaches is 16 symbols.
+    using Key = uint64_t;
+    static constexpr int KEY_SYMBOLS = 18;
+
+    Key information_set(const State& s, int player) const {
+        const std::string& h = s.bet.history;
+        if (h.size() > static_cast<size_t>(KEY_SYMBOLS))
+            throw std::length_error("history too long for a packed key: " + h);
+        uint64_t code = 0;
+        for (size_t i = 0; i < h.size(); ++i) {
+            const uint64_t sym = h[i] == '/' ? 7 : static_cast<uint64_t>(h[i] - '0') + 1;
+            code |= sym << (3 * i);
+        }
+        return (static_cast<uint64_t>(bucket_for(s, player)) << 56) | code;
+    }
+
+    static std::string key_to_string(Key key) {
+        std::string out = std::to_string(static_cast<int>(key >> 56)) + "|";
+        uint64_t code = key & ((uint64_t(1) << 54) - 1);
+        for (int i = 0; i < KEY_SYMBOLS; ++i) {
+            const uint64_t sym = (code >> (3 * i)) & 7;
+            if (sym == 0) break;
+            out.push_back(sym == 7 ? '/' : static_cast<char>('0' + sym - 1));
+        }
+        return out;
+    }
+
+    /// The inverse of `key_to_string`, for a warm start from a saved pickle.
+    static Key key_from_string(const std::string& text) {
+        const size_t bar = text.find('|');
+        if (bar == std::string::npos) throw std::invalid_argument("key without '|': " + text);
+        const int bucket = std::stoi(text.substr(0, bar));
+        const std::string h = text.substr(bar + 1);
+        if (h.size() > static_cast<size_t>(KEY_SYMBOLS))
+            throw std::length_error("history too long for a packed key: " + h);
+        uint64_t code = 0;
+        for (size_t i = 0; i < h.size(); ++i) {
+            const uint64_t sym = h[i] == '/' ? 7 : static_cast<uint64_t>(h[i] - '0') + 1;
+            code |= sym << (3 * i);
+        }
+        return (static_cast<uint64_t>(bucket) << 56) | code;
     }
 
     size_t cache_size() const { return bucket_cache_.size(); }
 
+    bool crn_ = false;
+    bool exact_terminals_ = false;
+    std::array<int8_t, 9> deal_{};
+
 private:
     static int who_folded(const pokerbot::State& s, size_t position) {
-        const std::string prefix = s.history.substr(0, position);
+        const std::string_view prefix = std::string_view(s.history).substr(0, position);
         int street = 0;
         size_t last_slash = std::string::npos;
         for (size_t i = 0; i < prefix.size(); ++i)

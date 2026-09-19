@@ -224,6 +224,39 @@ data-biased response (always on), a Slumbot loss split (`scripts/slumbot_split.p
 river endgame solving on the exact hand (`--river-solve`, `cfr/river.py`, with
 `scripts/river_solve.py` to re-solve logged rivers). Each goes live only after its own gate.
 
+## 16 September: v5 in play, the flags tied, iterations won, and a lobby-hours limit
+
+v5 won its two fixtures (runner1 78 hands, mellyy 94) and went 13 of 20 against the house bots
+for +115 ± 84 chips a hand, while its rating fell 1617 to 1601, which is what Glicko does when a
+bot loses a third of its matches to opponents rated far below it. The two mr_hide losses were
+stack-offs at nodes the cap-2 tree either lacked (a third raise) or had never visited (16 misses
+in 39 hands, 7 of them with no raise on the street yet), which pointed at coverage.
+
+Two experiments answered which lever moves that. The four literature flags from the morning's C++
+sitting (common random numbers, exact all-in terminals, current strategy where the average is
+empty, average from 10 percent) were trained together on the 100bb cap-2 rung and played against
+v5's rung on the same tree: +0.12 ± 1.46 BB/100, a tie, with the same 2.26M information sets
+reached. Ten million iterations of v5's own recipe on the same rung: +9.4 ± 1.0, with the 70bb
+and 50bb rungs at +3.6 ± 0.7 and +3.0 ± 0.7. So the deep rungs at 10M went in as v5b for v003,
+one change under its own label after a replay pass, and v6 for Thursday morning carries them
+too. The flags stay off; the tie says "not worse", and a head-to-head between two approximations
+of the same equilibrium cannot say more than that.
+
+The lane N run also showed the flag recipe is about 2.5 times faster per iteration on a quiet
+machine (0.74 against 1.9 ms), most likely common random numbers sparing bucket lookups, and the
+solver now runs on threads (4.0x at four, bit-identical at one, `--threads`), so a full retrain
+of whichever recipe wins fits in about three hours before the playoffs.
+
+The 10,000-hand Slumbot run finished at −815 ± 357 mbb/hand on the 200bb contender, no better
+than folding, with 41 percent of the loss in the 4 percent of hands where a lookup missed and
+most of the rest at river showdowns from the big blind. It is the post-season baseline and does
+not bear on the season, which is played at 100bb against far weaker opponents.
+
+At 20:02 the platform started refusing the queue with `lobby_hours_per_day` (8 hours on the free
+tier, reset 00:00 UTC), after the bot had sat in the lobby since noon. Whether an over-limit bot
+still receives its fixture is not known, so from now the bot connects only for the quota burst
+and the fixture windows, and the v003 reconnect at 23:40 is inbound-only.
+
 ## Order
 
 1. Tonight: companions at every depth (running). Restart between matches.
@@ -237,3 +270,22 @@ river endgame solving on the exact hand (`--river-solve`, `cfr/river.py`, with
    reach and is checked against the 256 MB cap (the remote bot sat at 763 MB
    after two hours on 13 September, unexplained), the image stays under 200 MB
    without llvmlite. Then bet sizes, and an exploit if the logs justify one.
+
+
+## Season 6, the operations that stood, 19 September
+
+- **Every fixture has its own timer**, `~/pokerbot-scratch/chipzen/fixture.sh CONNECT SLOT NAME`:
+  connects inbound-only ten to fifteen minutes before the slot, prints the lobby at +5 min, and
+  stops the bot only after a match has finished (or forty minutes past the slot with none). The
+  set it plays is read at connect time from `fixture_set`: line 1 the ladder directory, line 2 the
+  label, **line 3 the extra flags** (`--deep-primary` for the v5 family, empty for v7 and v7b).
+- **A timer is dry-run before it is armed**: `STOP_AFTER=1 DEADLINE=2 STATUS_AFTER=5 fixture.sh
+  "$(date '+%F %H:%M')" "$(date -d '1 minute' '+%F %H:%M')" DRYRUN` against a slot a minute out,
+  and it must stop *after* its deadline. The Shadow fixture was lost to a `date -d` string the
+  script had never executed. A syntax check is not a test.
+- **Bursts** (`v7_burst.sh`, `v7b_burst.sh`): start at 05:29 IST with the rated queue, stop after
+  20 matches or 11:30, so the day's eight lobby hours cover the evening fixture. Read them with
+  `scripts/chipzen_decompose.py`, not the headline.
+- **One set per label, the gated one, untouched on match day.** The playoff timetable every
+  season: quarters Sat 18:00 UTC in ten-minute slots, semis Sun 18:00 and 18:10, final Sun 21:00
+  UTC (02:30 IST Monday).

@@ -37,6 +37,10 @@ from abstraction.betting import STREETS, measure  # noqa: E402
 from abstraction.buckets import CardAbstraction, preflop_key
 from abstraction.equity import FULL_DECK  # noqa: E402
 from cfr import ALL_RULES, MCCFRSolver  # noqa: E402
+from cfr.flat import KEY_WIDTH, FlatStrategy, flat_paths  # noqa: E402
+
+#: The native path's flat export, written beside the pickle by `_report_and_write`.
+_FLAT_EXPORT = None
 from cfr.play import (always_call_policy, play_hands, strategy_policy,
                       uniform_policy)  # noqa: E402
 from games.nolimit import NoLimitHoldem  # noqa: E402
@@ -66,6 +70,18 @@ def parse_args():
                         help="regret and averaging schedule (cfr/updates.py). vanilla weighs "
                              "every iteration's strategy equally, which leaves a rarely "
                              "reached node's average at its early near-uniform visits")
+    parser.add_argument("--common-random-numbers", action="store_true",
+                        help="one deal per iteration shared across every branch (native only); "
+                             "off by default until its head-to-head passes")
+    parser.add_argument("--exact-terminals", action="store_true",
+                        help="score flop and turn all-ins over every runout instead of one sample "
+                             "(native only); off by default until its head-to-head passes")
+    parser.add_argument("--current-when-empty", action="store_true",
+                        help="export regret matching's current strategy at nodes whose average is empty, "
+                             "instead of a uniform (native only); off by default until its head-to-head passes")
+    parser.add_argument("--average-from", type=float, default=0.0,
+                        help="fraction of the run before the average strategy starts accumulating "
+                             "(Pluribus skipped the early part; 0 is the classical average)")
     parser.add_argument("--texture", action="store_true",
                         help="fold the board's flush and straight texture into the "
                              "postflop bucket (abstraction.buckets.board_texture)")
@@ -78,6 +94,36 @@ def parse_args():
     #: reference `tests/test_native.py` pins the port against.
     parser.add_argument("--native", action=argparse.BooleanOptionalAction,
                         default=True, help="use the C++ solver core")
+    #: Worker threads sharing one node table (native only). One is the exact
+    #: single-threaded path the golden test pins; more split the iterations
+    #: between workers with their own deals and random streams, which is not
+    #: reproducible bit for bit, only in distribution. Item 11 of NEXT.md.
+    parser.add_argument("--threads", type=int, default=1,
+                        help="worker threads for the native solver (1: the golden path)")
+    #: Warm start (native only): seed every node whose key the given pickle
+    #: holds with that strategy, as if `--warm-weight` iterations had already
+    #: been played at `--warm-scale` chips of regret each (default: one big
+    #: blind). Meant for a cap-2 solve started from the one-raise solve at the
+    #: same depth, whose histories are a subset with the same bucket scheme;
+    #: the re-raise actions start at zero regret. See MCCFR::warm_start.
+    parser.add_argument("--warm-start", metavar="PICKLE",
+                        help="seed the shared nodes from this saved strategy")
+    parser.add_argument("--warm-weight", type=int, default=1_000_000,
+                        help="iterations the warm start counts for")
+    parser.add_argument("--warm-scale", type=float, default=None,
+                        help="chips of regret per warm iteration (default: the big blind)")
+    #: Regret-based pruning (native only), Pluribus's form: after `--prune-after`
+    #: of the run, 95% of iterations skip the traverser's actions whose regret
+    #: is below `--prune-stacks` starting stacks (Pluribus: -300M chips on
+    #: 10,000-chip stacks, i.e. 30,000 stacks), never on the river and never an
+    #: action that ends the hand. Off by default; the golden test pins that.
+    parser.add_argument("--prune-after", type=float, default=None,
+                        help="fraction of the run before pruning starts (e.g. 0.1); off if absent")
+    parser.add_argument("--prune-stacks", type=float, default=30000.0,
+                        help="prune an action whose regret is below minus this many starting stacks")
+    parser.add_argument("--warm-mode", default="proportional", choices=["proportional", "frozen"],
+                        help="proportional: regrets set to the prior; frozen: play the prior for "
+                             "--warm-weight iterations while regrets accumulate (substitute regrets)")
     return parser.parse_args()
 
 
@@ -144,12 +190,35 @@ def _train_native(args, abstraction, projected):
                 else list(args.raise_cap))
     preflop, flop, turn, river = _native_tables(abstraction)
 
-    print(f"\nTraining MCCFR (native) for {args.iterations:,} iterations...")
+    print(f"\nTraining MCCFR (native) for {args.iterations:,} iterations"
+          + (f" on {args.threads} threads..." if args.threads > 1 else "..."))
     solver = pokerbot_native.NoLimitSolver(
         preflop, flop, turn, river, args.equity_samples, args.stack,
         args.big_blind // 2, args.big_blind, schedule, args.seed,
         texture=bool(getattr(abstraction, "texture", False)),
         rule=args.update_rule)
+    solver.set_average_from(int(args.average_from * args.iterations))
+    solver.set_common_random_numbers(bool(args.common_random_numbers))
+    solver.set_exact_terminals(bool(args.exact_terminals))
+    solver.set_current_when_empty(bool(args.current_when_empty))
+    if args.warm_start:
+        from cfr.flat import load_strategy
+        prior = load_strategy(args.warm_start)
+        entries = [(key, [float(p) for p in prior["strategy"][key]]) for key in prior["strategy"]]
+        scale = args.big_blind if args.warm_scale is None else args.warm_scale
+        solver.warm_start(entries, args.warm_weight, scale, args.warm_mode)
+        if args.warm_mode == "frozen":
+            # The frozen iterations are measurement, not play: keep them out of
+            # the average, and out of the run's own count of iterations.
+            solver.set_average_from(args.warm_weight + int(args.average_from * args.iterations))
+            args.iterations += args.warm_weight
+        print(f"warm start ({args.warm_mode}): {len(entries):,} entries from {args.warm_start}, "
+              f"weight {args.warm_weight:,} iterations at {scale:g} chips", flush=True)
+        del prior, entries
+    if args.prune_after is not None:
+        solver.set_pruning(int(args.prune_after * args.iterations), -args.prune_stacks * args.stack, 0.95)
+        print(f"pruning from iteration {int(args.prune_after * args.iterations):,}: regret below "
+              f"{-args.prune_stacks * args.stack:,.0f} chips, 95% of iterations", flush=True)
     start = time.perf_counter()
 
     # Trained in chunks so the run reports progress.
@@ -163,7 +232,7 @@ def _train_native(args, abstraction, projected):
     done = 0
     while done < args.iterations:
         chunk = min(step, args.iterations - done)
-        solver.train(chunk)
+        solver.train(chunk, args.threads)
         done += chunk
         taken = time.perf_counter() - start
         rss = _resident_mb()
@@ -176,9 +245,22 @@ def _train_native(args, abstraction, projected):
     print(f"  {elapsed:.1f}s ({elapsed / args.iterations * 1000:.3f} ms/iteration)")
     print(f"  information sets reached: {solver.information_sets():,} "
           f"of {projected.information_sets:,} in the abstraction")
+    if args.warm_start:
+        print(f"  warm start: {solver.warm_hits():,} of {solver.warm_entries():,} entries "
+              f"landed on a node that was reached")
+    if args.prune_after is not None:
+        print(f"  pruning: {solver.pruned():,} action visits skipped")
 
-    strategy = {key: np.asarray(value, dtype=np.float64)
-                for key, value in solver.average_strategy().items()}
+    # Flat export: three arrays rather than a tree, a dict and millions of
+    # small arrays. The pickle keeps its dict shape (views into the values
+    # array), and the flat pair is written beside it from the same arrays.
+    key_bytes, offsets, values = solver.average_strategy_flat(KEY_WIDTH)
+    keys = np.asarray(key_bytes).view(f"S{KEY_WIDTH}").reshape(-1)
+    flat = FlatStrategy(keys, np.asarray(offsets), np.asarray(values))
+    strategy = {k.decode(): flat._values[flat._offsets[i]:flat._offsets[i + 1]]
+                for i, k in enumerate(keys)}
+    global _FLAT_EXPORT
+    _FLAT_EXPORT = flat
 
     # Scored and written exactly as the Python path does, through the same
     # Python game, so the file is indistinguishable downstream and the printed
@@ -200,6 +282,8 @@ def main():
     rng = np.random.default_rng(args.seed)
     if args.preflop_buckets is None:
         args.preflop_buckets = args.buckets
+    if (args.warm_start or args.prune_after is not None) and not args.native:
+        raise SystemExit("--warm-start and --prune-after are native solver features; drop --no-native")
 
     projected = measure({street: (args.preflop_buckets if street == "preflop" else args.buckets)
                          for street in STREETS},
@@ -227,7 +311,8 @@ def main():
 
     print(f"\nTraining MCCFR for {args.iterations:,} iterations...")
     rule = next(r for r in ALL_RULES if r.name == args.update_rule)
-    solver = MCCFRSolver(game, rule=rule, seed=args.seed)
+    solver = MCCFRSolver(game, rule=rule, seed=args.seed,
+                         average_from=int(args.average_from * args.iterations))
     start = time.perf_counter()
 
     def checkpoint(done, total, live):
@@ -295,6 +380,13 @@ def _report_and_write(args, game, abstraction, strategy, information_sets, elaps
         with open(args.output, "wb") as handle:
             pickle.dump({"strategy": strategy, "abstraction": abstraction,
                          "args": vars(args), "results": results}, handle)
+        if _FLAT_EXPORT is not None:
+            # The flat pair from the same arrays, so the loaders never touch
+            # the dict form of a big rung again.
+            npz, side = flat_paths(args.output)
+            np.savez(npz, keys=_FLAT_EXPORT._keys, offsets=_FLAT_EXPORT._offsets, values=_FLAT_EXPORT._values)
+            with open(side, "wb") as handle:
+                pickle.dump({"abstraction": abstraction, "args": vars(args)}, handle)
         with open(os.path.splitext(args.output)[0] + ".json", "w") as handle:
             json.dump({"args": vars(args), "results": results,
                        "information_sets_reached": information_sets,

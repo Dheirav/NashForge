@@ -1,0 +1,23 @@
+{
+ "first": "results/cfr/experiments/cap2_18bb_100m_warm_pruned.pkl",
+ "second": "/home/dheirav/Code/PokerBot/results/cfr/ladder169l/nolimit_18bb.pkl",
+ "hands": 40000,
+ "seeds": [
+  0,
+  1,
+  2
+ ],
+ "bb_per_100": [
+  -10.029375,
+  -3.63,
+  -10.34625
+ ],
+ "mean": -8.001875,
+ "stderr": 2.187850596904414,
+ "on_miss": "call",
+ "miss_rate": [
+  0.020569484845084637,
+  0.004829251851039978
+ ],
+ "measured": "2026-09-19 13:43"
+}

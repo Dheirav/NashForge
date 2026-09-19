@@ -21,5 +21,8 @@ list(APPEND CMAKE_PREFIX_PATH "${NB_DIR}")
 find_package(nanobind CONFIG REQUIRED)
 
 nanobind_add_module(pokerbot_native STABLE_ABI NB_STATIC src/bindings.cpp)
+# The solver's worker threads (MCCFR::train with threads > 1).
+find_package(Threads REQUIRED)
+target_link_libraries(pokerbot_native PRIVATE Threads::Threads)
 
 install(TARGETS pokerbot_native LIBRARY DESTINATION .)
