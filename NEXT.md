@@ -4,7 +4,7 @@ One page, kept current. [`BACKLOG.md`](BACKLOG.md) holds the reasoning and every
 [`docs/training-plan.md`](docs/training-plan.md) holds the full phase plan and its results. This
 file is only the next thing to do.
 
-**Last updated:** 20 September 2026, 17:05 IST · 343 tests (~7m with the machine shared; collection ~3m24s)
+**Last updated:** 20 September 2026, 19:35 IST · 343 tests (~7m with the machine shared; collection ~3m24s)
 
 ---
 
@@ -82,10 +82,34 @@ timer armed and dry-run); the final about 02:30 Monday against Blueprint or Fold
 7 opens Tuesday 05:30, entries close Monday 23:59 UTC.
 
 *Today, bot off until 23:15:* done: the instrument tests, the reads-on duel, the histogram
-abstraction, the council's fixes, the corrected-dealer re-runs, and **the commit** (`328bf66`;
-the 2.2 GB of real solves the ladders link to are now gitignored). Left: lane T3's result
-(about 20:30); scout whoever is registered for season 7; write and dry-run, without
-starting, Monday's 05:29 v5d burst script; keep the machine awake through 05:29.
+abstraction, the council's fixes, the corrected-dealer re-runs, **the commit** (`328bf66`;
+the 2.2 GB of real solves the ladders link to are now gitignored), lane T3 (below), and
+**Monday's 05:29 burst, armed** (`~/pokerbot-scratch/chipzen/burst.sh`, pid in
+`burst_mon.pid`, dry-run passed 19:28 with the bot connected inbound-only). It plays the set
+named in `~/pokerbot-scratch/chipzen/burst_set`, currently **v5f**; to burst v5d again
+instead, change that file's three lines before 05:29 (dir `ladder169l_v5c`, the v5d label,
+`--deep-primary --stack-cap`). Left: scout whoever is registered for season 7; keep the
+machine awake through 05:29.
+
+**Sunday 20 September, 19:35 IST: the tapered third raise (v5f) ties v5d.** Lane T3's three
+deep rungs (`(4, 2, 1)`: four sizes for the open, 2×pot or all-in for the re-raise, all-in for
+the third raise; 20M warm, 2.7 to 3.2 h each on 2 threads) assembled as `ladder169l_v5f`.
+Against v5d on the corrected dealer: **50.0 ± 2.0% of 600 arena matches** and +6.2 ± 8.9
+chips a hand at 100bb. What differs is the rule hands: v5d fell to the rule 339 times against
+v5f (every 4-bet shove is off its tree) and v5f 114 times against v5d, and it made no
+difference to the score. Gates: cross-tree against the one-raise rung +104, +135 and +167
+BB/100 at 50/70/100bb, three seeds; the (2, 2) rung on the same corrected gate reads +197 at
+100bb, with the one-raise side missing 26% of its decisions (11% against v5f). **The
+cross-tree gate at deep stacks is saturated by the one-raise side's forced calls on a miss
+and no longer reads convergence**; it still says neither set loses to the one-raise
+strategy, which is all a go-live gate needs. Replay on the v5d record: 103 new-set misses
+against 44, but these are translation artefacts (the logged histories were mapped onto the
+cap-2 tree, whose ½-pot and pot re-raises the tapered tree does not have; live, v5f maps
+opponents' raises onto its own sizes), and agreement with the played action is 0.57 to 0.66
+against the baseline's 0.65 to 0.70. So v5f has passed the gate and the replay and is bursting
+Monday at 05:29; a tie in the duel plus the closed third-raise hole is the case for it, and
+twenty matches will not separate it from v5d either, so season 7's first-week set is chosen
+on the burst's decomposition (rule hands and preflop jams), not its headline.
 
 *Tonight and overnight:* the semi, decomposed after; the final's timer from the listed slot,
 dry-run; the final; enter season 7 after it.

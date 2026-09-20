@@ -283,9 +283,13 @@ and the fixture windows, and the v003 reconnect at 23:40 is inbound-only.
   "$(date '+%F %H:%M')" "$(date -d '1 minute' '+%F %H:%M')" DRYRUN` against a slot a minute out,
   and it must stop *after* its deadline. The Shadow fixture was lost to a `date -d` string the
   script had never executed. A syntax check is not a test.
-- **Bursts** (`v7_burst.sh`, `v7b_burst.sh`): start at 05:29 IST with the rated queue, stop after
-  20 matches or 11:30, so the day's eight lobby hours cover the evening fixture. Read them with
-  `scripts/chipzen_decompose.py`, not the headline.
+- **Bursts** (`burst.sh "2026-09-21 05:29"`, from 20 September; the earlier `v*_burst.sh` were
+  one script per set): start at the given time with the rated queue, stop between matches after
+  20 or two hours, so the day's eight lobby hours cover the evening fixture. The set comes from
+  `burst_set` (dir, label, flags), like `fixture_set`, so the morning's choice is one edit. Dry
+  run before arming: `NO_QUEUE=1 DEADLINE=3 MAX_MATCHES=0 burst.sh "<now + 1 min>"` connects
+  inbound-only, plays nothing, and exercises the start, the set file and the stop. Read a burst
+  with `scripts/chipzen_decompose.py`, not the headline.
 - **One set per label, the gated one, untouched on match day.** The playoff timetable every
   season: quarters Sat 18:00 UTC in ten-minute slots, semis Sun 18:00 and 18:10, final Sun 21:00
   UTC (02:30 IST Monday).
