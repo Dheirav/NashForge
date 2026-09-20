@@ -1,84 +1,87 @@
 {
  "Blueprint": {
-  "bets_faced": 3494,
+  "bets_faced": 4177,
   "by_history": {
    "flop:": {
-    "check": 752,
-    "raise": 145
+    "check": 1018,
+    "raise": 179
    },
    "flop:TcUr": {
-    "call": 59,
-    "fold": 298,
-    "raise": 51
+    "call": 82,
+    "fold": 432,
+    "raise": 68
    },
    "flop:TrUr": {
-    "call": 11,
-    "fold": 16,
-    "raise": 7
+    "call": 16,
+    "fold": 20,
+    "raise": 8
    },
    "flop:Uc": {
-    "check": 106,
-    "raise": 134
+    "check": 122,
+    "raise": 153
    },
    "flop:UcTrUr": {
-    "fold": 2,
-    "raise": 3
+    "fold": 5,
+    "raise": 4
    },
    "flop:Ur": {
-    "call": 26,
+    "call": 28,
     "fold": 55,
-    "raise": 45
+    "raise": 49
    },
    "preflop:": {
-    "call": 27,
-    "fold": 2203,
-    "raise": 998
+    "call": 35,
+    "fold": 2624,
+    "raise": 1218
    },
    "preflop:TcUr": {
     "call": 1,
-    "fold": 4,
+    "fold": 9,
     "raise": 2
    },
    "preflop:TrUr": {
-    "call": 18,
-    "fold": 54,
-    "raise": 20
+    "call": 26,
+    "fold": 87,
+    "raise": 36
    },
    "preflop:TrUrTrUr": {
     "call": 1,
-    "fold": 1
+    "fold": 1,
+    "raise": 1
    },
    "preflop:Uc": {
-    "check": 667,
-    "raise": 120
+    "check": 927,
+    "raise": 185
    },
    "preflop:UcTrUr": {
-    "fold": 7
+    "fold": 11
    },
    "preflop:Ur": {
-    "call": 167,
-    "fold": 1801,
-    "raise": 389
+    "call": 204,
+    "fold": 2027,
+    "raise": 446
    },
    "river:": {
-    "check": 171,
-    "raise": 131
+    "check": 220,
+    "raise": 165
    },
    "river:TcUr": {
-    "call": 19,
-    "fold": 47,
-    "raise": 13
+    "call": 20,
+    "fold": 61,
+    "raise": 19
    },
    "river:TrUr": {
-    "call": 7,
-    "fold": 14,
-    "raise": 3
+    "call": 10,
+    "fold": 16,
+    "raise": 6
    },
    "river:TrUrTrUr": {
-    "fold": 1
+    "call": 1,
+    "fold": 1,
+    "raise": 1
    },
    "river:Uc": {
-    "check": 25,
+    "check": 29,
     "raise": 34
    },
    "river:UcTrUr": {
@@ -86,191 +89,205 @@
     "fold": 1
    },
    "river:Ur": {
-    "call": 18,
-    "fold": 28,
-    "raise": 17
+    "call": 21,
+    "fold": 32,
+    "raise": 18
    },
    "turn:": {
-    "check": 362,
-    "raise": 116
+    "check": 471,
+    "raise": 144
    },
    "turn:TcUr": {
-    "call": 37,
-    "fold": 102,
-    "raise": 17
+    "call": 50,
+    "fold": 135,
+    "raise": 22
    },
    "turn:TrUr": {
-    "call": 8,
-    "fold": 8,
+    "call": 10,
+    "fold": 9,
     "raise": 6
    },
    "turn:TrUrTrUr": {
     "raise": 1
    },
    "turn:Uc": {
-    "check": 70,
-    "raise": 29
+    "check": 79,
+    "raise": 32
    },
    "turn:UcTrUr": {
-    "call": 1
+    "call": 2
    },
    "turn:Ur": {
-    "call": 41,
-    "fold": 43,
-    "raise": 23
+    "call": 43,
+    "fold": 47,
+    "raise": 25
    }
   },
-  "calls": 415,
-  "folds": 2482,
-  "hands": 6460,
-  "net": 190000,
-  "raises": 597
+  "calls": 516,
+  "folds": 2949,
+  "hands": 7754,
+  "net": 210000,
+  "raises": 712
  },
  "Fold-ver-3": {
-  "bets_faced": 1722,
+  "bets_faced": 1938,
   "big_bets": 0,
   "big_bets_air": 0,
   "by_history": {
    "flop:": {
-    "check": 346,
-    "raise": 231
+    "check": 386,
+    "raise": 245
    },
    "flop:TcUr": {
-    "call": 19,
-    "fold": 94
+    "call": 21,
+    "fold": 115
    },
    "flop:TrUr": {
-    "call": 19,
-    "fold": 3,
-    "raise": 1
+    "call": 24,
+    "fold": 6,
+    "raise": 2
    },
    "flop:TrUrTrUr": {
+    "call": 1,
     "raise": 1
    },
    "flop:Uc": {
-    "check": 343,
-    "raise": 220
+    "check": 344,
+    "raise": 247
    },
    "flop:UcTrUr": {
-    "call": 2,
-    "fold": 2,
-    "raise": 2
-   },
-   "flop:UcTrUrTrUr": {
-    "call": 1
-   },
-   "flop:Ur": {
-    "call": 58,
-    "fold": 102,
-    "raise": 55
-   },
-   "flop:UrTrUr": {
-    "call": 7,
-    "raise": 4
-   },
-   "flop:UrTrUrTrUr": {
-    "call": 3
-   },
-   "preflop:": {
-    "call": 609,
-    "fold": 47,
-    "raise": 230
-   },
-   "preflop:TcUr": {
-    "call": 387,
-    "fold": 26,
+    "call": 4,
+    "fold": 4,
     "raise": 1
    },
+   "flop:Ur": {
+    "call": 84,
+    "fold": 126,
+    "raise": 58
+   },
+   "flop:UrTrUr": {
+    "call": 6,
+    "raise": 1
+   },
+   "flop:UrTrUrTrUr": {
+    "call": 1
+   },
+   "preflop:": {
+    "call": 694,
+    "fold": 39,
+    "raise": 268
+   },
+   "preflop:TcUr": {
+    "call": 346,
+    "fold": 44
+   },
    "preflop:TrUr": {
-    "call": 5,
-    "fold": 1
+    "call": 9,
+    "fold": 2
    },
    "preflop:Uc": {
-    "check": 47,
-    "raise": 11
+    "check": 79,
+    "raise": 18
    },
    "preflop:UcTrUr": {
     "call": 2
    },
    "preflop:Ur": {
-    "call": 440,
-    "fold": 21,
-    "raise": 86
+    "call": 475,
+    "fold": 40,
+    "raise": 73
    },
    "preflop:UrTrUr": {
-    "call": 1
+    "call": 1,
+    "fold": 1
    },
    "river:": {
-    "check": 160,
-    "raise": 88
+    "check": 158,
+    "raise": 130
    },
    "river:TcUr": {
-    "fold": 40
+    "fold": 50
    },
    "river:TrUr": {
-    "call": 4,
-    "fold": 5,
+    "call": 6,
+    "fold": 10,
     "raise": 2
    },
    "river:TrUrTrUr": {
     "call": 1
    },
    "river:Uc": {
-    "check": 190,
-    "raise": 60
+    "check": 184,
+    "raise": 85
    },
    "river:UcTrUr": {
+    "raise": 1
+   },
+   "river:UcTrUrTrUr": {
     "call": 1
    },
    "river:Ur": {
-    "call": 19,
-    "fold": 63,
-    "raise": 14
+    "call": 14,
+    "fold": 105,
+    "raise": 23
    },
    "river:UrTrUr": {
-    "call": 2
+    "call": 3,
+    "raise": 1
+   },
+   "river:UrTrUrTrUr": {
+    "raise": 1
    },
    "turn:": {
-    "check": 245,
-    "raise": 134
+    "check": 256,
+    "raise": 178
    },
    "turn:TcUr": {
     "call": 1,
-    "fold": 64
+    "fold": 75
    },
    "turn:TrUr": {
-    "call": 6,
-    "fold": 11,
+    "call": 9,
+    "fold": 13,
     "raise": 5
    },
    "turn:TrUrTrUr": {
-    "call": 3
+    "call": 1
    },
    "turn:Uc": {
-    "check": 263,
-    "raise": 112
+    "check": 284,
+    "raise": 136
    },
    "turn:UcTrUr": {
-    "fold": 1
+    "fold": 1,
+    "raise": 1
+   },
+   "turn:UcTrUrTrUr": {
+    "call": 1
    },
    "turn:Ur": {
-    "call": 32,
-    "fold": 82,
-    "raise": 22
+    "call": 40,
+    "fold": 90,
+    "raise": 28
    },
    "turn:UrTrUr": {
-    "raise": 1
+    "call": 3,
+    "fold": 1,
+    "raise": 2
+   },
+   "turn:UrTrUrTrUr": {
+    "call": 1
    }
   },
-  "calls": 1013,
-  "folds": 515,
-  "hands": 1803,
+  "calls": 1055,
+  "folds": 683,
+  "hands": 2042,
   "net": 0,
-  "raises": 194,
-  "river_bets": 164,
+  "raises": 200,
+  "river_bets": 243,
   "river_bluffs": 0,
   "scouted": true,
-  "small_bets": 845,
+  "small_bets": 1021,
   "small_bets_air": 0
  },
  "PluriBot": {
@@ -315,7 +332,7 @@
   "raises": 2
  },
  "PoetAndCoder": {
-  "bets_faced": 939,
+  "bets_faced": 951,
   "big_bets": 463,
   "big_bets_air": 0,
   "by_history": {
@@ -347,8 +364,8 @@
     "call": 1
    },
    "flop:Uc": {
-    "check": 190,
-    "raise": 233
+    "check": 193,
+    "raise": 236
    },
    "flop:UcTrUr": {
     "call": 1,
@@ -358,7 +375,7 @@
     "call": 1
    },
    "flop:Ur": {
-    "call": 74,
+    "call": 77,
     "fold": 44,
     "raise": 24
    },
@@ -371,11 +388,11 @@
     "raise": 1
    },
    "preflop:": {
-    "call": 488,
+    "call": 500,
     "raise": 153
    },
    "preflop:TcUr": {
-    "call": 78,
+    "call": 81,
     "fold": 37,
     "raise": 24
    },
@@ -411,7 +428,7 @@
    },
    "preflop:Ur": {
     "call": 156,
-    "fold": 13,
+    "fold": 16,
     "raise": 21
    },
    "preflop:UrTrUr": {
@@ -449,7 +466,7 @@
    },
    "river:Uc": {
     "check": 101,
-    "raise": 208
+    "raise": 214
    },
    "river:UcUcUc": {
     "check": 1
@@ -482,7 +499,7 @@
     "raise": 1
    },
    "turn:Uc": {
-    "check": 162,
+    "check": 165,
     "raise": 211
    },
    "turn:UcTrUr": {
@@ -495,18 +512,18 @@
    "turn:Ur": {
     "call": 56,
     "fold": 27,
-    "raise": 16
+    "raise": 19
    },
    "turn:UrTrUr": {
     "call": 1,
     "raise": 1
    }
   },
-  "calls": 563,
-  "folds": 225,
-  "hands": 1314,
-  "net": 20000,
-  "raises": 151,
+  "calls": 569,
+  "folds": 228,
+  "hands": 1338,
+  "net": 50000,
+  "raises": 154,
   "river_bets": 479,
   "river_bluffs": 158,
   "scouted": true,
@@ -754,30 +771,30 @@
   "raises": 120
  },
  "mellyy": {
-  "bets_faced": 1579,
+  "bets_faced": 1837,
   "big_bets": 7,
   "big_bets_air": 0,
   "by_history": {
    "flop:": {
-    "check": 213,
-    "raise": 197
+    "check": 243,
+    "raise": 224
    },
    "flop:TcUr": {
     "call": 4,
-    "fold": 103
+    "fold": 121
    },
    "flop:TrUr": {
-    "call": 21,
-    "fold": 22
+    "call": 24,
+    "fold": 25
    },
    "flop:Uc": {
-    "check": 110,
-    "raise": 123
+    "check": 125,
+    "raise": 135
    },
    "flop:Ur": {
-    "call": 53,
-    "fold": 60,
-    "raise": 6
+    "call": 68,
+    "fold": 69,
+    "raise": 9
    },
    "flop:UrTrUr": {
     "call": 1,
@@ -785,21 +802,21 @@
    },
    "preflop:": {
     "call": 12,
-    "fold": 833,
-    "raise": 694
+    "fold": 935,
+    "raise": 781
    },
    "preflop:TrUr": {
-    "call": 14,
-    "fold": 69,
-    "raise": 12
+    "call": 17,
+    "fold": 81,
+    "raise": 15
    },
    "preflop:Uc": {
-    "check": 275,
+    "check": 317,
     "raise": 22
    },
    "preflop:Ur": {
-    "call": 115,
-    "fold": 827,
+    "call": 130,
+    "fold": 959,
     "raise": 63
    },
    "preflop:UrTrUr": {
@@ -809,8 +826,8 @@
     "raise": 1
    },
    "river:": {
-    "check": 74,
-    "raise": 47
+    "check": 77,
+    "raise": 53
    },
    "river:TcUr": {
     "call": 4,
@@ -818,19 +835,19 @@
    },
    "river:TrUr": {
     "call": 3,
-    "raise": 12
+    "raise": 15
    },
    "river:Uc": {
-    "check": 61,
-    "raise": 82
+    "check": 73,
+    "raise": 97
    },
    "river:UcTrUr": {
     "fold": 1
    },
    "river:Ur": {
-    "call": 7,
-    "fold": 27,
-    "raise": 12
+    "call": 10,
+    "fold": 33,
+    "raise": 15
    },
    "river:UrTrUr": {
     "raise": 1
@@ -839,32 +856,32 @@
     "raise": 1
    },
    "turn:": {
-    "check": 136,
-    "raise": 78
+    "check": 154,
+    "raise": 87
    },
    "turn:TcUr": {
     "call": 4,
-    "fold": 61
+    "fold": 76
    },
    "turn:TrUr": {
     "call": 2,
     "fold": 2
    },
    "turn:Uc": {
-    "check": 110,
-    "raise": 74
+    "check": 131,
+    "raise": 86
    },
    "turn:Ur": {
-    "call": 23,
+    "call": 32,
     "fold": 15,
-    "raise": 12
+    "raise": 15
    }
   },
-  "calls": 251,
-  "folds": 1205,
-  "hands": 3087,
-  "net": 110000,
-  "raises": 123,
+  "calls": 299,
+  "folds": 1400,
+  "hands": 3465,
+  "net": 170000,
+  "raises": 138,
   "river_bets": 67,
   "river_bluffs": 5,
   "scouted": true,
@@ -1148,30 +1165,30 @@
   "raises": 161
  },
  "runner1": {
-  "bets_faced": 1346,
+  "bets_faced": 1565,
   "big_bets": 1,
   "big_bets_air": 0,
   "by_history": {
    "flop:": {
-    "check": 310,
-    "raise": 135
+    "check": 355,
+    "raise": 156
    },
    "flop:TcUr": {
-    "call": 39,
+    "call": 42,
     "fold": 20
    },
    "flop:TrUr": {
     "call": 4,
-    "raise": 15
+    "raise": 18
    },
    "flop:Uc": {
-    "check": 281,
-    "raise": 138
+    "check": 317,
+    "raise": 159
    },
    "flop:Ur": {
-    "call": 186,
-    "fold": 32,
-    "raise": 54
+    "call": 219,
+    "fold": 35,
+    "raise": 66
    },
    "flop:UrTrUr": {
     "fold": 1,
@@ -1184,21 +1201,21 @@
     "raise": 1
    },
    "preflop:": {
-    "call": 743,
-    "raise": 15
+    "call": 857,
+    "raise": 18
    },
    "preflop:TcUr": {
-    "call": 180,
-    "fold": 50
+    "call": 210,
+    "fold": 59
    },
    "preflop:Uc": {
-    "check": 196,
-    "raise": 21
+    "check": 220,
+    "raise": 24
    },
    "preflop:Ur": {
-    "call": 218,
-    "fold": 67,
-    "raise": 14
+    "call": 254,
+    "fold": 79,
+    "raise": 17
    },
    "preflop:UrTrUr": {
     "raise": 1
@@ -1210,23 +1227,23 @@
     "raise": 1
    },
    "river:": {
-    "check": 222,
-    "raise": 88
+    "check": 255,
+    "raise": 103
    },
    "river:TcUr": {
-    "call": 48,
-    "fold": 23
+    "call": 57,
+    "fold": 26
    },
    "river:TrUr": {
     "raise": 2
    },
    "river:Uc": {
-    "check": 204,
-    "raise": 59
+    "check": 234,
+    "raise": 65
    },
    "river:Ur": {
-    "call": 35,
-    "fold": 57,
+    "call": 38,
+    "fold": 66,
     "raise": 9
    },
    "river:UrTrUr": {
@@ -1237,38 +1254,38 @@
     "raise": 1
    },
    "turn:": {
-    "check": 232,
-    "raise": 158
+    "check": 265,
+    "raise": 188
    },
    "turn:TcUr": {
-    "call": 53,
-    "fold": 17
+    "call": 62,
+    "fold": 20
    },
    "turn:TrUr": {
-    "call": 14
+    "call": 17
    },
    "turn:Uc": {
-    "check": 223,
-    "raise": 102
+    "check": 250,
+    "raise": 114
    },
    "turn:UcTrUr": {
-    "call": 12,
+    "call": 15,
     "raise": 2
    },
    "turn:Ur": {
-    "call": 93,
-    "fold": 59,
-    "raise": 31
+    "call": 108,
+    "fold": 71,
+    "raise": 37
    },
    "turn:UrTrUr": {
     "fold": 1
    }
   },
-  "calls": 882,
-  "folds": 329,
-  "hands": 1510,
-  "net": 120000,
-  "raises": 135,
+  "calls": 1026,
+  "folds": 380,
+  "hands": 1744,
+  "net": 150000,
+  "raises": 159,
   "river_bets": 76,
   "river_bluffs": 0,
   "scouted": true,
@@ -1276,17 +1293,17 @@
   "small_bets_air": 0
  },
  "v003": {
-  "bets_faced": 77,
-  "big_bets": 9,
+  "bets_faced": 107,
+  "big_bets": 15,
   "big_bets_air": 0,
   "by_history": {
    "flop:": {
-    "check": 16,
-    "raise": 10
+    "check": 22,
+    "raise": 16
    },
    "flop:TcUr": {
     "call": 5,
-    "fold": 3
+    "fold": 5
    },
    "flop:TrUr": {
     "call": 1,
@@ -1296,17 +1313,18 @@
     "raise": 1
    },
    "flop:Uc": {
-    "check": 8,
-    "raise": 7
+    "check": 12,
+    "raise": 10
    },
    "flop:Ur": {
-    "fold": 3,
-    "raise": 2
+    "call": 2,
+    "fold": 4,
+    "raise": 3
    },
    "preflop:": {
-    "call": 15,
-    "fold": 20,
-    "raise": 33
+    "call": 18,
+    "fold": 28,
+    "raise": 48
    },
    "preflop:TcUr": {
     "fold": 2,
@@ -1321,52 +1339,57 @@
     "raise": 1
    },
    "preflop:Ur": {
-    "call": 19,
-    "fold": 12,
-    "raise": 9
+    "call": 28,
+    "fold": 17,
+    "raise": 14
    },
    "river:": {
-    "check": 8,
-    "raise": 4
+    "check": 11,
+    "raise": 7
    },
    "river:TcUr": {
+    "call": 1,
     "fold": 3
    },
    "river:Uc": {
-    "check": 3,
-    "raise": 1
+    "check": 5,
+    "raise": 3
+   },
+   "river:Ur": {
+    "fold": 1
    },
    "turn:": {
-    "check": 11,
-    "raise": 9
+    "check": 14,
+    "raise": 14
    },
    "turn:TcUr": {
     "call": 1
    },
    "turn:TrUr": {
-    "call": 3,
+    "call": 4,
     "fold": 1,
     "raise": 1
    },
    "turn:Uc": {
-    "check": 3,
-    "raise": 6
+    "check": 6,
+    "raise": 9
    },
    "turn:Ur": {
+    "call": 1,
     "fold": 1,
-    "raise": 2
+    "raise": 3
    }
   },
-  "calls": 30,
-  "folds": 28,
-  "hands": 137,
-  "net": 0,
-  "raises": 19,
-  "river_bets": 5,
+  "calls": 44,
+  "folds": 37,
+  "hands": 189,
+  "net": 10000,
+  "raises": 26,
+  "river_bets": 10,
   "river_bluffs": 0,
   "scouted": true,
-  "small_bets": 18,
-  "small_bets_air": 1
+  "small_bets": 31,
+  "small_bets_air": 4
  },
  "wsp": {
   "bets_faced": 1107,

@@ -150,7 +150,8 @@ ON_MISS_MODES = ("random", "call")
 def cfr_agent(strategy: Dict[Hashable, np.ndarray], abstraction,
               rng: np.random.Generator, misses: Optional[List[int]] = None,
               raise_cap: int = 1, probe: Optional[List] = None,
-              purify: str = "none", on_miss: str = "random") -> Agent:
+              purify: str = "none", on_miss: str = "random",
+              stack_cap: bool = False) -> Agent:
     """
     A solved strategy, playing in the engine.
 
@@ -181,6 +182,15 @@ def cfr_agent(strategy: Dict[Hashable, np.ndarray], abstraction,
     cross-tree gate: a cap-2 solve against a one-raise one misses on lines the
     bigger tree never visited, and a random shove there measured the fallback
     rather than the solve (25bb read −29.6 random, −17.5 call, 17 September).
+
+    ``stack_cap`` mirrors the trees' rule that a player who cannot cover the
+    bet has only fold and call: both solvers store a two-wide entry there,
+    and without the mirror this harness reconstructed the full list, rejected
+    the entry as the wrong width, and played the miss policy at exactly the
+    "facing a big bet" nodes. 34% of a cap-2 rung's keys are such nodes (19
+    September); a one-raise tree's two-wide nodes happen to match anyway,
+    which is why only cap-2 solves suffered. Off by default because the arena
+    player's chip scale is the bridge's, not this engine's; on in the gates.
 
     ``probe`` is the same idea for the viewer: it receives the distribution
     actually sampled from, or ``None`` where no entry existed and the choice
@@ -233,9 +243,18 @@ def cfr_agent(strategy: Dict[Hashable, np.ndarray], abstraction,
         if probabilities is None:
             return guess()
 
-        actor = game.players[player_id]
-        to_call = game.current_bet - actor.bet
+        to_call = game.current_bet - game.players[player_id].bet
         actions = _solver_actions(history, to_call, raise_cap)
+        if stack_cap and to_call > 0 and probabilities.size == 2:
+            # The tree drops the raise tail when the actor's stack cannot
+            # cover the call, and a facing node's list always begins with
+            # fold and call, so a two-wide entry there is fold/call whatever
+            # the reason. Deciding by the stored width rather than by the
+            # engine's stack matters in the arena, where the real stack is
+            # not the tree's: with real bet sizes the two boundaries differ,
+            # and a stack test turned tree hits into rule decisions and left
+            # capped entries unreachable.
+            actions = [FOLD, CHECK_CALL]
         if len(actions) != probabilities.size:
             # The reconstruction disagrees with the stored width, so the entry
             # cannot be placed reliably. Rare, and counted rather than guessed at
@@ -308,7 +327,7 @@ def _constrain(mask: np.ndarray, to_call: int, raises_this_street: int,
 
 
 def _play_hand(agents: Sequence[Agent], seed: int, starting_stack: int,
-               small_blind: int, big_blind: int, raise_cap: int) -> float:
+               small_blind: int, big_blind: int, raise_cap, raise_caps=None) -> float:
     """
     One hand. Returns chips won by ``agents[0]``, who sits in seat 0.
 
@@ -340,8 +359,13 @@ def _play_hand(agents: Sequence[Agent], seed: int, starting_stack: int,
 
         actor = game.players[player]
         to_call = game.current_bet - actor.bet
+        # Each seat is narrowed to its own tree. With one cap for both, a
+        # cap-2 solve could never make the re-raise it was solved with, and
+        # every cross-tree gate before 19 September was a cap-2 strategy
+        # playing fold/call frequencies meant for a game with a re-raise in it.
+        cap = raise_caps[player] if raise_caps is not None else raise_cap
         mask = _constrain(get_abstract_action_mask(game, player), to_call,
-                          raises_this_street, raise_cap)
+                          raises_this_street, cap)
 
         choice = agents[player](game, player, mask, history)
         if not mask[choice]:
@@ -370,13 +394,18 @@ def _play_hand(agents: Sequence[Agent], seed: int, starting_stack: int,
 def benchmark(agent: Agent, opponent: Agent, name: str, hands: int = 2000,
               seed: int = 0, starting_stack: int = 200, small_blind: int = 1,
               big_blind: int = 2, raise_cap: int = 1,
-              misses: Optional[List[int]] = None) -> BenchmarkResult:
+              misses: Optional[List[int]] = None, raise_caps=None) -> BenchmarkResult:
     """
     Play ``agent`` against ``opponent`` and report chips per hand to ``agent``.
 
     Every hand is played twice from one seed with the seats swapped, and the
     two results differenced. Position cancels because each agent sits in both
     seats; card luck cancels because both hold the same cards.
+
+    ``raise_caps`` gives ``(agent's, opponent's)`` raise schedules when the two
+    were solved on different trees; each is narrowed to its own, and an agent
+    facing a raise its tree lacks takes its miss policy, as it would in play
+    without a companion. ``raise_cap`` alone applies one tree to both.
     """
     outcomes = np.empty(hands, dtype=np.float64)
     if misses is None:
@@ -384,10 +413,12 @@ def benchmark(agent: Agent, opponent: Agent, name: str, hands: int = 2000,
 
     for index in range(hands):
         deal = seed * 1_000_003 + index
+        caps = None if raise_caps is None else tuple(raise_caps)
         ours = _play_hand([agent, opponent], deal, starting_stack,
-                          small_blind, big_blind, raise_cap)
+                          small_blind, big_blind, raise_cap, caps)
         theirs = _play_hand([opponent, agent], deal, starting_stack,
-                            small_blind, big_blind, raise_cap)
+                            small_blind, big_blind, raise_cap,
+                            None if caps is None else (caps[1], caps[0]))
         outcomes[index] = (ours - theirs) / 2.0
 
     stderr = (float(outcomes.std(ddof=1) / math.sqrt(hands)) if hands > 1

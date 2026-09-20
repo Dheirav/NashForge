@@ -35,7 +35,7 @@ sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")
 import numpy as np  # noqa: E402
 
 from chipzen.player import load_solver  # noqa: E402
-from evaluation.benchmark import NUM_ACTIONS, _solver_actions  # noqa: E402
+from evaluation.benchmark import CHECK_CALL, FOLD, NUM_ACTIONS, _solver_actions  # noqa: E402
 from scripts.chipzen_review import DIRS, ACTION, hands_of, load, net  # noqa: E402
 from scripts.chipzen_run import ladder_paths  # noqa: E402
 from slumbot.bridge import parse_cards  # noqa: E402
@@ -70,6 +70,8 @@ def lookup(solver, decision):
     # Spread onto the six abstract actions exactly as `cfr_agent` does: an
     # entry is stored over the node's own legal-action list, not six wide.
     actions = _solver_actions(decision["history"], decision["to_call"], solver.schedule)
+    if decision["to_call"] > 0 and probabilities.size == 2:
+        actions = [FOLD, CHECK_CALL]     # stack-capped in the tree: fold/call (see cfr_agent)
     if len(actions) != probabilities.size:
         return None                      # the reconstruction disagrees with the stored width
     mask = np.asarray(decision["legal"], dtype=float)

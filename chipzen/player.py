@@ -92,16 +92,27 @@ class Stats:
         return self.misses / self.consulted if self.consulted else 0.0
 
 
-def _shim(hole, board, to_call: int):
-    """The four things `cfr_agent` reads. See `slumbot.player._shim` for why."""
-    actor = SimpleNamespace(hole_cards=hole, bet=0)
+def _shim(hole, board, to_call: int, stack: int = 0):
+    """
+    The five things `cfr_agent` reads. See `slumbot.player._shim` for why.
+
+    `stack` matters only with `cfr_agent(stack_cap=True)`: the trees give a
+    player who cannot cover the bet just fold and call, and both solvers store
+    a two-wide entry there. Without the stack the lookup rebuilt the full
+    list, rejected the entry as the wrong width, and the decision fell to the
+    rule at exactly the all-in-facing nodes (19 September; 34% of a cap-2
+    rung's keys are such nodes). The arena's `your_stack` is in the bridge's
+    chip scale, which the bridge already uses for the shove ceiling.
+    """
+    actor = SimpleNamespace(hole_cards=hole, bet=0, stack=stack)
     return SimpleNamespace(
-        players=[actor, SimpleNamespace(hole_cards=[], bet=0)],
+        players=[actor, SimpleNamespace(hole_cards=[], bet=0, stack=0)],
         state=SimpleNamespace(community_cards=board),
         current_bet=to_call)
 
 
-def load_solver(path: str, rng: np.random.Generator, purify: str = "none") -> Solver:
+def load_solver(path: str, rng: np.random.Generator, purify: str = "none",
+                stack_cap: bool = False) -> Solver:
     # The flat pair beside the pickle when it exists (cfr/flat.py): the same
     # answers, a twentieth of the memory, which is what lets the whole ladder
     # sit beside a training run.
@@ -115,7 +126,8 @@ def load_solver(path: str, rng: np.random.Generator, purify: str = "none") -> So
     solver = Solver(path=path, depth_bb=depth, schedule=schedule,
                     strategy=saved["strategy"], abstraction=saved["abstraction"])
     solver.agent = cfr_agent(solver.strategy, solver.abstraction, rng,
-                             misses=solver.misses, raise_cap=schedule, purify=purify)
+                             misses=solver.misses, raise_cap=schedule, purify=purify,
+                             stack_cap=stack_cap)
     return solver
 
 
@@ -176,9 +188,12 @@ class ArenaPlayer:
     def __init__(self, paths: Sequence[str], rng: Optional[np.random.Generator] = None,
                  companions: Sequence[str] = (), purify: str = "none",
                  river: bool = False, river_budget_s: float = 8.0,
-                 river_shove_companion: bool = False):
+                 river_shove_companion: bool = False, stack_cap: bool = False):
         self.rng = rng if rng is not None else np.random.default_rng()
         self.purify = purify
+        #: Honour the trees' stack cap in every lookup (see `_shim`). Off by
+        #: default until a burst has gated it; the duel gates it first.
+        self.stack_cap = stack_cap
         #: Facing an all-in on the river, ask the cap-2 companion even though
         #: the one-raise primary has a node. The primary's river node was solved
         #: in a game where nobody can re-raise, so a shove there is bluff-heavy
@@ -192,11 +207,11 @@ class ArenaPlayer:
         #: blueprint's own answer is kept only if the solve fails or overruns.
         self.river = river
         self.river_budget_s = river_budget_s
-        self.ladder = sorted((load_solver(p, self.rng, purify) for p in paths),
+        self.ladder = sorted((load_solver(p, self.rng, purify, stack_cap) for p in paths),
                              key=lambda s: s.depth_bb)
         if not self.ladder:
             raise ValueError("an empty ladder cannot play")
-        self.companions = sorted((load_solver(p, self.rng, purify) for p in companions),
+        self.companions = sorted((load_solver(p, self.rng, purify, stack_cap) for p in companions),
                                  key=lambda s: s.depth_bb)
         self.stats = Stats()
         self.probe: List = []
@@ -277,7 +292,7 @@ class ArenaPlayer:
 
         before = list(solver.misses)
         self.probe[:] = []
-        choice = solver.agent(_shim(hole, board, to_call), 0, mask, node.history)
+        choice = solver.agent(_shim(hole, board, to_call, int(state.get("your_stack") or 0)), 0, mask, node.history)
         missed = solver.misses[0] > before[0]
         fell_back = False
         companion_used = None
@@ -289,7 +304,7 @@ class ArenaPlayer:
                 deep_hand = replay(state, seat, self.rng, schedule=deep.schedule)
                 deep_mask = legal_mask(deep_hand.node, valid_actions, deep.schedule)
                 deep_before = deep.misses[0]
-                answer = deep.agent(_shim(hole, board, to_call), 0, deep_mask, deep_hand.node.history)
+                answer = deep.agent(_shim(hole, board, to_call, int(state.get("your_stack") or 0)), 0, deep_mask, deep_hand.node.history)
                 if deep.misses[0] == deep_before:
                     river_shove = f"river shove: {ACTION_NAMES.get(choice, choice)} -> companion "
                     river_shove += f"{ACTION_NAMES.get(answer, answer)}"
@@ -302,7 +317,7 @@ class ArenaPlayer:
                 deep_hand = replay(state, seat, self.rng, schedule=deep.schedule)
                 deep_mask = legal_mask(deep_hand.node, valid_actions, deep.schedule)
                 deep_before = deep.misses[0]
-                choice = deep.agent(_shim(hole, board, to_call), 0, deep_mask,
+                choice = deep.agent(_shim(hole, board, to_call, int(state.get("your_stack") or 0)), 0, deep_mask,
                                     deep_hand.node.history)
                 if deep.misses[0] == deep_before:
                     companion_used = f"{deep.depth_bb:g}bb{deep.schedule}"

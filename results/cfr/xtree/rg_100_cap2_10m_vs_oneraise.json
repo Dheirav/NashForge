@@ -1,0 +1,26 @@
+{
+ "first": "results/cfr/ladder169l_10m/cap2_100bb.pkl",
+ "second": "results/cfr/ladder169l/nolimit_100bb.pkl",
+ "hands": 40000,
+ "seeds": [
+  0,
+  1,
+  2
+ ],
+ "bb_per_100": [
+  -13.89125,
+  -15.70125,
+  -16.168125
+ ],
+ "mean": -15.253541666666669,
+ "stderr": 0.6943514972520124,
+ "on_miss": "call",
+ "stack": 200,
+ "big_blind": 2,
+ "stack_cap": true,
+ "miss_rate": [
+  0.001359011486404621,
+  0.0
+ ],
+ "measured": "2026-09-19 16:36"
+}

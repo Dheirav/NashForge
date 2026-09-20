@@ -217,7 +217,7 @@ def flop_table_arrays(abstraction):
 #:
 #: Which to use is a real trade-off rather than an optimisation, so both are
 #: available and measured — see ``scripts/cfr/compare_strength_signals.py``.
-STRENGTH_SIGNALS = ("equity", "made_hand")
+STRENGTH_SIGNALS = ("equity", "made_hand", "histogram")
 
 
 #: Texture classes: three flush levels (two or fewer of a suit on board, three,
@@ -288,6 +288,14 @@ class CardAbstraction:
     #: Off by default: every panel solver was fitted without it, and the key
     #: space multiplies by TEXTURE_CLASSES when it is on.
     texture: bool = False
+    #: `strength="histogram"` only (abstraction/histogram.py): the distribution
+    #: of river equity over `hist_runouts` sampled boards, each scored against
+    #: `hist_opponents` random hands, in `hist_bins` bins; clustered by earth
+    #: mover's distance. The scalar E[HS] is this histogram's mean, so the
+    #: feature strictly refines the old one. Johanson et al. 2013.
+    hist_bins: int = 20
+    hist_runouts: int = 100
+    hist_opponents: int = 50
 
     _preflop: Dict[Tuple[str, str, bool], int] = None
     #: Lossless preflop only: each hand's coarse Chen class, `postflop_buckets`
@@ -298,12 +306,24 @@ class CardAbstraction:
     _preflop_strength: Dict[int, int] = None
     _centroids: Dict[str, np.ndarray] = None
     #: The same centroids as plain sorted lists, for the binary-search lookup.
+    #: In histogram mode this holds the centroids' mean equities, so every
+    #: `len(self._centroid_list[street])` stays the bucket count.
     _centroid_list: Dict[str, List[float]] = None
+    #: Histogram mode: [buckets, hist_bins] centroid histograms per street,
+    #: ordered by mean equity so bucket 0 is weakest.
+    _hist_centroids: Dict[str, np.ndarray] = None
 
     def __post_init__(self):
         if self.strength not in STRENGTH_SIGNALS:
             raise ValueError(
                 f"strength must be one of {STRENGTH_SIGNALS}, got {self.strength!r}")
+        # The native mirror keeps the histogram on the stack (64 doubles) and
+        # divides by runouts and opponents; a zero in either reads or writes
+        # out of bounds there. Rejected here, before a fit runs for minutes.
+        if not 1 <= self.hist_bins <= 64:
+            raise ValueError(f"hist_bins must be 1 to 64, got {self.hist_bins}")
+        if self.hist_runouts < 1 or self.hist_opponents < 1:
+            raise ValueError("hist_runouts and hist_opponents must be at least 1")
 
     def __setstate__(self, state):
         """
@@ -322,6 +342,10 @@ class CardAbstraction:
             self.texture = False
         if "_preflop_strength" not in state:
             self._preflop_strength = None
+        for name, default in (("hist_bins", 20), ("hist_runouts", 100), ("hist_opponents", 50),
+                              ("_hist_centroids", None)):
+            if name not in state:
+                setattr(self, name, default)
         if getattr(self, "_centroid_list", None) is None and self._centroids:
             self._centroid_list = {street: centroids.tolist()
                                    for street, centroids in self._centroids.items()}
@@ -343,6 +367,10 @@ class CardAbstraction:
                 if value is not None:
                     return value
             return equity_vs_random(hole, board, self.equity_samples, rng)
+        if self.strength == "histogram":
+            from abstraction.histogram import strength_histogram
+            return strength_histogram(hole, board, self.hist_bins, self.hist_runouts,
+                                      self.hist_opponents, rng)
         return made_hand_strength(hole, board)
 
     # ------------------------------------------------------------------
@@ -394,12 +422,21 @@ class CardAbstraction:
         """Cluster sampled equities into buckets, one clustering per street."""
         self._centroids = {}
         self._centroid_list = {}
+        self._hist_centroids = {}
         for street in POSTFLOP_STREETS:
             values = np.array([
                 self._postflop_strength(hole, board, rng)
                 for hole, board in sample_situations(
                     STREET_BOARD_SIZE[street], self.samples, rng)
             ])
+            if self.strength == "histogram":
+                from abstraction.histogram import kmeans_emd
+                centroids = kmeans_emd(values, self.postflop_buckets, rng=rng)
+                self._hist_centroids[street] = centroids
+                centres = (np.arange(self.hist_bins) + 0.5) / self.hist_bins
+                self._centroids[street] = centroids @ centres
+                self._centroid_list[street] = self._centroids[street].tolist()
+                continue
             self._centroids[street] = _fit_kmeans_1d(values, self.postflop_buckets)
             self._centroid_list[street] = self._centroids[street].tolist()
 
@@ -420,8 +457,27 @@ class CardAbstraction:
             return self._preflop[preflop_key(hole)]
 
         street = _STREET_BY_BOARD[len(board)]
-        value = self._postflop_strength(hole, board, rng)
-        bucket = _nearest_centroid(self._centroid_list[street], value)
+        if self.strength == "histogram":
+            # The Python histogram costs about 30 ms a lookup on the flop, the
+            # native one 0.4 ms, and the river re-solver buckets 1,081 hands
+            # per decision; through the Python that is a minute against a
+            # 30-second clock. Same distribution either way, so play uses the
+            # native when it is importable and keeps the Python as reference.
+            try:
+                import pokerbot_native as native
+                seed = int(rng.integers(0, 2 ** 63 - 1)) if rng is not None else 0
+                value = np.asarray(native.strength_histogram(
+                    [c.index for c in hole], [c.index for c in board], self.hist_bins,
+                    self.hist_runouts, self.hist_opponents, seed))
+            except ImportError:
+                value = self._postflop_strength(hole, board, rng)
+        else:
+            value = self._postflop_strength(hole, board, rng)
+        if self.strength == "histogram":
+            from abstraction.histogram import nearest_emd
+            bucket = nearest_emd(self._hist_centroids[street], value)
+        else:
+            bucket = _nearest_centroid(self._centroid_list[street], value)
         if getattr(self, "texture", False):
             bucket += len(self._centroid_list[street]) * board_texture(board)
         return bucket

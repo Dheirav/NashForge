@@ -1,0 +1,26 @@
+{
+ "first": "results/cfr/experiments/cap2_8bb_20m_warm.pkl",
+ "second": "results/cfr/ladder169l/nolimit_8bb.pkl",
+ "hands": 40000,
+ "seeds": [
+  0,
+  1,
+  2
+ ],
+ "bb_per_100": [
+  -7.67375,
+  -7.4643749999999995,
+  -7.6825
+ ],
+ "mean": -7.606875,
+ "stderr": 0.07129475933288057,
+ "on_miss": "call",
+ "stack": 16,
+ "big_blind": 2,
+ "stack_cap": true,
+ "miss_rate": [
+  0.002018806096741047,
+  0.0
+ ],
+ "measured": "2026-09-19 16:28"
+}

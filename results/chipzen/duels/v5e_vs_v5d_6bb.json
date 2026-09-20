@@ -1,0 +1,82 @@
+{
+ "a": {
+  "dir": "results/cfr/ladder169l_v5e",
+  "flags": "--deep-primary --stack-cap",
+  "label": "v5e"
+ },
+ "b": {
+  "dir": "results/cfr/ladder169l_v5c",
+  "flags": "--deep-primary --stack-cap",
+  "label": "v5d"
+ },
+ "hands": 4000,
+ "stack_bb": 6.0,
+ "big_blind": 100,
+ "seed": 33,
+ "chips_per_hand": -2.23125,
+ "stderr": 1.7188197457439727,
+ "bb_per_100": -2.23125,
+ "a_stats": {
+  "decisions": 9456,
+  "misses": 0,
+  "consulted": 9456,
+  "off_abstraction": 0,
+  "companion_hits": 0,
+  "river_shoves_to_companion": 0,
+  "shoves_softened": 0,
+  "bluffs_withheld": 0,
+  "shove_calls_declined": 0,
+  "river_solves": 0,
+  "blinds_opened": 0,
+  "three_bets_into_folders": 0,
+  "river_bets_believed": 0,
+  "big_bets_believed": 0,
+  "small_bets_called": 0,
+  "river_failures": 0,
+  "fallbacks": 0,
+  "miss_depths": {},
+  "depths_used": {
+   "6bb": 9456
+  },
+  "actions_sent": {
+   "fold": 2511,
+   "raise": 4712,
+   "call": 1712,
+   "check": 521
+  },
+  "slowest_ms": 140.9988310188055
+ },
+ "b_stats": {
+  "decisions": 9289,
+  "misses": 932,
+  "consulted": 9289,
+  "off_abstraction": 0,
+  "companion_hits": 0,
+  "river_shoves_to_companion": 0,
+  "shoves_softened": 0,
+  "bluffs_withheld": 0,
+  "shove_calls_declined": 0,
+  "river_solves": 0,
+  "blinds_opened": 0,
+  "three_bets_into_folders": 0,
+  "river_bets_believed": 0,
+  "big_bets_believed": 0,
+  "small_bets_called": 0,
+  "river_failures": 0,
+  "fallbacks": 932,
+  "miss_depths": {
+   "1": 221
+  },
+  "depths_used": {
+   "5bb": 9289
+  },
+  "actions_sent": {
+   "fold": 2011,
+   "call": 1980,
+   "check": 1154,
+   "raise": 4144
+  },
+  "slowest_ms": 337.87169301649556
+ },
+ "measured": "2026-09-20 10:43"
+}

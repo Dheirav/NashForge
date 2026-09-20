@@ -1,0 +1,96 @@
+{
+ "a": {
+  "dir": "results/cfr/ladder169l_v5c",
+  "flags": "--deep-primary --stack-cap --sequential-triggers --scout-reads",
+  "label": "v5d"
+ },
+ "b": {
+  "dir": "results/cfr/ladder169l_v5c",
+  "flags": "--stack-cap --sequential-triggers --scout-reads",
+  "label": "v7b+cap"
+ },
+ "arena_matches": 600,
+ "win_rate": 0.5366666666666666,
+ "stderr": 0.020357453817359525,
+ "hands_per_match": 50.97666666666667,
+ "seed": 42,
+ "a_stats": {
+  "decisions": 71462,
+  "misses": 132,
+  "consulted": 71462,
+  "off_abstraction": 0,
+  "companion_hits": 0,
+  "river_shoves_to_companion": 0,
+  "shoves_softened": 0,
+  "bluffs_withheld": 0,
+  "shove_calls_declined": 0,
+  "river_solves": 0,
+  "blinds_opened": 0,
+  "three_bets_into_folders": 0,
+  "river_bets_believed": 0,
+  "big_bets_believed": 0,
+  "small_bets_called": 0,
+  "river_failures": 0,
+  "fallbacks": 132,
+  "miss_depths": {},
+  "depths_used": {
+   "100bb": 15742,
+   "70bb": 11208,
+   "50bb": 13877,
+   "35bb": 10861,
+   "25bb": 8272,
+   "18bb": 5831,
+   "12bb": 3387,
+   "8bb": 1607,
+   "5bb": 677
+  },
+  "actions_sent": {
+   "call": 18369,
+   "check": 15233,
+   "fold": 14622,
+   "raise": 23238
+  },
+  "slowest_ms": 9.069907013326883
+ },
+ "b_stats": {
+  "decisions": 76020,
+  "misses": 11892,
+  "consulted": 76020,
+  "off_abstraction": 0,
+  "companion_hits": 11802,
+  "river_shoves_to_companion": 0,
+  "shoves_softened": 89,
+  "bluffs_withheld": 0,
+  "shove_calls_declined": 0,
+  "river_solves": 0,
+  "blinds_opened": 0,
+  "three_bets_into_folders": 0,
+  "river_bets_believed": 0,
+  "big_bets_believed": 0,
+  "small_bets_called": 0,
+  "river_failures": 0,
+  "fallbacks": 90,
+  "miss_depths": {
+   "1": 12146
+  },
+  "depths_used": {
+   "100bb": 16800,
+   "70bb": 12049,
+   "50bb": 14854,
+   "35bb": 11715,
+   "25bb": 8777,
+   "18bb": 6115,
+   "12bb": 3425,
+   "8bb": 1604,
+   "5bb": 681
+  },
+  "actions_sent": {
+   "check": 21169,
+   "raise": 30768,
+   "call": 14552,
+   "fold": 9531
+  },
+  "slowest_ms": 291.4204790140502
+ },
+ "measured": "2026-09-20 11:00"
+}

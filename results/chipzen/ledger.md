@@ -99,3 +99,19 @@ first match 19 Sep 05:30 IST. **20 matches, 12 won (60%), 1,491 hands, net +40,0
 | Blueprint | 18 | 12 | 1428 | +60,000 | +42 |
 | hoops | 2 | 0 | 63 | -20,000 | -317 |
 
+## ab646c2+ | results/cfr/ladder169l_v5c | v7b: v7 with the 20M warm-started cap-2 solves as companions at every depth
+
+first match 19 Sep 23:30 IST. **1 matches, 1 won (100%), 32 hands, net +10,000 chips, +312 ± 141 chips/hand**, showdowns 4 won / 2 lost.
+
+| opponent | matches | won | hands | net | chips/hand |
+|---|---|---|---|---|---|
+| mellyy | 1 | 1 | 32 | +10,000 | +312 |
+
+## ab646c2+ | results/cfr/ladder169l_v5c | deep-primary | v5d: cap-2 primary at every depth, 20M warm-started rungs, stack cap on
+
+first match 20 Sep 09:59 IST. **20 matches, 11 won (55%), 1,294 hands, net +20,000 chips, +15 ± 35 chips/hand**, showdowns 51 won / 50 lost.
+
+| opponent | matches | won | hands | net | chips/hand |
+|---|---|---|---|---|---|
+| Blueprint | 20 | 11 | 1294 | +20,000 | +15 |
+

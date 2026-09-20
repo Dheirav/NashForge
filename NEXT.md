@@ -4,7 +4,7 @@ One page, kept current. [`BACKLOG.md`](BACKLOG.md) holds the reasoning and every
 [`docs/training-plan.md`](docs/training-plan.md) holds the full phase plan and its results. This
 file is only the next thing to do.
 
-**Last updated:** 19 September 2026, 13:50 IST · 338 tests (~7m with the machine shared; collection ~3m24s)
+**Last updated:** 20 September 2026, 16:50 IST · 343 tests (~7m with the machine shared; collection ~3m24s)
 
 ---
 
@@ -77,6 +77,87 @@ real improvement are compatible; the earlier phrasing denied the second.
 
 ## Now — the next thing to do
 
+**The list, Sunday 20 September, 16:50 IST.** Semi-final tonight 23:30 against v003 (v7b,
+timer armed and dry-run); the final about 02:30 Monday against Blueprint or Fold-ver-3; season
+7 opens Tuesday 05:30, entries close Monday 23:59 UTC.
+
+*Today, bot off until 23:15:* instrument regression tests (done: `tests/test_instruments.py`,
+a solve against itself at its own stack reads zero with zero misses, the duel's mirror reads
+even); the reads-on duel (mirror even at 47.0 ± 2.9%; v5d against v7b running); **the commit**
+(everything since `ab646c2`); scout whoever is registered for season 7; prepare and dry-run,
+without starting, Monday's 05:29 v5d burst script and the cap-3 lane script (waits for the
+final's bot to stop); keep the machine awake through 05:29.
+
+*Tonight and overnight:* the semi, decomposed after; the final's timer from the listed slot,
+dry-run; the final; enter season 7 after it.
+
+*Monday:* v5d's second burst; pool it with today's (+15 ± 35, 11 of 20) and choose season 7's
+set, one label, unchanged through the week without a burst; cap-3 deep rungs training.
+
+*This week, each duel-gated then burst-gated, one label at a time:* cap-3 at 50bb and above
+(the third-raise hole: 29 rule hands at −1,470 in v5d's burst); 20 postflop classes at the deep
+rungs (deep is the weaker half of every set); read thresholds sized to the scout's samples,
+gated on the replay; the river-vs-shove check on the next two bursts, the river re-solver only
+if it still leaks; Slumbot at 100bb once; the second laptop for the lanes.
+
+*Running, lane T3:* the tapered `(4, 2, 1)` deep rungs (50/70/100bb, 20M warm, 2 threads each)
+to `ladder169l_v5f`, then their duel against v5d (600 arena matches, 6,000 hands at 100bb).
+Started 16:07; at 16:43 the measured rate says the solves end about 19:30 IST and the duel
+about an hour after. Watch: `tail -c 300 ~/pokerbot-scratch/cap2/exp_t421_cap2_100bb.log`.
+
+**Sunday 20 September, 16:50 IST: the histogram abstraction is trainable, and the council
+found five things.** `abstraction/histogram.py` (equity histograms over sampled runouts, EMD,
+k-means under EMD) is wired into `CardAbstraction` as `--strength histogram` with
+`--hist-bins/--hist-runouts/--hist-opponents`, mirrored in `native/src/equity.hpp` and
+`nolimit_game.hpp` (the trainer and the play-time lookup both use the native histogram; the
+Python one is 30 ms a lookup, too slow for the river re-solver), pinned by
+`tests/test_histogram.py`, and smoke-trained (66 and KQs on 9-4-2 land in classes 4 and 2 of
+20). Three review agents then read it and the two instruments. What they found, all applied:
+the C++ segfaulted on zero bins, runouts or opponents (validated now); the texture stride used
+the scalar centroid count in histogram mode; fewer situations than buckets left dead classes.
+**In the duel's dealer, six defects** (an all-in seat asked to act, an illegal check facing a
+bet, an un-offered raise, a sub-minimum raise, a short all-in raise reopening the minimum, and
+a call for less not closing the street), and then one of my fixes: the refund for a call-for-less
+tested `min(stack)`, so a shove by the seat that had committed more was refunded before the
+opponent was asked and the hand went on as if it had never happened. The reviewer's probe
+(2,415 chip-creation failures) caught it; it now reads clean on every scripted matchup, and
+the fixed test is on the *short-committed* seat's stack. Before today's fix the same block
+(from 01:46) ended the street on any shove made as the second or later action, giving the
+opponent a free showdown for the smaller commitment; so **every duel from 01:46 to 16:30 was
+on a dealer that mishandled shoves over a bet**, symmetric enough to keep the mirror even but
+not to be trusted for a comparison. Re-run on the corrected dealer (each about a minute now):
+v5d against v7b+cap **61.5 ± 2.4% of 400 arena matches** without reads (was 57.2) and
+**55.3 ± 2.0% of 600** with reads (was 53.7); v5e against v5d 48.7 ± 2.0% (was 50.2, still
+nothing); the mirror 48.2 ± 2.0%. At a fixed 100bb over 6,000 duplicate deals v5d against
+v7b+cap is **+0.6 ± 9.9 chips a hand, even** (the old dealer had read the one-raise set 12 to
+22 behind there), and at 25bb +10.0 ± 5.4; so the cap-2 primary's edge in an arena match comes
+from the escalating-blind phases, not from deep play. Every decision made on the old numbers
+stands; the river re-solver's 52.0 ± 5.0% is not re-run yet (an hour, after the final). Lane
+T3's duel is on the corrected dealer. **The stack cap now decides by the stored width, not the
+stack**: a facing node's two-wide entry is fold/call whatever the reason, and the engine's
+stack is not the arena's (the reviewer showed both directions of disagreement in the arena;
+on the v5d record it is one decision of 1,668, 45 misses to 44). Same rule in the replay's
+lookup and the river solver's reach; `play_pickles` now refuses a pickle without its stack
+and blinds rather than playing it at 200/2.
+
+*Sunday afternoon, measured:* the reads-on duel, v5d 53.7 ± 2.0% of 600 matches against v7b+cap
+(57.2 without reads; same direction). **The river re-solver in the duel** (`cfr/river.py`,
+`--river-solve`, 8 s budget, 1,752 solves, 0 failures): v5d+river against v5d **52.0 ± 5.0% of
+100 matches**, 63 min. Inside noise; the literature's largest gain does not show at this size
+against our own bot (whose river play comes from the same blueprint ranges the solver assumes;
+against a real opponent the ranges are wrong in the solver's favour, which is the case the
+papers measure). Costs 40 s a match to test; a 400-match run (4 h) is the honest next step
+and belongs on the second laptop, not before the final. Per-item literature check in
+`docs/research/2026-09-17-cap2-convergence.md`: cap-3 becomes a tapered `(4, 2, 1)` schedule
+(Pluribus and Libratus give later raises one or two sizes, not a full menu); the card
+abstraction change is the feature (EMD over equity histograms, or OCHS) before the count;
+translation and the solver recipe are already what Pluribus uses.
+
+*Closed, not on the list:* iterations, finer short rungs (v5e 50.2 ± 2.0% against v5d), the
+full-width solver as production (−2 and −1 against the sampled 20M solves same-tree), the
+stack-cap defect (fixed, `--stack-cap`), the three gate defects, the maniac read, the
+river-shove override.
+
 **Season 3 (page pasted):** PoetAndCoder (the house LLM bot) champion over Blueprint; wsp 4-1
 lost the semi to Poet; half the fixtures were walkovers (three registered bots never showed).
 **Season 2 (page pasted):** qwentom-leap (house) champion over wsp; five of eight entrants
@@ -93,6 +174,192 @@ been 1-3; mr_hide reached a semi. Same slot pattern (quarters Sat 18:00 UTC, sem
 and 18:10, final Sun 21:00 UTC). Across seasons 4 and 5: the top seed won once and lost a semi
 once; Blueprint reached a final and a semi from 1-3 and 2-2; wsp is top-two in the round-robin
 every season and has never won it; the same builder has won both seasons with different bots.
+
+**Sunday 20 September, 10:55 IST: the 10bb and 6bb rungs do not change matches.** v5e (v5d
+plus lane SR's cap-2 rungs at 10 and 6bb, `ladder169l_v5e/`) against v5d: **50.2 ± 2.0% of 600
+arena matches**; at fixed 10bb +2.2 ± 2.4, at 6bb −2.2 ± 1.7. The gate had said cap-2 10bb beats
+one-raise 10bb by +14.5 and 6bb by +2.8, but the nearest-rung rule already sends a 10bb hand to
+the 12bb cap-2 rung and a 6bb hand to the 5bb one-raise, and those play those depths as well as
+a rung built for them. v5d's misses in the 6bb duel (932 of 9,289, the 5bb one-raise rung being
+re-raised, answered by the rule at zero cost) confirm the short end is push-or-fold and nothing
+there moves the result. **v5e closed; the ladder's short end stays as it is.**
+
+**Sunday 20 September, 10:50 IST: v5d's burst, run by hand after the machine slept through
+05:29.** 09:59 to 10:42, **20 matches, 11 won, +15 ± 35 chips/hand, all Blueprint**, showdowns
+51 to 50. Decomposed against the earlier versions on Blueprint hands (`chipzen_decompose.py`):
+
+| | v6 | v7 | v7b | **v5d** |
+|---|---|---|---|---|
+| all | −32 ± 60 | +103 ± 51 | +101 ± 44 | **+80 ± 53** |
+| deep | −40 ± 56 | +51 ± 49 | +74 ± 40 | **−22 ± 67** |
+| short | −17 ± 139 | +170 ± 99 | +136 ± 85 | **+204 ± 83** |
+| we jammed preflop | 15 at −2,545 | 2 | 3 | **17 at +650 ± 512** |
+| called a river shove | 4 at −4,044 | 3 at −2,450 | 4 at −2,719 | **5 at +6,020 ± 3,168** |
+| rule decided | 24 at −2,152 | 4 | 2 | 29 at −1,470 ± 892 |
+
+So: v5d is not v6 (its 17 jams netted +650 each where v6's 15 lost 2,545; its river calls won),
+it is level with v7b overall inside the noise (+80 ± 53 against +101 ± 44), better short
+(+204 against +136) and worse deep (−22 against +74, about 1.2 SE), and the rule decided 29
+hands at −1,470, all third raises, which is where a cap-2 primary has no node and v7b's
+companion structure never reaches. **Not a clear arena win for v5d, not a loss**; one burst at
+±35 cannot separate two sets that the duel puts 15 chips apart. Decision: **tonight stays v7b**
+(gated twice in the arena, and a fixture is not the place to break a tie), and **season 7 opens
+with a second v5d burst on Monday 05:29** before the choice; if it reads like this one again,
+the pooled two bursts decide, with the deep-stack rule hands as the thing to look at (a cap-3
+tree at 50bb and above would remove them).
+
+**Sunday 20 September, 02:15 IST: the duel plays arena matches now, and the answer is
+v5d.** `chipzen_duel.py --arena-matches N`: 10,000 chips each, the arena's blind schedule
+as read from every logged match (100, 150, 200, 300, 400, 600, 800, 1,000, 1,200 every 20
+hands), button alternating, to a bust, A in each seat alternately, match win rate ± SE. A
+dealer fix on the way: a call for less than the bet closes the street and returns the excess,
+as the engine does. Zero check: a mirror wins 51.3 ± 2.9% of 300 matches at 52 hands a match
+(the real fixtures have run 3 to 94). **v5d beats v7b+cap 57.2 ± 2.5% of 400 matches** (2.9
+SE from even), with v7b's one-raise primary handing 8,142 decisions to the companion and v5d
+handing none; **v7b vs v7 51.0 ± 2.9%** (the companion upgrade is invisible against a bot that
+never re-raises, as the fixed-depth duel also said). So the layout question is answered on
+both instruments: cap-2 primary at every depth, with the 20M rungs and the stack cap, beats
+the one-raise primary with companions, by about 15 chips a hand at 100bb and by 57 to 43 in
+matches. **Monday's burst is v5d**, and if it reads near v7b's +42 against Blueprint or
+better it is season 7's set. Tonight stays v7b: gated, and a duel is a burst's worth of
+evidence, not a fixture's.
+
+**Sunday 20 September, 02:05 IST: the duel instrument, and its first answers.**
+`scripts/chipzen_duel.py`: two whole bot configurations (`ArenaPlayer` each, built as
+`chipzen_run.py` builds them) through `decide()` under a dealer that speaks the arena's
+conventions, duplicate deals with seats swapped, chips per hand ± SE, both sides' miss,
+companion and rule counts. Zero check: a mirror reads +3.8 ± 11.3 over 2,000 deals at 100bb.
+**v7b vs v7 at 100bb: +0.1 ± 8.9 over 3,000 deals, zero misses and zero companion calls on
+either side**: two one-raise primaries never re-raise each other, so the companions are never
+asked and the sets are identical in that matchup; v7b's upgrade shows only against opponents
+who re-raise. **v7b vs v5c** (the same seven 20M rungs with cap-2 as primary everywhere; the
+question the week could not answer): **−18.1 ± 13.6 at 100bb and −5.0 ± 7.4 at 25bb** over
+3,000 deals each, with v7b's one-raise primary missing 18% of its decisions (every re-raise)
+and the companion answering all of them, v5c missing none. So cap-2 primary is ahead by about
+1.3 SE at 100bb and within noise at 25bb; two more seeds at 6,000 deals: **−22.5 ± 10.0 and −12.5 ± 9.9; pooled over three seeds and
+15,000 deals, −17.5 ± 6.1, about 2.9 SE. Cap-2 primary beats one-raise-primary-with-companions
+at 100bb.** No reads on either side. That is the answer the week wanted: the companion
+arrangement gives up about 17 chips a hand at 100bb to letting the cap-2 solve play the whole
+hand, presumably because a one-raise primary never three-bets and never check-raises, and the
+companion inherits lines it did not choose. The arena stack-cap fix is built behind a flag
+(`ArenaPlayer(stack_cap=True)`, `--stack-cap`; `_shim` carries `your_stack`; 28 player tests
+pass) and lane DL3 duels it: each layout with and without the fix, then v7b+cap against v5d
+(cap-2 primary with the fix), the Monday burst candidate. **Lane DL3 (01:41):** the fix against no fix, same layout,
+4,000 deals each: v7b +6.1 ± 8.2 at 100bb, **+14.9 ± 5.6 at 25bb**; v5c −6.1 ± 11.4 at 100bb,
++5.4 ± 5.1 at 25bb. With both fixed, **v7b+cap vs v5d at 100bb −14.8 ± 10.0** over 6,000 deals,
+the same direction as unfixed. Note the miss column: 0 misses on every side once the cap is
+honoured except the one-raise primary's re-raise misses, so the fix is real and was answering
+the arena's "2% of decisions fall to the rule" (which the review reported as 33 of 1,438 in
+v6's burst). Reading: the fix is a small gain that grows short (stack-capped nodes are the
+all-in-facing ones and there are more of them short), never a loss; and cap-2 primary leads
+one-raise-with-companions by about 15 at 100bb whether or not either is fixed. **Monday's
+burst: v5d** (cap-2 primary everywhere, 20M rungs, stack cap on), label "v5d", under the
+usual rule: near or above v7b's +42 against Blueprint it becomes season 7's set, near v6's −54
+it does not. Dry-run the burst script before arming. Semi-final tonight is v7b regardless (gated, and v5c is v6's layout,
+which lost its burst; a duel win is a burst's worth of evidence, not a fixture's).
+
+**Saturday 19 September, 23:45 IST: quarter-final won, mellyy, 32 hands, +10,000, v7b's first
+fixture.** 29 of 32 hands won on the table; mellyy folded 25 of its 56 actions and raised 16;
+52 decisions, 4 misses all answered by the 20M companions, no fallback; one read fired (opened
+into a folding blind). The pot that decided it, hand 22 at 50bb: K4 called an open, flopped
+A-A-9, called a half-pot bet, then the opponent re-raised the turn (a 3, into 21/251/13) and
+the **companion** called 1,710 and, when the river came a king, shoved and took 6,270 uncalled;
+four companion decisions in one hand, all at the re-raise lines v7 used to lose. The rest were
+small: a rivered flush with J4, a Q-high flush with QT, a river bet paid by A7. **Into the
+semi-final, Sunday, against the winner of v003 v wsp**; the semi slot is read by a poller
+from 00:40 (`playoffs_semi.txt`) and the timer armed and dry-run when it appears.
+
+**Saturday 19 September, 18:40 IST: lane RG2, the gates with each seat on its own tree.**
+One-raise self-play +0.2 ± 0.2; full-width one-raise ties sampled one-raise (−0.6 ± 0.7, and
++0.3 ± 0.6 at 20 classes); and every cap-2 solve now **wins**: 8bb +7.1 (sampled 20M warm) and
++7.1 / +7.5 (full-width, 6 and 20 classes), 12bb +22.8 / +22.4 (20M warm / 100M), 18bb +47.8 /
++48.0 / +44.9 (10M / 20M warm / 100M), 50bb +144.9, 70bb +172.4, 100bb +197.3 (20M warm) and
++205.3 (10M). But read the miss column: the one-raise side misses **17 to 27% of its
+decisions**, every time it is re-raised, and the miss policy is check/call, so most of that
+margin is "a one-raise bot with no companion calls every re-raise". That is what a bare
+one-raise pickle does; it is not what v7b does, whose one-raise primary hands every re-raise
+to a cap-2 companion. So the single-pickle cross-tree gate cannot rank cap-2-primary against
+one-raise-primary-with-companions at all, in either direction: the week's "cap-2 loses 20 to
+30" was the instrument, and this "cap-2 wins 50 to 200" is the instrument again. **What it does
+settle:** the cap-2 solves are not broken and not badly unconverged (full-width converged and
+sampled 20M agree to a point at 8bb; 10M and 100M agree within 3 at 18bb), the prototype is
+faithful, and more iterations or finer buckets are not where the strength is. **The right
+instrument is a duel between bot configurations**, both seats played by `ArenaPlayer` (primary,
+companions, reads) over duplicate hands at the rung's stack: v7b against v5c is the question
+the arena has been asking twenty matches at a time. To build (`scripts/chipzen_duel.py`,
+a synthetic arena state per decision from the engine); post-season, first item. Also for the
+arena player: its `_shim` carries no stack, so `cfr_agent` there never applies the stack cap
+either, and a cap-2 companion's stored fold/call entry at a capped node is rejected and falls
+to the rule (about 2% of arena decisions at 100bb real stacks, the all-in-facing ones); pass
+the real stack in the shim and set `stack_cap=True`, gated by a burst. Nothing changes tonight.
+
+**Saturday 19 September, 18:15 IST: lane AB2, and a third gate defect, the biggest.** The
+20-class postflop abstraction at 8bb (fit by a 3M sampled one-raise solve, chance tables of
+2,400 states, full-width one-raise and cap-2 solves in 41 and 70 min): 20-class one-raise ties
+the 6-class one-raise (+0.3 ± 0.6; the sampled 20-class one-raise +0.2 ± 0.6), and **20-class
+cap-2 still loses, −10.4 ± 0.8 against the 6-class one-raise and −9.7 ± 0.4 against its own
+20-class one-raise**. So a finer card abstraction changed nothing, which pointed back at the
+instrument, and the third defect is there: **`benchmark()` applies one `raise_cap` to both
+seats, default one raise, and `play_pickles` never passed the pickles' caps; every cross-tree
+gate this week forbade the cap-2 solve the very re-raise it was solved with**, so it played
+fold/call frequencies meant for a game with a re-raise in it and lost about 10 BB/100 to a
+strategy that never wanted one. Fixed: `benchmark(raise_caps=(a, b))` narrows each seat to its
+own tree (the seat facing a raise its tree lacks takes its miss policy, as a bot without a
+companion would); `play_pickles` passes each pickle's cap. Lane RG2 re-runs the sixteen key
+gates on it. The 16:50 table below was measured with the re-raise forbidden and is superseded.
+
+**Saturday 19 September, 16:50 IST: the gate instrument was wrong all week, fixed, and the
+week re-measured.** Two defects found by asking why the full-width cap-2 solve lost 68 BB/100 to
+a solve it should dominate. (1) `play_pickles.py` never passed the rung's stack: every gate
+played the benchmark's default 200 chips, so "18bb against 18bb" was two 36-chip trees playing
+100bb poker. (2) `cfr_agent` reconstructs a node's action list from the history alone, so at a
+node the tree had stack-capped to fold/call it rebuilt six actions, rejected the stored two-wide
+entry, and played the miss policy: **34% of a cap-2 rung's keys are such nodes** (79,133 of
+235,017 at 18bb); a one-raise tree's two-wide nodes match by coincidence, which is why only
+cap-2 solves suffered. Both fixed in the gate path: `play_pickles` uses the rung's stack and
+blinds (asserted equal for the pair) and `cfr_agent(stack_cap=True)` mirrors the trees' rule;
+the arena player is untouched (its bridge is on another chip scale; a burst gates it later).
+Every cross-tree number above this paragraph was measured on the broken instrument. **Lane RG,
+the week on the corrected one** (check/call on a miss; misses now 0 to 0.4%):
+
+| gate at the rung's stack | BB/100 |
+|---|---|
+| one-raise 18bb self-play | +0.2 ± 0.2 |
+| **full-width one-raise 8bb vs sampled one-raise 8bb (the faithfulness check)** | **−0.6 ± 0.7** |
+| full-width cap-2 8bb vs one-raise | −11.0 ± 0.2 |
+| sampled cap-2 8bb 20M warm vs one-raise | −7.6 ± 0.1 |
+| 12bb cap-2 20M warm / 100M vs one-raise | −10.5 ± 0.6 / −11.4 ± 0.8 |
+| 18bb cap-2 10M / 20M warm / 100M vs one-raise | −15.5 ± 0.9 / −12.0 ± 0.4 / −11.4 ± 1.1 |
+| 50bb, 70bb, 100bb cap-2 20M warm vs one-raise | −10.3 ± 1.6 / −9.1 ± 1.3 / −6.3 ± 1.9 |
+| 100bb cap-2 10M (v5b's) vs one-raise | −15.3 ± 0.7 |
+
+**What it settles.** The full-width prototype is faithful (its one-raise solve ties the sampled
+one to within a point), and its cap-2 solve, which is a converged equilibrium of the abstract
+cap-2 game, **still loses 11 BB/100 to the one-raise rung in the real game**. So the floor is
+not the sampled solver's convergence and not iterations: it is the abstraction. With six
+postflop strength classes, the extra re-raise decisions are made on information too coarse to
+make them well, and a strategy that never takes them does better with real cards (the
+action-abstraction pathology: a finer betting tree on the same coarse cards is more
+exploitable). Warm start and pruning still buy convergence (10M → 20M warm is +3.5 at 18bb), but
+the gap they close ends at about −11. **Next: the abstraction**, and the full-width solver makes
+that test cheap: a 20-class postflop abstraction, one-raise and cap-2 solved full-width at 8bb,
+gated against the 6-class one-raise rung with real cards (lane AB2, started 16:55).
+
+**Saturday 19 September, 16:10 IST: two small ones closed without code, and the commit.**
+`ab646c2` pins the week (329 files; the new pickles and scout caches stay out of git). **The
+8bb miss rate** (9% of decisions on both sides of every 8bb gate, against 1% at 18bb): the
+missed histories are lines like `21/21/21/` and `31/31/`, half-pot bets called on every street,
+which in the tree's 16-chip game put both players all-in before the river, so the tree has no
+river node there, while the engine's real chip accounting (and the arena's, playing a 10bb
+stack on the 8bb rung) leaves chips behind and asks for one. Not an encoding bug (the native
+and Python games both keep the fractional symbol when a raise happens to be all-in); it is the
+coarseness of the stack rungs at the short end, already counted as `off_abstraction` in the
+arena stats. It is the same on both sides of a gate, so the gates stand; the fix is finer
+short rungs or per-hand stack scaling, post-season. **The maniac read** is not built: over
+every hoops match on record, "called a river shove" is five hands (two at −6,818, three at
+−5,738), and v5 was +224 ± 141 against hoops over 188 hands while v7 and v7b read −7 ± 143
+and −187 ± 285. Five hands is not a rule; `chipzen_decompose.py --opponent hoops` is the
+check to re-run when there are fifty.
 
 **Saturday 19 September, 15:40 IST: the full-width prototype, first pass, and a retraction.**
 `cfr/fullwidth.py` (vectorised CFR+ over the explicit abstract game, chance factorised per

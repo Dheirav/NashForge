@@ -82,6 +82,16 @@ def parse_args():
     parser.add_argument("--average-from", type=float, default=0.0,
                         help="fraction of the run before the average strategy starts accumulating "
                              "(Pluribus skipped the early part; 0 is the classical average)")
+    #: The card feature. `histogram` clusters on the distribution of river
+    #: equity over sampled runouts with earth mover's distance
+    #: (abstraction/histogram.py; Johanson et al. 2013), which separates draws
+    #: from made hands where the scalar E[HS] cannot. Fitting costs
+    #: `--hist-runouts` x `--hist-opponents` evaluations per sampled situation.
+    parser.add_argument("--strength", default="equity", choices=["equity", "histogram"],
+                        help="postflop card feature: E[HS] (default) or the equity histogram")
+    parser.add_argument("--hist-bins", type=int, default=20)
+    parser.add_argument("--hist-runouts", type=int, default=100)
+    parser.add_argument("--hist-opponents", type=int, default=50)
     parser.add_argument("--texture", action="store_true",
                         help="fold the board's flush and straight texture into the "
                              "postflop bucket (abstraction.buckets.board_texture)")
@@ -192,11 +202,17 @@ def _train_native(args, abstraction, projected):
 
     print(f"\nTraining MCCFR (native) for {args.iterations:,} iterations"
           + (f" on {args.threads} threads..." if args.threads > 1 else "..."))
+    hist = {}
+    if getattr(abstraction, "strength", "equity") == "histogram":
+        hist = dict(hist_centroids=[abstraction._hist_centroids[street].tolist()
+                                    for street in ("flop", "turn", "river")],
+                    hist_bins=abstraction.hist_bins, hist_runouts=abstraction.hist_runouts,
+                    hist_opponents=abstraction.hist_opponents)
     solver = pokerbot_native.NoLimitSolver(
         preflop, flop, turn, river, args.equity_samples, args.stack,
         args.big_blind // 2, args.big_blind, schedule, args.seed,
         texture=bool(getattr(abstraction, "texture", False)),
-        rule=args.update_rule)
+        rule=args.update_rule, **hist)
     solver.set_average_from(int(args.average_from * args.iterations))
     solver.set_common_random_numbers(bool(args.common_random_numbers))
     solver.set_exact_terminals(bool(args.exact_terminals))
@@ -297,7 +313,8 @@ def main():
     abstraction = CardAbstraction(
         preflop_buckets=args.preflop_buckets, postflop_buckets=args.buckets,
         samples=args.abstraction_samples, equity_samples=args.equity_samples,
-        texture=args.texture,
+        texture=args.texture, strength=args.strength,
+        hist_bins=args.hist_bins, hist_runouts=args.hist_runouts, hist_opponents=args.hist_opponents,
     ).fit(rng)
     print(f"  fitted in {time.perf_counter() - start:.1f}s")
     print(abstraction.describe())

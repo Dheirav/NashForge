@@ -114,7 +114,8 @@ async def _main(args, config):
                                                   args.ladder, args.companions)
     player = ArenaPlayer(ladder, rng, companions=companions, purify=args.purify,
                          river=args.river_solve, river_budget_s=args.river_budget,
-                         river_shove_companion=args.river_shove_companion)
+                         river_shove_companion=args.river_shove_companion,
+                         stack_cap=args.stack_cap)
     player.profiles = Profiles(os.path.join(ROOT, "results", "chipzen", "opponents.json"),
                                sequential=args.sequential_triggers, bankroll=args.exploit_bankroll,
                                scout_reads=args.scout_reads) \
@@ -133,6 +134,7 @@ async def _main(args, config):
         "commit": _commit(), "label": args.label,
         "ladder_dir": os.path.relpath(ladder_dir, ROOT), "deep_primary": bool(args.deep_primary),
         "river_shove_companion": bool(args.river_shove_companion),
+        "stack_cap": bool(args.stack_cap),
         "purify": args.purify, "river_solve": bool(args.river_solve),
         "sequential_triggers": bool(args.sequential_triggers), "scout_reads": bool(args.scout_reads),
         "exploit_bankroll": bool(args.exploit_bankroll),
@@ -303,6 +305,9 @@ def main():
     parser.add_argument("--exploit-bankroll", action="store_true",
                         help="fire the opponent rules only while our net against that opponent is "
                              "not negative (risk what you have won); off by default")
+    parser.add_argument("--stack-cap", action="store_true",
+                        help="honour the trees' fold/call-only nodes in every lookup instead of "
+                             "rebuilding the full action list and falling to the rule (19 Sept)")
     parser.add_argument("--river-shove-companion", action="store_true",
                         help="facing an all-in on the river, take the cap-2 companion's answer over the "
                              "one-raise primary's (its river calling range comes from a game without re-raises)")

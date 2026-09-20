@@ -32,11 +32,22 @@ from evaluation.benchmark import benchmark, cfr_agent  # noqa: E402
 def load(path, seed, raise_cap, on_miss="random"):
     saved = load_strategy(path)
     args = saved.get("args") or {}
-    cap = args.get("raise_cap", raise_cap) if isinstance(args, dict) else raise_cap
+    if not isinstance(args, dict):
+        args = vars(args)                # older pickles stored the argparse Namespace
+    # The stack and blinds the rung was solved for. Until 19 September every
+    # gate played the benchmark's default 200 chips whatever the rung, so a
+    # cross-tree gate at 18bb was two 18bb trees playing 100bb poker. A pickle
+    # that does not say is refused rather than quietly played at 200/2 again.
+    if "stack" not in args or "big_blind" not in args:
+        raise SystemExit(f"{path}: no stack/big_blind in its args; refusing to guess the game")
+    cap = args.get("raise_cap", raise_cap)
     cap = tuple(cap) if isinstance(cap, (list, tuple)) else int(cap)
     misses = [0, 0]
-    return cfr_agent(saved["strategy"], saved["abstraction"], np.random.default_rng(seed),
-                     misses=misses, raise_cap=cap, on_miss=on_miss), cap, len(saved["strategy"]), misses
+    stack = int(args["stack"])
+    bb = int(args["big_blind"])
+    return (cfr_agent(saved["strategy"], saved["abstraction"], np.random.default_rng(seed),
+                      misses=misses, raise_cap=cap, on_miss=on_miss, stack_cap=True),
+            cap, len(saved["strategy"]), misses, (stack, bb))
 
 
 def main():
@@ -56,13 +67,21 @@ def main():
     scores = []
     miss_rates = []
     for seed in args.seeds:
-        a, cap_a, n_a, miss_a = load(args.first, seed, args.raise_cap, args.on_miss)
-        b, cap_b, n_b, miss_b = load(args.second, seed + 1000, args.raise_cap, args.on_miss)
+        a, cap_a, n_a, miss_a, (stack, bb) = load(args.first, seed, args.raise_cap, args.on_miss)
+        b, cap_b, n_b, miss_b, (stack_b, bb_b) = load(args.second, seed + 1000, args.raise_cap, args.on_miss)
+        if (stack, bb) != (stack_b, bb_b):
+            raise SystemExit(f"the pickles were solved for different stacks: {stack}/{bb} and {stack_b}/{bb_b}")
         if seed == args.seeds[0]:
             print(f"{os.path.basename(args.first)}: {n_a:,} infosets, cap {cap_a}; "
-                  f"{os.path.basename(args.second)}: {n_b:,} infosets, cap {cap_b}; on miss: {args.on_miss}", flush=True)
+                  f"{os.path.basename(args.second)}: {n_b:,} infosets, cap {cap_b}; on miss: {args.on_miss}; "
+                  f"stack {stack} at blinds {bb // 2}/{bb}", flush=True)
         started = time.perf_counter()
-        result = benchmark(a, b, os.path.basename(args.second), hands=args.hands, seed=seed)
+        # Each side narrowed to its own tree: until 19 September the benchmark's
+        # single cap (its default, one raise) applied to both, so a cap-2 solve
+        # could never re-raise in the very gate meant to measure its re-raises.
+        result = benchmark(a, b, os.path.basename(args.second), hands=args.hands, seed=seed,
+                           starting_stack=stack, small_blind=bb // 2, big_blind=bb,
+                           raise_caps=(cap_a, cap_b))
         scores.append(result.bb_per_100)
         miss_rates.append((miss_a[0] / max(1, miss_a[1]), miss_b[0] / max(1, miss_b[1])))
         print(f"  seed {seed}: {result.bb_per_100:+8.1f} BB/100 to the first, "
@@ -77,7 +96,7 @@ def main():
         with open(args.output, "w") as handle:
             json.dump({"first": args.first, "second": args.second, "hands": args.hands,
                        "seeds": args.seeds, "bb_per_100": scores, "mean": mean, "stderr": stderr,
-                       "on_miss": args.on_miss,
+                       "on_miss": args.on_miss, "stack": stack, "big_blind": bb, "stack_cap": True, "raise_caps": [cap_a, cap_b],
                        "miss_rate": [float(np.mean([m[0] for m in miss_rates])),
                                      float(np.mean([m[1] for m in miss_rates]))],
                        "measured": time.strftime("%Y-%m-%d %H:%M")}, handle, indent=1)

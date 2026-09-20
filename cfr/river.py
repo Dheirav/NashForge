@@ -408,7 +408,11 @@ def blueprint_ranges(hands: HandSet, strategy: dict, abstraction, schedule,
                 for b in np.unique(buckets):
                     probabilities = strategy.get(f"{b}|{prefix}")
                     mask = buckets == b
-                    if probabilities is None or probabilities.size != len(actions):
+                    if probabilities is not None and facing and probabilities.size == 2:
+                        # Stack-capped in the tree: the entry is fold/call, and
+                        # a raise there has no mass (see `cfr_agent`).
+                        reach[player][mask] *= float(probabilities[code]) if code <= CHECK_CALL else 0.0
+                    elif probabilities is None or probabilities.size != len(actions):
                         reach[player][mask] *= 1.0 / len(actions)
                     else:
                         reach[player][mask] *= float(probabilities[slot])

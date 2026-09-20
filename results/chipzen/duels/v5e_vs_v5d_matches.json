@@ -1,0 +1,98 @@
+{
+ "a": {
+  "dir": "results/cfr/ladder169l_v5e",
+  "flags": "--deep-primary --stack-cap",
+  "label": "v5e"
+ },
+ "b": {
+  "dir": "results/cfr/ladder169l_v5c",
+  "flags": "--deep-primary --stack-cap",
+  "label": "v5d"
+ },
+ "arena_matches": 600,
+ "win_rate": 0.5016666666666667,
+ "stderr": 0.020412301120575238,
+ "hands_per_match": 57.428333333333335,
+ "seed": 31,
+ "a_stats": {
+  "decisions": 90206,
+  "misses": 134,
+  "consulted": 90206,
+  "off_abstraction": 0,
+  "companion_hits": 0,
+  "river_shoves_to_companion": 0,
+  "shoves_softened": 0,
+  "bluffs_withheld": 0,
+  "shove_calls_declined": 0,
+  "river_solves": 0,
+  "blinds_opened": 0,
+  "three_bets_into_folders": 0,
+  "river_bets_believed": 0,
+  "big_bets_believed": 0,
+  "small_bets_called": 0,
+  "river_failures": 0,
+  "fallbacks": 134,
+  "miss_depths": {},
+  "depths_used": {
+   "100bb": 18165,
+   "70bb": 13581,
+   "25bb": 11356,
+   "18bb": 9078,
+   "12bb": 3958,
+   "10bb": 1339,
+   "50bb": 16908,
+   "35bb": 13654,
+   "5bb": 703,
+   "8bb": 1114,
+   "6bb": 350
+  },
+  "actions_sent": {
+   "fold": 12830,
+   "check": 29308,
+   "call": 20207,
+   "raise": 27861
+  },
+  "slowest_ms": 884.7361989901401
+ },
+ "b_stats": {
+  "decisions": 90289,
+  "misses": 212,
+  "consulted": 90289,
+  "off_abstraction": 0,
+  "companion_hits": 0,
+  "river_shoves_to_companion": 0,
+  "shoves_softened": 0,
+  "bluffs_withheld": 0,
+  "shove_calls_declined": 0,
+  "river_solves": 0,
+  "blinds_opened": 0,
+  "three_bets_into_folders": 0,
+  "river_bets_believed": 0,
+  "big_bets_believed": 0,
+  "small_bets_called": 0,
+  "river_failures": 0,
+  "fallbacks": 212,
+  "miss_depths": {
+   "1": 78
+  },
+  "depths_used": {
+   "100bb": 18282,
+   "70bb": 13559,
+   "25bb": 11368,
+   "18bb": 8945,
+   "12bb": 4697,
+   "8bb": 1822,
+   "50bb": 17014,
+   "35bb": 13710,
+   "5bb": 892
+  },
+  "actions_sent": {
+   "call": 20334,
+   "raise": 27753,
+   "fold": 12817,
+   "check": 29385
+  },
+  "slowest_ms": 111.38201400171965
+ },
+ "measured": "2026-09-20 10:43"
+}

@@ -1,0 +1,94 @@
+{
+ "a": {
+  "dir": "results/cfr/ladder169l_v5c",
+  "flags": "--stack-cap --sequential-triggers --scout-reads",
+  "label": "v7b+cap"
+ },
+ "b": {
+  "dir": "results/cfr/ladder169l_v5c",
+  "flags": "--stack-cap --sequential-triggers --scout-reads",
+  "label": "mirror"
+ },
+ "arena_matches": 300,
+ "win_rate": 0.47,
+ "stderr": 0.02881550508551487,
+ "hands_per_match": 55.43666666666667,
+ "seed": 41,
+ "a_stats": {
+  "decisions": 43217,
+  "misses": 55,
+  "consulted": 43217,
+  "off_abstraction": 0,
+  "companion_hits": 17,
+  "river_shoves_to_companion": 0,
+  "shoves_softened": 0,
+  "bluffs_withheld": 0,
+  "shove_calls_declined": 0,
+  "river_solves": 0,
+  "blinds_opened": 0,
+  "three_bets_into_folders": 0,
+  "river_bets_believed": 0,
+  "big_bets_believed": 0,
+  "small_bets_called": 0,
+  "river_failures": 0,
+  "fallbacks": 38,
+  "miss_depths": {},
+  "depths_used": {
+   "100bb": 8689,
+   "70bb": 7599,
+   "50bb": 9032,
+   "25bb": 4998,
+   "35bb": 6571,
+   "18bb": 3126,
+   "12bb": 1812,
+   "8bb": 960,
+   "5bb": 430
+  },
+  "actions_sent": {
+   "raise": 16121,
+   "fold": 6393,
+   "call": 10754,
+   "check": 9949
+  },
+  "slowest_ms": 548.2351170503534
+ },
+ "b_stats": {
+  "decisions": 43243,
+  "misses": 53,
+  "consulted": 43243,
+  "off_abstraction": 0,
+  "companion_hits": 16,
+  "river_shoves_to_companion": 0,
+  "shoves_softened": 0,
+  "bluffs_withheld": 0,
+  "shove_calls_declined": 0,
+  "river_solves": 0,
+  "blinds_opened": 0,
+  "three_bets_into_folders": 0,
+  "river_bets_believed": 0,
+  "big_bets_believed": 0,
+  "small_bets_called": 0,
+  "river_failures": 0,
+  "fallbacks": 37,
+  "miss_depths": {},
+  "depths_used": {
+   "100bb": 8717,
+   "70bb": 7546,
+   "50bb": 9095,
+   "25bb": 4997,
+   "35bb": 6599,
+   "18bb": 3094,
+   "12bb": 1816,
+   "8bb": 954,
+   "5bb": 425
+  },
+  "actions_sent": {
+   "fold": 6403,
+   "raise": 16169,
+   "call": 10709,
+   "check": 9962
+  },
+  "slowest_ms": 97.98882203176618
+ },
+ "measured": "2026-09-20 10:59"
+}

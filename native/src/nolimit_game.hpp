@@ -35,6 +35,14 @@ struct Abstraction {
     /// Fold the board's texture into the postflop bucket. Mirrors
     /// `abstraction.buckets.board_texture` exactly; see that docstring for why.
     bool texture = false;
+    /// Histogram mode (abstraction/histogram.py): centroid histograms per
+    /// street, [buckets][bins], nearest by earth mover's distance. Empty means
+    /// the scalar E[HS] mode above.
+    std::array<std::vector<std::vector<double>>, 3> hist_centroids;
+    int hist_bins = 20;
+    int hist_runouts = 100;
+    int hist_opponents = 50;
+    bool histogram() const { return !hist_centroids[0].empty(); }
 
     static int board_texture(const int* board, int n) {
         if (n == 0) return 0;
@@ -372,14 +380,30 @@ private:
         // Seeded from the cards so a situation always buckets the same way
         // within a run. Not the Python's seed: that comes from Python's own
         // tuple hash, which is not reproducible here and need not be.
-        const double value = equity_vs_random(cards, 2, board, s.bet.board_n,
-                                              abstraction_.equity_samples, key * 0x9E3779B97F4A7C15ULL);
         const int street_index = s.bet.board_n - 3;
-        int bucket = Abstraction::nearest(
-            abstraction_.centroids[static_cast<size_t>(street_index)], value);
-        if (abstraction_.texture)
-            bucket += static_cast<int>(abstraction_.centroids[static_cast<size_t>(street_index)].size())
-                      * Abstraction::board_texture(board, s.bet.board_n);
+        int bucket;
+        if (abstraction_.histogram()) {
+            double hist[64];
+            strength_histogram(cards, board, s.bet.board_n, abstraction_.hist_bins,
+                               abstraction_.hist_runouts, abstraction_.hist_opponents,
+                               key * 0x9E3779B97F4A7C15ULL, hist);
+            bucket = nearest_emd(abstraction_.hist_centroids[static_cast<size_t>(street_index)],
+                                 hist, abstraction_.hist_bins);
+        } else {
+            const double value = equity_vs_random(cards, 2, board, s.bet.board_n,
+                                                  abstraction_.equity_samples, key * 0x9E3779B97F4A7C15ULL);
+            bucket = Abstraction::nearest(
+                abstraction_.centroids[static_cast<size_t>(street_index)], value);
+        }
+        if (abstraction_.texture) {
+            // The stride is the bucket count for the street, which in histogram
+            // mode is the centroid-histogram count, not the scalar list a
+            // caller may or may not have passed.
+            const size_t classes = abstraction_.histogram()
+                ? abstraction_.hist_centroids[static_cast<size_t>(street_index)].size()
+                : abstraction_.centroids[static_cast<size_t>(street_index)].size();
+            bucket += static_cast<int>(classes) * Abstraction::board_texture(board, s.bet.board_n);
+        }
         // Cleared wholesale at the ceiling, as games/nolimit.py does.
         //
         // This was omitted when the game was ported and it cost a run: the

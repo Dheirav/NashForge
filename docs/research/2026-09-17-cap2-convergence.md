@@ -167,3 +167,142 @@ enough for the cap-2-primary plan. The remaining gap is either the sampled solve
 this abstraction (the full-width solver's question) or the abstraction itself (six postflop
 strength classes; a re-raised pot may need more). The 8bb full-width prototype, gated the same
 way, is the next experiment, before any more iterations are spent.
+
+## 19 September, evening: the instrument was wrong, and the corrected answer
+
+Two defects in the cross-tree gate, found while chasing the full-width prototype's first
+result: `play_pickles` played every gate at the benchmark's default 200 chips whatever the
+rung, and `cfr_agent` rebuilt a node's action list from the history alone, so at nodes the
+tree had stack-capped to fold/call (34% of a cap-2 rung's keys) it rejected the stored entry
+and played the miss policy. Every number above this section was measured that way; the
+one-raise trees' two-wide nodes matched by coincidence, which is why the defect only hurt
+cap-2 solves and looked like "cap-2 is unconverged".
+
+On the corrected gate (rung stack and blinds, stack cap honoured, check/call on a miss,
+misses 0 to 0.4%): one-raise 18bb self-play +0.2 ± 0.2; **the full-width one-raise 8bb solve
+ties the sampled one-raise rung, −0.6 ± 0.7**, so the abstract game with the preflop all-in
+table is faithful; **the full-width cap-2 8bb solve, a converged equilibrium of the abstract
+cap-2 game, loses 11.0 ± 0.2 to the one-raise rung with real cards**; the sampled cap-2 solves
+read −7.6 (8bb 20M warm), −10.5 / −11.4 (12bb 20M / 100M), −15.5 / −12.0 / −11.4 (18bb 10M /
+20M warm / 100M), −10.3 / −9.1 / −6.3 (50/70/100bb 20M warm), −15.3 (100bb 10M).
+
+Reading: convergence is not the floor; the abstraction is. A converged cap-2 equilibrium on
+six postflop strength classes is worse with real cards than the one-raise equilibrium on the
+same classes, which is the action-abstraction pathology (Waugh et al. 2009): more betting
+options on the same coarse cards give the solver decisions it cannot make well, and a
+strategy that never takes them does better. Warm start and pruning still buy convergence
+(10M to 20M warm is +3.5 at 18bb, 10M to 20M is +9 at 100bb) but the gap they close ends
+near −10. The full-width solver is the instrument for the next question, which is the
+abstraction: a 20-class postflop abstraction at 8bb, one-raise and cap-2 solved full-width
+in about an hour, gated with real cards against the 6-class one-raise rung (lane AB2).
+
+## 19 September, later: the third defect, and what the gate can and cannot say
+
+`benchmark()` applied one raise cap to both seats and `play_pickles` passed none, so its
+default of one raise held: every cross-tree gate forbade the cap-2 solve the re-raise it was
+solved with. With each seat narrowed to its own tree (`raise_caps`), every cap-2 solve wins,
++7 at 8bb (sampled and full-width alike), +22 at 12bb, +45 to +48 at 18bb, +145 to +205 at
+50 to 100bb, and the one-raise side misses 17 to 27% of its decisions (every re-raise it
+faces), answered by check/call. So the gate now measures a bare one-raise pickle without a
+companion, which is not the bot either. Settled: the cap-2 solves are sound and close to
+converged (full-width and sampled agree at 8bb; 10M and 100M within 3 at 18bb), the abstract
+game is faithful, and the earlier "abstraction is the floor" reading was the instrument. Not
+settled, and not measurable with single pickles: whether a cap-2 primary beats a one-raise
+primary that hands re-raises to a cap-2 companion. That needs a duel between whole bot
+configurations over duplicate hands, or the arena.
+
+## 20 September: what the literature says about card abstraction (for the 20-class question)
+
+Read: Johanson, Burch, Valenzano and Bowling, "Evaluating State-Space Abstractions in
+Extensive-Form Games" (AAMAS 2013), and Ganzfried and Sandholm, "Potential-Aware
+Imperfect-Recall Abstraction with Earth Mover's Distance" (AAAI 2014). Both are about limit or
+no-limit Texas Hold'em at the ACPC scale, and both compare abstractions by solving each and
+playing the strategies against each other in duplicate hands, which is what our duel does.
+
+What ours is: **E[HS]**, expected hand strength against a random hand, sampled (200 runouts),
+k-means in one dimension into 6 classes per street, plus a board-texture class, imperfect
+recall (the key is the current bucket and the betting). That is the 2007-era Hyperborean
+design, "percentile hand strength" without even the E[HS²] nesting.
+
+What the literature found, in order of effect:
+
+1. **The feature matters more than the count.** Johanson 2013 ranked, at equal size (169 /
+   9,000 / 9,000 / 9,000 buckets, imperfect recall), k-means over **hand-strength distribution
+   histograms with earth mover's distance** (KE) first, k-means over **OCHS** (eight numbers per
+   hand: equity against each of eight opponent-hand clusters) close behind, and percentile
+   E[HS²]/E[HS] (PHS, ours) last, on both one-on-one play and CFR-BR exploitability. The reason
+   is drawing hands: 6c6d and KcQc have E[HS] 0.634 and 0.633 and end up in the same bucket
+   under E[HS], while their end-of-hand equity histograms are nothing alike (a low-potential
+   pair against a high-potential two overcards). Ganzfried 2014 goes a step further,
+   potential-aware EMD over *next-round* bucket distributions, and beat the KE abstraction by
+   2.2 to 2.6 mbb/h at 169 / 5,000 / 5,000 / 5,000 buckets.
+2. **Imperfect recall beat perfect recall at equal size**, every time, because it lets the
+   buckets be spent on the present street. Ours is already imperfect recall.
+3. **More buckets help, with diminishing returns, and the first-round lossless 169 is standard.**
+   Ours has the lossless preflop. The ACPC bots ran thousands of postflop buckets; we run six.
+4. **Texture in the key** is a crude form of OCHS's public-card awareness; keeping it is right.
+
+So the answer to "why 20": it is not the number that the literature says matters, it is the
+feature. Six E[HS] classes to twenty E[HS] classes refines the same one-dimensional signal and
+still cannot separate 6c6d from KcQc, which is why the 8bb test moved nothing. The change with
+evidence behind it is **the feature: cluster on the hand-strength histogram with EMD** (a
+50-bin histogram of end-of-hand equity per situation, k-means with EMD as the distance, 1-D EMD
+is a linear scan), which the fitting code can do in place of the scalar (`_postflop_strength`
+returns one number; it would return a histogram, `_fit_kmeans_1d` becomes k-means with EMD).
+Then the count: 20 or 50 classes of *that*. OCHS is the cheaper cousin (eight equities per hand,
+L2 distance) and is what to try if EMD clustering is slow to fit.
+
+Cost: fitting is one-off (the 3,000-situation sample per street becomes 3,000 histograms of
+200 runouts, minutes); lookup at play time is the same equity sampling we do now, binned; the
+tree size is set by the class count, not the feature. So a 20-class EMD abstraction costs the
+same to solve as a 20-class E[HS] one, and the literature says it plays better.
+
+Sources: Johanson et al. 2013 (ifaamas.org/Proceedings/aamas2013/docs/p271.pdf);
+Ganzfried and Sandholm 2014 (ojs.aaai.org/index.php/AAAI/article/view/8816).
+
+## 20 September: each planned change checked against what the field does
+
+**1. Cap-3 betting tree at 50bb and above.** Pluribus's blueprint (Science 2019 supplement)
+caps the number of raises implicitly through its sizes: on the turn and river at most three
+sizes for the first raise (0.5x, 1x, all-in) and at most two for any further raise (1x,
+all-in); preflop up to 14 sizes; the flop coarser. Libratus's river subgames: 0.25/0.5/1/2/4/8x
+first in, 0.4/0.7/1.1/2x facing a bet, 0.4/0.7/2x after one raise, 0.7x only after more. So
+the field's answer to "the third raise" is not a third full menu; it is **one or two sizes
+for every raise past the first**, which keeps the tree small while always having a node.
+Better than plain `--raise-cap 3` (which triples the tree with four sizes at every raise):
+a tapered schedule, e.g. `(4, 2, 1)`: four sizes first in, pot and all-in for the re-raise,
+all-in only for the third. The trainer already takes a tuple schedule. The tree grows by a
+fraction, not 3x, and the third-raise hole closes. **Do this instead of cap-3.**
+
+**2. Card abstraction.** Covered above: the feature (EMD over equity histograms, or OCHS)
+before the count. Pluribus used 200 buckets per postflop round in the blueprint on "k-means
+over domain-specific features" and 500 in search; Johanson's ACPC bots 9,000 per round on the
+EMD histograms. Our six E[HS] classes are two orders of magnitude coarser and on the weakest
+feature. **Do the feature first (EMD histogram or OCHS), at 20 to 50 classes**, one deep rung,
+duel-gated.
+
+**3. Action translation.** The bridge already uses Ganzfried and Sandholm's pseudo-harmonic
+mapping, randomised (`abstraction/translation.py`); Pluribus uses the same, deterministic in
+search and randomised in play. Nothing to change; the caveat from that paper stands: the
+mapping is invariant only in pot fractions, which the bridge honours.
+
+**4. River play.** Every modern bot re-solves the river (Libratus: nested safe subgame solving
+from the turn; Pluribus: depth-limited search on rounds two to four; DeepStack: continual
+re-solving). Our `cfr/river.py` is a river re-solver built on 16 September and switched off;
+the blueprint's river node comes from a six-class abstraction, which is where the re-solver
+adds the most (it plays the exact hand against the blueprint's range). **Turn it on for a
+duel** (`--river-solve`, 8 s budget) before building anything else on the river; the
+literature says this is the single largest gain available to a small-abstraction bot, and it
+costs no training.
+
+**5. Reads.** No literature; opponent modelling in this field is the reads we have. The one
+established idea is to use them only where the equilibrium is indifferent (Ganzfried's
+"safe exploitation"), which is what thresholds on measured counts approximate.
+
+**6. The solver.** Linear MCCFR with pruning is exactly Pluribus's recipe (they estimate
+linear at 3x over plain MCCFR and prune on 95% of iterations off the last round and off
+terminal actions, which is what `set_pruning` does). Nothing to change.
+
+Revised order, by expected gain per night of work: river re-solving on (a duel, no training);
+tapered third raise `(4, 2, 1)` at 50bb and above; the EMD/OCHS abstraction at 20 to 50
+classes on one deep rung; then the count.

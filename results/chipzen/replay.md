@@ -1,10 +1,10 @@
-# Replay: results/cfr/ladder169 on the logged hands
+# Replay: results/cfr/ladder169l_v5c on the logged hands
 
-9798 decisions from 5234 hands; baseline results/cfr/ladder200t.
+1668 decisions from 1294 hands (matches labelled v5d*); baseline results/cfr/ladder200t.
 
 ## Coverage
 
-logged misses 557, baseline lookup misses 371 (these should match), new-set misses 485; 9299 decisions compared.
+logged misses 45, baseline lookup misses 85 (these should match), new-set misses 44; 1583 decisions compared.
 
 ## Agreement with what was played
 
@@ -12,96 +12,94 @@ Mean probability the set gives the action actually taken. The baseline played th
 
 | street | compared | P(baseline) | P(new) | most likely action differs |
 |---|---|---|---|---|
-| preflop | 4057 | 0.44 | 0.36 | 2398 (59%) |
-| flop | 2427 | 0.54 | 0.52 | 708 (29%) |
-| turn | 1628 | 0.52 | 0.51 | 560 (34%) |
-| river | 1187 | 0.54 | 0.55 | 384 (32%) |
+| preflop | 971 | 0.41 | 0.65 | 519 (53%) |
+| flop | 359 | 0.51 | 0.70 | 122 (34%) |
+| turn | 157 | 0.48 | 0.66 | 65 (41%) |
+| river | 96 | 0.51 | 0.68 | 35 (36%) |
 
 Most common changes of most-likely action (baseline → new):
 
-- check/call → raise ½: 1056
-- check/call → raise pot: 429
-- raise ½ → check/call: 347
-- check/call → fold: 310
-- raise ½ → raise pot: 292
-- raise pot → raise ½: 264
-- check/call → raise 2×: 233
-- fold → check/call: 228
+- check/call → raise ½: 175
+- raise ½ → check/call: 161
+- raise pot → check/call: 89
+- check/call → fold: 65
+- raise pot → raise ½: 62
+- check/call → raise pot: 33
+- raise ½ → raise pot: 31
+- fold → check/call: 22
 
 ## Calls of a bet of the pot or more
 
-86 such calls were made. Call probability under each set:
+20 such calls were made. Call probability under each set:
 
 | hand | street | ours | board | to call | pot | baseline call | new call |
 |---|---|---|---|---|---|---|---|
-| 38 | preflop | 3h Th | - | 19,116 | 19,416 | 0.94 | 0.81 |
-| 18 | preflop | Jc 8s | - | 18,988 | 19,188 | 1.00 | 0.44 |
-| 48 | preflop | 9d Jh | - | 18,664 | 19,064 | 1.00 | 0.98 |
-| 21 | river | Qd Jh | Jd 5d 8s 2d 6c | 18,018 | 19,218 | 1.00 | 1.00 |
-| 30 | turn | 7c 7h | 2h 4h 5c 8h | 16,414 | 17,974 | 1.00 | 0.19 |
-| 27 | river | Ah As | Ts 8h 3d Tc 4d | 12,363 | 16,127 | 1.00 | 1.00 |
-| 39 | river | Qs 6c | 8s Jc Qh 6h 2s | 11,607 | 15,297 | 1.00 | 1.00 |
-| 23 | river | Jh 2h | 6h 4h Jc 4c 5h | 10,314 | 14,568 | 1.00 | 1.00 |
-| 33 | preflop | Qs Kh | - | 9,775 | 10,075 | 0.81 | 0.64 |
-| 11 | preflop | Kh Kc | - | 9,500 | 10,500 | 1.00 | 1.00 |
-| 29 | river | Ad 5s | 7h Ah 9d 6s 6c | 9,006 | 13,708 | 0.20 | 0.92 |
-| 18 | river | 8c Jc | Jd Qc 9c Ts Jh | 8,051 | 13,295 | 0.65 | 0.99 |
-| 21 | river | 7c 9c | 4h Qs 9s Th 9d | 7,800 | 12,000 | 1.00 | 0.99 |
-| 2 | river | 5d Ac | 2c 4s 2h 3d 6s | 6,962 | 13,638 | 1.00 | 0.50 |
-| 16 | turn | 4d 5s | 5h Kc 4c Ah | 6,712 | 10,816 | 1.00 | 1.00 |
-| 103 | preflop | 5s 5c | - | 5,550 | 6,750 | 0.99 | 0.99 |
-| 3 | turn | 2c 2h | 8s 6c 2d 4s | 3,600 | 6,000 | 1.00 | 1.00 |
-| 2 | flop | 3h 3s | 6c 4c 7s | 3,600 | 6,000 | 0.00 | 0.07 |
-| 3 | turn | 2c 2h | 8s 6c 2d 4s | 3,600 | 6,000 | 1.00 | 1.00 |
-| 2 | flop | 3h 3s | 6c 4c 7s | 3,600 | 6,000 | 0.00 | 0.07 |
+| 16 | preflop | Qs 6c | - | 19,700 | 19,900 | 0.94 | 1.00 |
+| 6 | preflop | Ad 7s | - | 19,500 | 19,700 | 1.00 | 1.00 |
+| 8 | preflop | 5c Tc | - | 19,000 | 19,200 | 0.21 | 0.72 |
+| 112 | preflop | Ts 7c | - | 18,550 | 19,750 | 0.93 | 1.00 |
+| 32 | preflop | Ac Ah | - | 18,250 | 18,550 | 0.99 | 1.00 |
+| 68 | preflop | 6s Ah | - | 18,250 | 18,850 | 1.00 | 1.00 |
+| 30 | preflop | 6c 6s | - | 17,725 | 18,025 | 0.99 | 1.00 |
+| 122 | preflop | As 4d | - | 17,400 | 19,000 | 1.00 | 1.00 |
+| 70 | preflop | 8h As | - | 17,400 | 18,000 | 1.00 | 1.00 |
+| 39 | preflop | Qd Jd | - | 17,025 | 17,325 | 1.00 | 0.94 |
+| 51 | preflop | Qc 8c | - | 16,950 | 17,350 | 0.99 | 0.37 |
+| 77 | preflop | Kh 9h | - | 14,800 | 15,400 | 0.67 | 1.00 |
+| 31 | turn | 4c Kc | Ac Ts Tc Ks | 8,450 | 15,850 | 1.00 | 1.00 |
+| 57 | river | Ks 2d | Jh 3c Kh 3h 2c | 7,650 | 13,650 | 1.00 | 1.00 |
+| 95 | preflop | 9c Kc | - | 7,050 | 7,850 | 0.14 | 0.99 |
+| 95 | preflop | 3s 3c | - | 6,650 | 7,450 | 0.67 | 1.00 |
+| 39 | preflop | Kc Kh | - | 5,425 | 5,725 | 1.00 | 1.00 |
+| 66 | preflop | 7c 7s | - | 4,475 | 5,075 | 0.58 | 1.00 |
+| 49 | preflop | Js 8s | - | 2,950 | 3,350 | 1.00 | 0.59 |
+| 12 | preflop | Qh Kh | - | 700 | 1,300 | 1.00 | 1.00 |
 
-Mean call probability over all 86: baseline 0.67, new 0.68.
+Mean call probability over all 20: baseline 0.85, new 0.93.
 
 ## The 8 most expensive hands, re-asked
 
 Only the first decision that differs is a real divergence; after it the opponent's replies are unknown.
 
-**-10,000 vs hoops**, hand 1 (0b7e2f73), we held 9h Qs, they showed Kd Ks.
-  - preflop board -              key `` to call 50 → played **raise ½**; new set: raise ½ 0.99, raise pot 0.01
-  - preflop board -              key `25` to call 340 → played **check/call**; new set: fold 1.00
-  - flop    board As 7s 2h       key `251/3` to call 610 → played **check/call**; new set: no entry
-  - turn    board As 7s 2h 6d    key `251/21/1` to call 0 → played **raise ½**; new set: no entry
-  - river   board As 7s 2h 6d 4c key `251/21/121/1` to call 0 → played **all-in**; new set: no entry
+**-9,900 vs Blueprint**, hand 4 (4e1b0b4e), we held Jd Ts, they showed Kd Qh.
+  - preflop board -              key `3` to call 200 → played **raise ½**; new set: check/call 0.43, raise ½ 0.50, raise pot 0.07
+  - preflop board -              key `325` to call 650 → played **check/call**; new set: no entry
+  - flop    board Tc 7d Qs       key `3251/` to call 0 → played **raise pot**; new set: no entry
+  - flop    board Tc 7d Qs       key `3251/35` to call 6,150 → played **check/call**; new set: no entry
 
-**-10,000 vs Blueprint**, hand 11 (daa4c270), we held Kh Kc, they showed 8c 8s.
-  - preflop board -              key `` to call 50 → played **raise 2×**; new set: check/call 0.05, raise ½ 0.15, raise pot 0.03, raise 2× 0.76, all-in 0.02
-  - preflop board -              key `45` to call 9,500 → played **check/call**; new set: check/call 1.00
+**-9,800 vs Blueprint**, hand 14 (4ecd82cb), we held As Qs, they showed Ah Ac.
+  - preflop board -              key `3` to call 300 → played **raise pot**; new set: raise pot 0.94, raise 2× 0.06
+  - preflop board -              key `335` to call 950 → played **raise pot**; new set: no entry
+  - preflop board -              key `33555` to call 3,350 → played **check/call**; new set: no entry
 
-**-9,933 vs hoops**, hand 17 (13fbf84a), we held Th Kh, they showed Qh Qc.
-  - preflop board -              key `` to call 50 → played **raise pot**; new set: check/call 0.29, raise ½ 0.50, raise pot 0.18, raise 2× 0.02
-  - preflop board -              key `35` to call 580 → played **check/call**; new set: fold 0.68, check/call 0.32
-  - flop    board Tc 6d Ts       key `351/2` to call 1,046 → played **all-in**; new set: no entry
+**-9,575 vs Blueprint**, hand 111 (389c8bf0), we held 2s 6h, they showed Qs Kd.
+  - preflop board -              key `` to call 300 → played **raise ½**; new set: fold 1.00
+  - preflop board -              key `25` to call 8,375 → played **check/call**; new set: fold 0.50, check/call 0.50
 
-**-9,925 vs Blueprint**, hand 33 (507aa7aa), we held Qs Kh, they showed Js Jd.
-  - preflop board -              key `` to call 75 → played **check/call**; new set: check/call 0.10, raise ½ 0.34, raise pot 0.21, raise 2× 0.25, all-in 0.09
-  - preflop board -              key `15` to call 9,775 → played **check/call**; new set: fold 0.36, check/call 0.64
+**-9,350 vs Blueprint**, hand 57 (8c43cb83), we held Ks 2d, they showed 7h Qh.
+  - preflop board -              key `2` to call 300 → played **check/call**; new set: fold 0.51, check/call 0.49
+  - flop    board Jh 3c Kh       key `21/` to call 0 → played **check/call**; new set: check/call 0.93, raise ½ 0.05, raise pot 0.02
+  - turn    board Jh 3c Kh 3h    key `21/11/` to call 0 → played **raise ½**; new set: check/call 0.49, raise ½ 0.50, raise pot 0.01
+  - turn    board Jh 3c Kh 3h    key `21/11/22` to call 500 → played **check/call**; new set: check/call 1.00
+  - river   board Jh 3c Kh 3h 2c key `31/11/221/` to call 0 → played **raise ½**; new set: check/call 0.47, raise ½ 0.37, raise pot 0.15, all-in 0.01
+  - river   board Jh 3c Kh 3h 2c key `21/11/221/25` to call 7,650 → played **check/call**; new set: check/call 1.00
 
-**-9,850 vs Blueprint**, hand 3 (aae9fbf2), we held 6h 8h, they showed 7c 7s.
-  - preflop board -              key `4` to call 450 → played **check/call**; new set: fold 0.89, check/call 0.01, raise ½ 0.08, raise pot 0.01, all-in 0.01
-  - flop    board Jc 8s Qs       key `41/` to call 0 → played **check/call**; new set: check/call 0.70, raise ½ 0.23, raise pot 0.06, raise 2× 0.01
-  - turn    board Jc 8s Qs Js    key `41/11/` to call 0 → played **check/call**; new set: check/call 0.60, raise ½ 0.30, raise pot 0.07, raise 2× 0.03
-  - river   board Jc 8s Qs Js 4s key `41/11/11/` to call 0 → played **check/call**; new set: check/call 0.73, raise ½ 0.24, raise 2× 0.01, all-in 0.01
-  - river   board Jc 8s Qs Js 4s key `41/11/11/14` to call 1,350 → played **all-in**; new set: fold 0.80, check/call 0.09, raise ½ 0.09, raise pot 0.02
+**-9,300 vs Blueprint**, hand 117 (5b41b64c), we held Th 9h, they showed Kh Ad.
+  - preflop board -              key `` to call 300 → played **raise ½**; new set: check/call 0.42, raise ½ 0.58
+  - preflop board -              key `25` to call 8,100 → played **check/call**; new set: check/call 1.00
 
-**-9,842 vs mr_hide**, hand 65 (fad37378), we held Th Ah, they showed As Ks.
-  - preflop board -              key `` to call 150 → played **raise pot**; new set: fold 0.01, check/call 0.13, raise pot 0.18, raise 2× 0.27, all-in 0.40
-  - preflop board -              key `35` to call 1,725 → played **check/call**; new set: no entry
-  - flop    board Jh 4s 7h       key `351/1` to call 0 → played **check/call**; new set: no entry
-  - turn    board Jh 4s 7h 3s    key `351/11/1` to call 0 → played **check/call**; new set: no entry
-  - river   board Jh 4s 7h 3s Ac key `351/11/11/3` to call 2,887 → played **raise pot**; new set: no entry
+**-9,200 vs Blueprint**, hand 31 (08a32bb7), we held Tc Th, they showed Ah Jh.
+  - preflop board -              key `2` to call 200 → played **raise 2×**; new set: raise ½ 0.30, raise pot 0.16, raise 2× 0.36, all-in 0.18
+  - preflop board -              key `245` to call 7,450 → played **check/call**; new set: no entry
 
-**-9,725 vs Blueprint**, hand 22 (2fdf8130), we held Qd Ks, they showed As Js.
-  - preflop board -              key `` to call 75 → played **raise pot**; new set: check/call 0.10, raise ½ 0.34, raise pot 0.21, raise 2× 0.25, all-in 0.09
-  - preflop board -              key `35` to call 9,275 → played **check/call**; new set: no entry
+**-9,000 vs Blueprint**, hand 14 (8e95e484), we held 8h Jh, they showed Ac Tc.
+  - preflop board -              key `4` to call 450 → played **raise pot**; new set: fold 0.20, check/call 0.06, raise ½ 0.23, raise pot 0.15, raise 2× 0.36
+  - flop    board Ah Qd 9s       key `431/` to call 0 → played **raise ½**; new set: check/call 0.23, raise ½ 0.77, raise pot 0.01
+  - turn    board Ah Qd 9s Jd    key `431/21/` to call 0 → played **check/call**; new set: check/call 0.99, raise ½ 0.01
+  - turn    board Ah Qd 9s Jd    key `431/21/12` to call 2,550 → played **raise ½**; new set: check/call 0.51, raise ½ 0.30, raise pot 0.13, raise 2× 0.01, all-in 0.05
 
-**-9,671 vs mr_hide**, hand 45 (17c03884), we held 7d 7s, they showed 9s 9c.
-  - preflop board -              key `` to call 100 → played **raise 2×**; new set: check/call 0.03, raise ½ 0.18, raise pot 0.09, raise 2× 0.19, all-in 0.51
-  - flop    board 6h Kh 3c       key `41/1` to call 0 → played **raise ½**; new set: check/call 0.59, raise ½ 0.32, raise pot 0.08, raise 2× 0.01
-  - turn    board 6h Kh 3c 2c    key `41/121/1` to call 0 → played **check/call**; new set: check/call 0.65, raise ½ 0.34, raise 2× 0.01
-  - river   board 6h Kh 3c 2c 4s key `41/131/11/1` to call 0 → played **raise 2×**; new set: check/call 0.38, raise ½ 0.16, raise pot 0.06, raise 2× 0.20, all-in 0.20
+**-8,650 vs Blueprint**, hand 43 (649fddd0), we held 6d Ah, they showed 9d Ad.
+  - preflop board -              key `2` to call 300 → played **raise pot**; new set: check/call 0.16, raise pot 0.74, raise 2× 0.02, all-in 0.07
+  - flop    board 9c 9s 6s       key `331/` to call 0 → played **raise ½**; new set: check/call 0.31, raise ½ 0.69
+  - flop    board 9c 9s 6s       key `331/25` to call 5,650 → played **check/call**; new set: check/call 1.00
 

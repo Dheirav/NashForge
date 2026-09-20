@@ -135,6 +135,21 @@ NB_MODULE(pokerbot_native, m) {
         return total / samples;
     }, nb::arg("mine"), nb::arg("theirs"), nb::arg("board"), nb::arg("exact"), nb::arg("samples") = 0, nb::arg("seed") = 0);
 
+    m.def("strength_histogram", [](const std::vector<int>& hole, const std::vector<int>& board,
+                                   int bins, int runouts, int opponents, uint64_t seed) {
+        if (bins < 1 || bins > 64 || runouts < 1 || opponents < 1 || hole.size() != 2 || board.size() > 5)
+            throw std::invalid_argument("strength_histogram: bins 1 to 64, runouts and opponents at least 1, two hole cards, at most five board cards");
+        std::vector<double> out(static_cast<size_t>(bins));
+        strength_histogram(hole.data(), board.data(), static_cast<int>(board.size()), bins, runouts, opponents, seed, out.data());
+        return out;
+    }, nb::arg("hole"), nb::arg("board"), nb::arg("bins"), nb::arg("runouts"), nb::arg("opponents"), nb::arg("seed"),
+       "River-equity histogram over sampled runouts, as abstraction/histogram.py computes it; same distribution, not the same stream.");
+    m.def("nearest_emd", [](const std::vector<std::vector<double>>& centroids, const std::vector<double>& hist) {
+        for (const auto& row : centroids)
+            if (row.size() != hist.size()) throw std::invalid_argument("nearest_emd: centroid width differs from the histogram");
+        return nearest_emd(centroids, hist.data(), static_cast<int>(hist.size()));
+    }, nb::arg("centroids"), nb::arg("hist"), "Nearest centroid under 1-D earth mover's distance.");
+
     m.def("board_texture", [](const std::vector<int>& board) {
         return Abstraction::board_texture(board.data(), static_cast<int>(board.size()));
     }, nb::arg("board"), "Board texture class, mirroring abstraction.buckets.board_texture.");
@@ -148,12 +163,29 @@ NB_MODULE(pokerbot_native, m) {
                             int equity_samples, int starting_stack,
                             int small_blind, int big_blind,
                             const std::vector<int>& schedule, uint64_t seed,
-                            bool texture, const std::string& rule) {
+                            bool texture, const std::string& rule,
+                            const std::vector<std::vector<std::vector<double>>>& hist_centroids,
+                            int hist_bins, int hist_runouts, int hist_opponents) {
             Abstraction abstraction;
             abstraction.preflop.assign(preflop.begin(), preflop.end());
             abstraction.centroids = {flop, turn, river};
             abstraction.equity_samples = equity_samples;
             abstraction.texture = texture;
+            if (!hist_centroids.empty()) {
+                if (hist_centroids.size() != 3) throw std::invalid_argument("hist_centroids: one list per postflop street");
+                if (hist_bins < 1 || hist_bins > 64) throw std::invalid_argument("hist_bins must be 1 to 64");
+                if (hist_runouts < 1 || hist_opponents < 1) throw std::invalid_argument("hist_runouts and hist_opponents must be at least 1");
+                for (size_t i = 0; i < 3; ++i) {
+                    if (hist_centroids[i].empty()) throw std::invalid_argument("hist_centroids: a street has no centroids");
+                    for (const auto& row : hist_centroids[i])
+                        if (static_cast<int>(row.size()) != hist_bins)
+                            throw std::invalid_argument("hist_centroids: a centroid row is not hist_bins wide");
+                }
+                for (size_t i = 0; i < 3; ++i) abstraction.hist_centroids[i] = hist_centroids[i];
+                abstraction.hist_bins = hist_bins;
+                abstraction.hist_runouts = hist_runouts;
+                abstraction.hist_opponents = hist_opponents;
+            }
             RaiseSchedule sched;
             for (int n : schedule) sched.sizes.push_back(n);
             new (self) MCCFR<NoLimitGame>(
@@ -163,7 +195,9 @@ NB_MODULE(pokerbot_native, m) {
         }, nb::arg("preflop"), nb::arg("flop"), nb::arg("turn"), nb::arg("river"),
            nb::arg("equity_samples"), nb::arg("starting_stack"),
            nb::arg("small_blind"), nb::arg("big_blind"), nb::arg("schedule"),
-           nb::arg("seed"), nb::arg("texture") = false, nb::arg("rule") = "vanilla")
+           nb::arg("seed"), nb::arg("texture") = false, nb::arg("rule") = "vanilla",
+           nb::arg("hist_centroids") = std::vector<std::vector<std::vector<double>>>{},
+           nb::arg("hist_bins") = 20, nb::arg("hist_runouts") = 100, nb::arg("hist_opponents") = 50)
         .def("set_common_random_numbers", [](MCCFR<NoLimitGame>& s, bool on) { s.game().set_common_random_numbers(on); },
              nb::arg("on"), "One deal per iteration shared across every branch (variance reduction); off by default.")
         .def("set_exact_terminals", [](MCCFR<NoLimitGame>& s, bool on) { s.game().set_exact_terminals(on); },

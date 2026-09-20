@@ -109,8 +109,19 @@ native/build/
 results/cfr/ladder/
 results/cfr/ladder200/
 results/cfr/experiments/
+# The season 6 ladders with real solves in them (about 2.2 GB together); the
+# ladder169l_v* directories are symlinks into experiments/ and stay tracked so
+# the composition of each played set is on record.
+results/cfr/ladder169l/
+results/cfr/ladder169l_v6/
+results/cfr/ladder169l_short/
+results/cfr/ladder200t/
+results/cfr/contender/
 results/chipzen/matches/
 results/chipzen/review.md
+# The scout's fetch cache of other bots' hands (18 MB of one-line JSON, refetched
+# from the arena on demand); the profiles built from it are tracked.
+results/chipzen/scout/hands/
 
 # Base papers for the course presentation: other people's PDFs, kept locally only.
 docs/base-papers/

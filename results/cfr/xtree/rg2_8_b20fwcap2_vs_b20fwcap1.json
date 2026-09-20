@@ -1,0 +1,30 @@
+{
+ "first": "results/cfr/experiments/fw_b20_cap2_8bb.pkl",
+ "second": "results/cfr/experiments/fw_b20_cap1_8bb.pkl",
+ "hands": 40000,
+ "seeds": [
+  0,
+  1,
+  2
+ ],
+ "bb_per_100": [
+  9.849375,
+  8.97,
+  9.605
+ ],
+ "mean": 9.474791666666667,
+ "stderr": 0.26206917357085524,
+ "on_miss": "call",
+ "stack": 16,
+ "big_blind": 2,
+ "stack_cap": true,
+ "raise_caps": [
+  2,
+  1
+ ],
+ "miss_rate": [
+  0.0,
+  0.1613426660815971
+ ],
+ "measured": "2026-09-19 18:33"
+}
