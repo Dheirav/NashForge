@@ -84,12 +84,13 @@ timer armed and dry-run); the final about 02:30 Monday against Blueprint or Fold
 *Today, bot off until 23:15:* done: the instrument tests, the reads-on duel, the histogram
 abstraction, the council's fixes, the corrected-dealer re-runs, **the commit** (`328bf66`;
 the 2.2 GB of real solves the ladders link to are now gitignored), lane T3 (below), and
-**Monday's 05:29 burst, armed** (`~/pokerbot-scratch/chipzen/burst.sh`, pid in
-`burst_mon.pid`, dry-run passed 19:28 with the bot connected inbound-only). It plays the set
-named in `~/pokerbot-scratch/chipzen/burst_set`, currently **v5f**; to burst v5d again
-instead, change that file's three lines before 05:29 (dir `ladder169l_v5c`, the v5d label,
-`--deep-primary --stack-cap`). Left: scout whoever is registered for season 7; keep the
-machine awake through 05:29.
+**Monday's burst script written and dry-run** (`~/pokerbot-scratch/chipzen/burst.sh`,
+dry-run passed 19:28 with the bot connected inbound-only) but **not armed: Monday's timers
+are set only when asked** (19:50, on instruction). It plays the set named in
+`~/pokerbot-scratch/chipzen/burst_set`, currently v5f; to burst v5d instead, change that
+file's three lines (dir `ladder169l_v5c`, the v5d label, `--deep-primary --stack-cap`). To
+arm: `nohup ~/pokerbot-scratch/chipzen/burst.sh "2026-09-21 05:29" > ~/pokerbot-scratch/chipzen/burst_mon.log 2>&1 &`.
+Left: scout whoever is registered for season 7.
 
 **Sunday 20 September, 19:35 IST: the tapered third raise (v5f) ties v5d.** Lane T3's three
 deep rungs (`(4, 2, 1)`: four sizes for the open, 2×pot or all-in for the re-raise, all-in for
@@ -106,8 +107,8 @@ strategy, which is all a go-live gate needs. Replay on the v5d record: 103 new-s
 against 44, but these are translation artefacts (the logged histories were mapped onto the
 cap-2 tree, whose ½-pot and pot re-raises the tapered tree does not have; live, v5f maps
 opponents' raises onto its own sizes), and agreement with the played action is 0.57 to 0.66
-against the baseline's 0.65 to 0.70. So v5f has passed the gate and the replay and is bursting
-Monday at 05:29; a tie in the duel plus the closed third-raise hole is the case for it, and
+against the baseline's 0.65 to 0.70. So v5f has passed the gate and the replay and is the candidate for
+Monday's burst, when it is armed; a tie in the duel plus the closed third-raise hole is the case for it, and
 twenty matches will not separate it from v5d either, so season 7's first-week set is chosen
 on the burst's decomposition (rule hands and preflop jams), not its headline.
 
