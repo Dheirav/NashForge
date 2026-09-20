@@ -4,7 +4,7 @@ One page, kept current. [`BACKLOG.md`](BACKLOG.md) holds the reasoning and every
 [`docs/training-plan.md`](docs/training-plan.md) holds the full phase plan and its results. This
 file is only the next thing to do.
 
-**Last updated:** 20 September 2026, 16:50 IST · 343 tests (~7m with the machine shared; collection ~3m24s)
+**Last updated:** 20 September 2026, 17:05 IST · 343 tests (~7m with the machine shared; collection ~3m24s)
 
 ---
 
@@ -81,12 +81,11 @@ real improvement are compatible; the earlier phrasing denied the second.
 timer armed and dry-run); the final about 02:30 Monday against Blueprint or Fold-ver-3; season
 7 opens Tuesday 05:30, entries close Monday 23:59 UTC.
 
-*Today, bot off until 23:15:* instrument regression tests (done: `tests/test_instruments.py`,
-a solve against itself at its own stack reads zero with zero misses, the duel's mirror reads
-even); the reads-on duel (mirror even at 47.0 ± 2.9%; v5d against v7b running); **the commit**
-(everything since `ab646c2`); scout whoever is registered for season 7; prepare and dry-run,
-without starting, Monday's 05:29 v5d burst script and the cap-3 lane script (waits for the
-final's bot to stop); keep the machine awake through 05:29.
+*Today, bot off until 23:15:* done: the instrument tests, the reads-on duel, the histogram
+abstraction, the council's fixes, the corrected-dealer re-runs, and **the commit** (`328bf66`;
+the 2.2 GB of real solves the ladders link to are now gitignored). Left: lane T3's result
+(about 20:30); scout whoever is registered for season 7; write and dry-run, without
+starting, Monday's 05:29 v5d burst script; keep the machine awake through 05:29.
 
 *Tonight and overnight:* the semi, decomposed after; the final's timer from the listed slot,
 dry-run; the final; enter season 7 after it.
