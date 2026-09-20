@@ -4,7 +4,7 @@ One page, kept current. [`BACKLOG.md`](BACKLOG.md) holds the reasoning and every
 [`docs/training-plan.md`](docs/training-plan.md) holds the full phase plan and its results. This
 file is only the next thing to do.
 
-**Last updated:** 20 September 2026, 19:35 IST · 343 tests (~7m with the machine shared; collection ~3m24s)
+**Last updated:** 21 September 2026, 03:45 IST · 410 tests, 6m32s (collection about half of that)
 
 ---
 
@@ -77,6 +77,46 @@ real improvement are compatible; the earlier phrasing denied the second.
 
 ## Now — the next thing to do
 
+**Season 6 is won. Monday 21 September, 02:34 IST: NashForge beat Fold-ver-3 in the final,
+67 hands, and is the Chipzen season 6 champion, as the top seed.** Every match the bot actually
+played this season, it won; the one loss was the Shadow walkover, a timer script of mine that
+never connected.
+
+| stage | opponent | set | hands | result |
+|---|---|---|---|---|
+| round 1, Wed 17 Sep 00:00 | runner1 | v5 | | won |
+| round 2, Wed 08:30 | mellyy | v5 | 32 | won |
+| round 3, Thu 00:00 | v003 | v5 | | won |
+| round 4, Wed 23:50 | Shadow | v5b | 0 | **lost by walkover** (the `date -d` bug) |
+| round 5, Fri 23:50 | PoetAndCoder | v7 | 8 | won |
+| quarter-final, Sat 23:30 | mellyy (8th seed) | v7b | 32 | won, +312 ± 141 a hand |
+| semi-final, Sun 23:30 | v003 | v7b | 22 | won, one river call decided it |
+| final, Mon 02:30 | Fold-ver-3 | v7b | 67 | won, +437 ± 173 a hand |
+
+Round-robin 4-1, first seed. The playoffs were played on v7b, the one-raise primary with the
+20M warm-started cap-2 solves as companions, because it was the set that had been through
+every gate when the playoffs began; v5d, which the corrected duel now puts ahead of it by
+61.5 ± 2.4% of matches, had one burst (11 of 20) and no fixture. The final went back and
+forth for fifty hands (low point 8,100 after hand 12, three 2,000-chip swings between hands
+31 and 51) and only ran one way from hand 52; against a 75% VPIP caller that is the shape of
+the game, and +437 a hand at ±173 is an edge two and a half times its noise, which a 67-hand
+match can still lose. Bursts by version, all season (the ledger): v1 64% of 47, v2 60% of 53,
+v3 62% of 21, v4 76% of 25, v5 60% of 30, v6 35% of 20, v7 62% of 21, v7b 60% of 20, v5d 55%
+of 20. The playoff opponents were profiled from the platform's hand histories (40 matches
+each) before each fixture, and the reads sized to those profiles; in the final the reads
+fired on 19 hands for no measurable chips, which is what they are for (they stop bluffs into
+a station, they do not win pots).
+
+What won the season was not solver strength, which every burst put within ±40 chips a hand
+of the field's best, but operations: a gated set, a timer exercised before it was armed, a
+bot that answered in under 200 ms against a 30-second clock and never timed out, and a
+scout on every opponent before its fixture. What lost the one match was also operations. The
+three arena rules in CLAUDE.md are the season's residue.
+
+**Season 7** opens Tuesday 05:30 IST; the entry must be made (the "Enter it" button) before
+Monday 23:59 UTC, 05:29 Tuesday IST. The field is not listed yet.
+
+
 **The list, Sunday 20 September, 16:50 IST.** Semi-final tonight 23:30 against v003 (v7b,
 timer armed and dry-run); the final about 02:30 Monday against Blueprint or Fold-ver-3; season
 7 opens Tuesday 05:30, entries close Monday 23:59 UTC.
@@ -112,12 +152,21 @@ Monday's burst, when it is armed; a tie in the duel plus the closed third-raise 
 twenty matches will not separate it from v5d either, so season 7's first-week set is chosen
 on the burst's decomposition (rule hands and preflop jams), not its headline.
 
-*Tonight and overnight:* the semi, decomposed after; **the final's timer is armed** (20:51):
+*Tonight and overnight, done:* the semi and the final, both won (above). The timer chain:
 `arm_final.sh` polls the fixture list from 23:50 every five minutes, and when the final is
 listed (Monday, about 02:30 IST) hands its slot to `fixture.sh` with a 15-minute lead and the
 set in `fixture_set` (v7b). Dry-run 20:44 against a fake listing three minutes out: polled,
-parsed, connected, stopped. Gives up at 06:00 if nothing is listed (a lost semi). Log:
-`~/pokerbot-scratch/chipzen/arm_final.log`. The final; enter season 7 after it.
+parsed, connected, stopped. Live, it listed the final at 23:50, connected at 02:15, and
+stopped the bot at 02:45. Log: `~/pokerbot-scratch/chipzen/arm_final.log`.
+
+*Monday, in order:* enter season 7 (before 05:29 Tuesday IST); the burst, if wanted (the
+script is written and dry-run, not armed; v5f is in `burst_set`, v5d is one edit); scout
+the season 7 field when it is listed; decide the histogram abstraction's cost (measured
+Sunday 22:20: 5.0 ms an iteration on two threads at 20 classes, 2.5M information sets after
+60,000 iterations, 575 MB and climbing, so 20M iterations is 28 hours and past the memory
+budget; the choices are fewer classes without texture, a precomputed bucket table so a
+histogram is computed once per hand and board rather than once per deal, or the second
+laptop); the river re-solver duel re-run on the corrected dealer (an hour).
 
 *Monday:* v5d's second burst; pool it with today's (+15 ± 35, 11 of 20) and choose season 7's
 set, one label, unchanged through the week without a burst; cap-3 deep rungs training.

@@ -115,3 +115,12 @@ first match 20 Sep 09:59 IST. **20 matches, 11 won (55%), 1,294 hands, net +20,0
 |---|---|---|---|---|---|
 | Blueprint | 20 | 11 | 1294 | +20,000 | +15 |
 
+## 4cf7d19+ | results/cfr/ladder169l_v5c | v7b: v7 with the 20M warm-started cap-2 solves as companions at every depth
+
+first match 20 Sep 23:30 IST. **2 matches, 2 won (100%), 89 hands, net +20,000 chips, +225 ± 154 chips/hand**, showdowns 17 won / 6 lost.
+
+| opponent | matches | won | hands | net | chips/hand |
+|---|---|---|---|---|---|
+| v003 | 1 | 1 | 22 | +10,000 | +455 |
+| Fold-ver-3 | 1 | 1 | 67 | +10,000 | +149 |
+

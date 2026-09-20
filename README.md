@@ -10,6 +10,27 @@ with evolutionary search and PPO measured against it on the same instrument.
 
 ---
 
+## Where it stands (September 2026)
+
+**NashForge won season 6 of the [Chipzen](https://chipzen.ai) arena** (15 to 20 September
+2026), a heads-up no-limit Hold'em arena for bots on a 30-second clock with blinds rising
+every twenty hands: 4-1 in the round-robin as the top seed, then 3-0 through the playoffs,
+every match it played won and the one loss a walkover from a timer bug of my own. The bot
+that played is the CFR family below: a ladder of solvers, one per stack depth from 5 to
+100 big blinds, trained in C++ (`native/`) and played through a Python bot (`chipzen/`)
+from this laptop, with opponent reads sized to scouted hand histories. The solved
+strategies are not in the repository; the code, the instruments and the match ledger are.
+
+The comparison the title promises is done as well: on one panel at 40,000 hands, the
+solver beats PPO by about 75 BB/100 and evolutionary search by about 200, with evolution
+spending seventy times PPO's hands to finish further behind (`results/comparison/`).
+
+What is current, and what to do next, is always in [`NEXT.md`](NEXT.md). The arena
+week's rules, learnt the expensive way, are in `CLAUDE.md`; the arena itself is described
+in [`docs/chipzen.md`](docs/chipzen.md) and [`docs/arena-plan.md`](docs/arena-plan.md).
+
+---
+
 ## Read this first
 
 This repository previously trained poker agents with an evolutionary algorithm and published
@@ -41,9 +62,13 @@ that say how far from one you actually are.
 | `games/` | The traversable game interface plus Kuhn poker, Leduc Hold'em and abstracted heads-up no-limit. CFR traverses a game rather than playing it, which the engine's in-place simulator cannot support. |
 | `abstraction/` | Card bucketing (Chen preflop, k-means over a strength signal postflop) and the six-action bet abstraction. |
 | `cfr/` | Vanilla CFR, external-sampling MCCFR, four regret update rules, exact exploitability for small games, and Local Best Response for no-limit. |
-| `tests/` | 150 invariants. Was an empty directory before the audit. |
-| `results/cfr/` | Measurements, as JSON, one file per question. |
-| `training/`, `rl/` | Genetic operators and a PPO implementation. Both were found sound and are retained; neither is the current line of work. See below. |
+| `native/` | The C++ core: external-sampling MCCFR with linear discounting, warm start and pruning, the abstract game, the hand evaluator, equity and histogram sampling. Bound with pybind11; `native/build.sh` builds it. |
+| `chipzen/`, `slumbot/` | The arena bot (remote, through the Chipzen SDK) and the Slumbot bridge. |
+| `evaluation/` | The benchmark loop, the duplicate-hand panel and the cross-tree gate every solver is measured on. |
+| `scripts/`, `tools/` | Entry points (training, gates, the duel, the replay, the burst decomposition) and the shell wrappers for the arena. |
+| `tests/` | 410 tests, about 6½ minutes; collection alone is about half of that. Was an empty directory before the audit. |
+| `results/` | Measurements as JSON, one file per question; the arena ledger and scouted profiles under `results/chipzen/`. |
+| `training/`, `rl/` | Genetic operators and a PPO implementation, both measured against the solver in Phase 4. Retained; not the current line of work. See below. |
 
 ## Why anyone should believe it
 
@@ -74,7 +99,7 @@ traversal.
 ## Run the tests
 
 ```bash
-python -m pytest tests/ -q        # 150 passed, about 2m40s
+venv/bin/python -m pytest -q      # 410 tests, about 6½ minutes; one file while iterating
 ```
 
 ## Run the experiments
