@@ -290,6 +290,10 @@ and the fixture windows, and the v003 reconnect at 23:40 is inbound-only.
   run before arming: `NO_QUEUE=1 DEADLINE=3 MAX_MATCHES=0 burst.sh "<now + 1 min>"` connects
   inbound-only, plays nothing, and exercises the start, the set file and the stop. Read a burst
   with `scripts/chipzen_decompose.py`, not the headline.
+- **A fixture whose slot is not listed yet** (the final is listed only after the semi):
+  `arm_final.sh "<poll from>"` polls `--fixtures` every five minutes, parses the first Monday
+  slot and `exec`s `fixture.sh` for it with a 15-minute lead. Dry run with `FIXTURES_CMD` set
+  to a script that prints a fake listing a few minutes out.
 - **One set per label, the gated one, untouched on match day.** The playoff timetable every
   season: quarters Sat 18:00 UTC in ten-minute slots, semis Sun 18:00 and 18:10, final Sun 21:00
   UTC (02:30 IST Monday).

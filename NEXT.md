@@ -112,8 +112,12 @@ Monday's burst, when it is armed; a tie in the duel plus the closed third-raise 
 twenty matches will not separate it from v5d either, so season 7's first-week set is chosen
 on the burst's decomposition (rule hands and preflop jams), not its headline.
 
-*Tonight and overnight:* the semi, decomposed after; the final's timer from the listed slot,
-dry-run; the final; enter season 7 after it.
+*Tonight and overnight:* the semi, decomposed after; **the final's timer is armed** (20:51):
+`arm_final.sh` polls the fixture list from 23:50 every five minutes, and when the final is
+listed (Monday, about 02:30 IST) hands its slot to `fixture.sh` with a 15-minute lead and the
+set in `fixture_set` (v7b). Dry-run 20:44 against a fake listing three minutes out: polled,
+parsed, connected, stopped. Gives up at 06:00 if nothing is listed (a lost semi). Log:
+`~/pokerbot-scratch/chipzen/arm_final.log`. The final; enter season 7 after it.
 
 *Monday:* v5d's second burst; pool it with today's (+15 ± 35, 11 of 20) and choose season 7's
 set, one label, unchanged through the week without a burst; cap-3 deep rungs training.
