@@ -144,7 +144,7 @@ the scouted profiles of other bots are not.
 | `evaluation/` | The benchmark loop, the duplicate-hand panel, the cross-tree gate. |
 | `scripts/`, `tools/` | Entry points (training, gates, duel, replay, decomposition, scouting) and the shell wrappers for the arena. |
 | `training/`, `rl/` | Evolutionary search and PPO, both measured in the comparison above. Retained; not the current line of work. |
-| `results/` | Every measurement as JSON, one file per question; the arena ledger and scouted profiles under `results/chipzen/`. |
+| `results/` | Every measurement as JSON, one file per question; the arena ledger under `results/chipzen/`. |
 | `tests/` | 410 tests. Was an empty directory before the audit. |
 | `docs/` | The arena (`chipzen.md`, `arena-plan.md`), the training plan, the research notes. |
 
