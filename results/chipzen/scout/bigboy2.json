@@ -1,0 +1,142 @@
+{
+ "summary": {
+  "name": "bigboy2",
+  "matches": 1,
+  "hands": 13,
+  "platform": {
+   "rating": 1840.152303921017,
+   "matches_played": 25,
+   "wins": 14,
+   "losses": 11,
+   "bb_per_100": 24.010675589547485,
+   "bb_hands_counted": 1046,
+   "llm_author_model": null,
+   "bot_kind": "sandboxed"
+  },
+  "vpip": 0.3076923076923077,
+  "pfr": 0.3076923076923077,
+  "three_bet": 0.0,
+  "fold_to_three_bet": 0.0,
+  "fold_to_bet": 0.38461538461538464,
+  "call_share_of_answers": 0.375,
+  "bets_faced": 13,
+  "raise_sizes": {
+   "1-2": 0.2,
+   "\u00bd-1": 0.8
+  },
+  "showdown_rate": 0.23076923076923078,
+  "showdown_win": 0.6666666666666666,
+  "river_bets": 7,
+  "river_bluff_rate": 0.0,
+  "big_bets": 0,
+  "big_bet_air_rate": 0.0,
+  "small_bets": 11,
+  "small_bet_air_rate": 0.0,
+  "bb_fold_to_open": 0.0,
+  "bb_opens_faced": 0,
+  "shown_chen_mean": 5.333333333333333,
+  "station": false,
+  "fold_or_raise": false,
+  "top_opponents": [
+   [
+    "runner1",
+    1
+   ]
+  ]
+ },
+ "counts": {
+  "name": "bigboy2",
+  "matches": 1,
+  "hands": 13,
+  "bets_faced": 13,
+  "folds": 5,
+  "calls": 3,
+  "raises": 5,
+  "by_history": {
+   "preflop:Uc": {
+    "check": 7
+   },
+   "flop:": {
+    "check": 4,
+    "raise": 3
+   },
+   "flop:TcUr": {
+    "fold": 1,
+    "call": 1
+   },
+   "preflop:": {
+    "raise": 4,
+    "fold": 2
+   },
+   "flop:Uc": {
+    "check": 1,
+    "raise": 1
+   },
+   "turn:Uc": {
+    "check": 1,
+    "raise": 1
+   },
+   "river:Uc": {
+    "raise": 2
+   },
+   "turn:": {
+    "check": 5,
+    "raise": 1
+   },
+   "turn:TcUr": {
+    "fold": 1,
+    "call": 1
+   },
+   "river:": {
+    "raise": 3,
+    "check": 2
+   },
+   "preflop:TrUr": {
+    "raise": 1
+   },
+   "preflop:TrUrTrUr": {
+    "raise": 1
+   },
+   "preflop:TrUrTrUrTrUr": {
+    "raise": 1
+   },
+   "preflop:TrUrTrUrTrUrTrUr": {
+    "fold": 1
+   },
+   "river:TcUr": {
+    "fold": 2
+   },
+   "river:TrUr": {
+    "raise": 1
+   },
+   "river:TrUrTrUr": {
+    "raise": 1
+   },
+   "river:TrUrTrUrTrUr": {
+    "call": 1
+   }
+  },
+  "vpip": 4,
+  "pfr": 4,
+  "three_bet": 0,
+  "three_bet_chances": 0,
+  "fold_to_three_bet": 0,
+  "three_bets_faced": 1,
+  "showdowns": 3,
+  "showdowns_won": 2,
+  "raise_sizes": {
+   "1-2": 4,
+   "\u00bd-1": 16
+  },
+  "opponents": {
+   "runner1": 1
+  },
+  "net_chips": 0,
+  "river_bets": 7,
+  "river_bluffs": 0,
+  "big_bets": 0,
+  "big_bets_air": 0,
+  "small_bets": 11,
+  "small_bets_air": 0
+ }
+}

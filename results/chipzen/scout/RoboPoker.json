@@ -1,0 +1,115 @@
+{
+ "summary": {
+  "name": "RoboPoker",
+  "matches": 1,
+  "hands": 35,
+  "platform": {
+   "rating": 1524.7648978828606,
+   "matches_played": 13,
+   "wins": 8,
+   "losses": 5,
+   "bb_per_100": 91.88776041666668,
+   "bb_hands_counted": 320,
+   "llm_author_model": null,
+   "bot_kind": "external_api"
+  },
+  "vpip": 0.6,
+  "pfr": 0.45714285714285713,
+  "three_bet": 0.16666666666666666,
+  "fold_to_three_bet": 0.8,
+  "fold_to_bet": 0.6086956521739131,
+  "call_share_of_answers": 0.5555555555555556,
+  "bets_faced": 23,
+  "raise_sizes": {
+   "1-2": 0.67,
+   "2-4": 0.28,
+   "\u00bd-1": 0.06
+  },
+  "showdown_rate": 0.08571428571428572,
+  "showdown_win": 0.3333333333333333,
+  "river_bets": 1,
+  "river_bluff_rate": 1.0,
+  "big_bets": 0,
+  "big_bet_air_rate": 0.0,
+  "small_bets": 0,
+  "small_bet_air_rate": 0.0,
+  "bb_fold_to_open": 0.6,
+  "bb_opens_faced": 10,
+  "shown_chen_mean": 4.0,
+  "station": false,
+  "fold_or_raise": false,
+  "top_opponents": [
+   [
+    "mellyy",
+    1
+   ]
+  ]
+ },
+ "counts": {
+  "name": "RoboPoker",
+  "matches": 1,
+  "hands": 35,
+  "bets_faced": 23,
+  "folds": 14,
+  "calls": 5,
+  "raises": 4,
+  "by_history": {
+   "preflop:": {
+    "raise": 14,
+    "call": 3
+   },
+   "flop:Ur": {
+    "fold": 1,
+    "call": 1,
+    "raise": 1
+   },
+   "preflop:Ur": {
+    "raise": 2,
+    "call": 2,
+    "fold": 6
+   },
+   "preflop:TrUr": {
+    "call": 1,
+    "fold": 4
+   },
+   "turn:Ur": {
+    "call": 1
+   },
+   "river:Ur": {
+    "raise": 1
+   },
+   "preflop:TcUr": {
+    "fold": 2
+   },
+   "flop:": {
+    "check": 1
+   },
+   "flop:TcUr": {
+    "fold": 1
+   }
+  },
+  "vpip": 21,
+  "pfr": 16,
+  "three_bet": 2,
+  "three_bet_chances": 12,
+  "fold_to_three_bet": 4,
+  "three_bets_faced": 5,
+  "showdowns": 3,
+  "showdowns_won": 1,
+  "raise_sizes": {
+   "1-2": 12,
+   "2-4": 5,
+   "\u00bd-1": 1
+  },
+  "opponents": {
+   "mellyy": 1
+  },
+  "net_chips": 0,
+  "river_bets": 1,
+  "river_bluffs": 1,
+  "big_bets": 0,
+  "big_bets_air": 0,
+  "small_bets": 0,
+  "small_bets_air": 0
+ }
+}

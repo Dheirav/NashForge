@@ -312,6 +312,12 @@ class CardAbstraction:
     #: Histogram mode: [buckets, hist_bins] centroid histograms per street,
     #: ordered by mean equity so bucket 0 is weakest.
     _hist_centroids: Dict[str, np.ndarray] = None
+    #: Histogram mode: precomputed buckets for the flop and the turn, keyed by
+    #: suit-isomorphic canonical form (native/src/bucket_table.hpp), as
+    #: {street: (sorted uint64 keys, uint8 buckets)}. Built by `build_tables`
+    #: after the fit; the native `BucketTable` objects are rebuilt on demand
+    #: and never pickled.
+    _hist_tables: Dict[str, tuple] = None
 
     def __post_init__(self):
         if self.strength not in STRENGTH_SIGNALS:
@@ -324,6 +330,13 @@ class CardAbstraction:
             raise ValueError(f"hist_bins must be 1 to 64, got {self.hist_bins}")
         if self.hist_runouts < 1 or self.hist_opponents < 1:
             raise ValueError("hist_runouts and hist_opponents must be at least 1")
+
+    def __getstate__(self):
+        # The native tables are rebuilt from the arrays on first use; the
+        # objects themselves cannot be pickled and would double the file.
+        state = dict(self.__dict__)
+        state.pop("_native_tables", None)
+        return state
 
     def __setstate__(self, state):
         """
@@ -343,7 +356,7 @@ class CardAbstraction:
         if "_preflop_strength" not in state:
             self._preflop_strength = None
         for name, default in (("hist_bins", 20), ("hist_runouts", 100), ("hist_opponents", 50),
-                              ("_hist_centroids", None)):
+                              ("_hist_centroids", None), ("_hist_tables", None)):
             if name not in state:
                 setattr(self, name, default)
         if getattr(self, "_centroid_list", None) is None and self._centroids:
@@ -440,6 +453,47 @@ class CardAbstraction:
             self._centroids[street] = _fit_kmeans_1d(values, self.postflop_buckets)
             self._centroid_list[street] = self._centroids[street].tolist()
 
+    def build_tables(self, threads: int = 1, progress=None) -> "CardAbstraction":
+        """
+        Precompute the flop and turn buckets for every canonical situation.
+
+        A histogram costs 0.4 ms and a solve looks one up several times an
+        iteration on cards it has not seen, so without this a 20-class solve
+        ran at 5.0 ms an iteration against 0.30 with the histogram made cheap
+        (measured 21 September 2026). The 1.29 million flop and 14 million turn
+        classes take a couple of minutes and about twenty minutes on six
+        threads, once per abstraction, and the bot's play-time lookup goes from
+        0.4 ms to a few microseconds as well. The river is one runout and
+        stays computed at the lookup.
+        """
+        if self.strength != "histogram":
+            raise ValueError("bucket tables are for the histogram abstraction")
+        import pokerbot_native as native
+        self._hist_tables = {}
+        for street in ("flop", "turn"):
+            table = native.build_bucket_table(
+                STREET_BOARD_SIZE[street], self._hist_centroids[street].tolist(),
+                self.hist_bins, self.hist_runouts, self.hist_opponents, threads)
+            self._hist_tables[street] = (np.asarray(table.keys()), np.asarray(table.buckets()))
+            if progress is not None:
+                progress(street, len(table))
+        self._native_tables = None
+        return self
+
+    def native_tables(self):
+        """The native `BucketTable` per street, built once from the stored arrays; {} without tables."""
+        cached = getattr(self, "_native_tables", None)
+        if cached is not None:
+            return cached
+        tables = {}
+        if getattr(self, "_hist_tables", None):
+            import pokerbot_native as native
+            for street, (keys, buckets) in self._hist_tables.items():
+                tables[street] = native.BucketTable(np.ascontiguousarray(keys, dtype=np.uint64),
+                                                    np.ascontiguousarray(buckets, dtype=np.uint8))
+        self._native_tables = tables
+        return tables
+
     # ------------------------------------------------------------------
 
     def bucket(self, hole: Sequence[Card], board: Sequence[Card],
@@ -457,6 +511,12 @@ class CardAbstraction:
             return self._preflop[preflop_key(hole)]
 
         street = _STREET_BY_BOARD[len(board)]
+        if self.strength == "histogram" and street in self.native_tables():
+            bucket = self.native_tables()[street].lookup([c.index for c in hole], [c.index for c in board])
+            if bucket >= 0:
+                if getattr(self, "texture", False):
+                    bucket += len(self._centroid_list[street]) * board_texture(board)
+                return bucket
         if self.strength == "histogram":
             # The Python histogram costs about 30 ms a lookup on the flop, the
             # native one 0.4 ms, and the river re-solver buckets 1,081 hands

@@ -4,7 +4,7 @@ One page, kept current. [`BACKLOG.md`](BACKLOG.md) holds the reasoning and every
 [`docs/training-plan.md`](docs/training-plan.md) holds the full phase plan and its results. This
 file is only the next thing to do.
 
-**Last updated:** 21 September 2026, 03:45 IST · 410 tests, 6m32s (collection about half of that)
+**Last updated:** 21 September 2026, 16:40 IST · 410 tests, 6m32s (collection about half of that)
 
 ---
 
@@ -76,6 +76,42 @@ real improvement are compatible; the earlier phrasing denied the second.
 ---
 
 ## Now — the next thing to do
+
+**Monday 21 September, 16:40 IST: the histogram abstraction is worth +6.9 ± 1.7 BB/100 at
+a rung, and the whole ladder is retraining on it tonight (lane H2).** The chain today, in
+order. The 20-class histogram solve ran at 5.0 ms an iteration against 0.30 with the
+histogram made a hundred times cheaper, so the cost was all histogram computation on cache
+misses (the trainer deals new cards every iteration). **Bucket tables**
+(`native/src/bucket_table.hpp`): every suit-isomorphic flop and turn situation (1,286,792
+and 13,960,050 canonical classes; the river needs none) gets its bucket computed once per
+abstraction and stored beside a sorted key; built in 12 minutes on six threads, looked up in
+microseconds by the trainer and the bot alike. H1, 20 classes with texture at 100bb on the
+two-raise tree, then trained at 0.32 ms/it, 106 minutes, 6.95M information sets, 1.8 GB.
+Same tree against v5c's 100bb rung: **+6.9 ± 1.7 BB/100**, 80,000 hands, zero misses. Swapped
+into v5f at 100bb only: 49.8 ± 1.1% of 2,000 matches (one rung decides twenty hands of a
+match) and +17.5 ± 9.8 at a fixed 100bb (mixed with the tree change). Lane H2: hist20 with the
+(4, 2, 1) taper at 12 to 100bb, cold, two rungs at a time, 0.08 ms/it measured (the tapered
+tree is a quarter the size of the two-raise one), about three hours; assembles
+`ladder169l_v5h` and duels it against v5f over 5,000 matches. Watch
+`~/pokerbot-scratch/hist/laneH2.log`.
+
+**The 10,000-match duels:** v5f beats v7b **54.9 ± 0.5%**; v5f against v5d 49.3 ± 0.5%, a
+tie. The two cap-2 sets sit together five points above the playoff set. v5f's burst
+(Monday 13:13, 12 of 20, +53 ± 54; +214 ± 72 on decision hands, deep +211 against v5d's −22,
+16 rule hands against 29) is inside noise but the right shape. **The pseudo all-in fix**
+(`chipzen.bridge._close_street`): a raise the taper can only read as all-in while the bettor
+kept chips left every later street off-tree (three deep rule hands in the burst); the street
+is now re-read with that raise as the largest sized raise at its depth, or collapsed into a
+call, and asked as a last resort after the primary and companion miss on the true history.
+**The field**, scouted and seeded: RockyPoker (new remote, 1,061 hands, balanced, no read
+fires; the one to burst against), RoboPoker (new remote, one match), Fold-ver-2, bigboy2,
+Maxwell (calls 92%), melly (never bluffs), vpr and Sleight-of-Hand (stations), LazerTank
+(fold-or-raise). The remote leaderboard is four bots: RockyPoker, NashForge (1578, +16.0
+bb/100 over 13,786 hands), RoboPoker, Blueprint. Direct challenges to the two new remote
+bots expired unanswered (owner's dashboard, until the lobby push ships). Tuesday's 05:35
+burst is armed with v5f. hoops (+18 bb/100 in our pool, 3 of 11 against us lately) is the
+queue benchmark to scout next.
+
 
 **Season 6 is won. Monday 21 September, 02:34 IST: NashForge beat Fold-ver-3 in the final,
 67 hands, and is the Chipzen season 6 champion, as the top seed.** Every match the bot actually

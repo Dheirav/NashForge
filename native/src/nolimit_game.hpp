@@ -16,6 +16,7 @@
 #include <vector>
 #include "nolimit.hpp"
 #include "equity.hpp"
+#include "bucket_table.hpp"
 
 namespace pokerbot {
 
@@ -43,6 +44,9 @@ struct Abstraction {
     int hist_runouts = 100;
     int hist_opponents = 50;
     bool histogram() const { return !hist_centroids[0].empty(); }
+    /// Precomputed buckets for the flop and the turn (bucket_table.hpp); an
+    /// empty table means compute the histogram at the lookup.
+    std::array<BucketTable, 2> hist_tables;
 
     static int board_texture(const int* board, int n) {
         if (n == 0) return 0;
@@ -383,12 +387,17 @@ private:
         const int street_index = s.bet.board_n - 3;
         int bucket;
         if (abstraction_.histogram()) {
-            double hist[64];
-            strength_histogram(cards, board, s.bet.board_n, abstraction_.hist_bins,
-                               abstraction_.hist_runouts, abstraction_.hist_opponents,
-                               key * 0x9E3779B97F4A7C15ULL, hist);
-            bucket = nearest_emd(abstraction_.hist_centroids[static_cast<size_t>(street_index)],
-                                 hist, abstraction_.hist_bins);
+            bucket = -1;
+            if (street_index < 2 && !abstraction_.hist_tables[static_cast<size_t>(street_index)].empty())
+                bucket = abstraction_.hist_tables[static_cast<size_t>(street_index)].lookup(cards, board, s.bet.board_n);
+            if (bucket < 0) {
+                double hist[64];
+                strength_histogram(cards, board, s.bet.board_n, abstraction_.hist_bins,
+                                   abstraction_.hist_runouts, abstraction_.hist_opponents,
+                                   key * 0x9E3779B97F4A7C15ULL, hist);
+                bucket = nearest_emd(abstraction_.hist_centroids[static_cast<size_t>(street_index)],
+                                     hist, abstraction_.hist_bins);
+            }
         } else {
             const double value = equity_vs_random(cards, 2, board, s.bet.board_n,
                                                   abstraction_.equity_samples, key * 0x9E3779B97F4A7C15ULL);

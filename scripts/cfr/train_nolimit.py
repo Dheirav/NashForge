@@ -92,6 +92,12 @@ def parse_args():
     parser.add_argument("--hist-bins", type=int, default=20)
     parser.add_argument("--hist-runouts", type=int, default=100)
     parser.add_argument("--hist-opponents", type=int, default=50)
+    parser.add_argument("--table-threads", type=int, default=None,
+                        help="threads for building the bucket tables (default: --threads); the build is "
+                             "embarrassingly parallel and the tables are built once")
+    parser.add_argument("--no-hist-tables", action="store_true",
+                        help="histogram mode: compute buckets at the lookup instead of precomputing the "
+                             "flop and turn tables (measured 21 Sept: 5.0 ms/it without them, 0.3 with)")
     parser.add_argument("--texture", action="store_true",
                         help="fold the board's flush and straight texture into the "
                              "postflop bucket (abstraction.buckets.board_texture)")
@@ -208,6 +214,9 @@ def _train_native(args, abstraction, projected):
                                     for street in ("flop", "turn", "river")],
                     hist_bins=abstraction.hist_bins, hist_runouts=abstraction.hist_runouts,
                     hist_opponents=abstraction.hist_opponents)
+        tables = abstraction.native_tables()
+        hist["flop_table"] = tables.get("flop")
+        hist["turn_table"] = tables.get("turn")
     solver = pokerbot_native.NoLimitSolver(
         preflop, flop, turn, river, args.equity_samples, args.stack,
         args.big_blind // 2, args.big_blind, schedule, args.seed,
@@ -318,6 +327,18 @@ def main():
     ).fit(rng)
     print(f"  fitted in {time.perf_counter() - start:.1f}s")
     print(abstraction.describe())
+    if args.strength == "histogram" and not args.no_hist_tables:
+        # Once per abstraction: every canonical flop and turn situation's
+        # bucket, so neither the solve nor the bot computes a histogram on
+        # those streets again. Minutes for the flop, tens of minutes for the
+        # turn on the given threads.
+        start = time.perf_counter()
+        table_threads = max(args.table_threads or args.threads, 1)
+        print(f"Building bucket tables on {table_threads} threads...", flush=True)
+        abstraction.build_tables(threads=table_threads,
+                                 progress=lambda street, n: print(f"  {street}: {n:,} classes at "
+                                                                  f"{time.perf_counter() - start:.0f}s", flush=True))
+        print(f"  tables built in {time.perf_counter() - start:.0f}s")
 
     game = NoLimitHoldem(abstraction, starting_stack=args.stack,
                          big_blind=args.big_blind, raise_cap=args.raise_cap,

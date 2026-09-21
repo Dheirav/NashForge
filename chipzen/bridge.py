@@ -59,6 +59,19 @@ class Hand:
     #: Per-street raise depth at which each miss occurred. The histogram is
     #: what says whether a deeper tree would have helped.
     miss_depths: List[int] = field(default_factory=list)
+    #: Positions in `node.history` of raises read as all-in although the
+    #: bettor kept chips (a size the schedule cannot name at that depth), and
+    #: the depth each was made at. When such a street closes and the hand
+    #: goes on, `_close_street` re-reads it; see there.
+    pseudo_allins: List[Tuple[int, int]] = field(default_factory=list)
+    #: How many streets `_close_street` re-read this hand.
+    collapsed: int = 0
+    #: The history with those streets re-read, or None when nothing was. The
+    #: true history stays the key; this one is asked only after the primary
+    #: and its companion have both missed on the true one, since a companion
+    #: may hold the real node (a one-raise primary's cap-2 companion does).
+    alt_history: str = None
+    _edits: List[Tuple[int, str]] = field(default_factory=list)
 
     @property
     def effective_bb(self) -> float:
@@ -84,12 +97,50 @@ def _as_abstract(fraction: float, level: int, ceiling: int, node: Node,
         # The schedule has no sized raise at this depth, only all-in or
         # nothing. Either way the solver has no sized entry to be asked.
         hand.miss_depths.append(node.raises_this_street)
+        hand.pseudo_allins.append((len(node.history), node.raises_this_street))
         return ALL_IN
     if fraction >= fractions[-1] * 1.5:
         node.misses += 1
+        hand.pseudo_allins.append((len(node.history), node.raises_this_street))
         return ALL_IN
     chosen = translate(fractions, max(fraction, fractions[0]), rng)
     return [a for a in sizes if a != ALL_IN][chosen]
+
+
+def _close_street(hand: Hand, schedule) -> None:
+    """
+    Re-read a street that closed on the call of a pseudo all-in.
+
+    A raise the schedule cannot name at its depth is read as all-in, which is
+    right for the decision it poses (fold or call) but says the hand ends at
+    the call. When the bettor kept chips the arena deals on, and every later
+    decision would key a history the tree treats as terminal: in v5f's burst
+    of 21 September, three deep-stack rule hands at about 1,600 chips each,
+    every one a preflop third raise under the (4, 2, 1) taper followed by a
+    flop. So once such a street has closed with a call, the pseudo all-in is
+    re-read as the largest sized raise the schedule has at that depth, and
+    where it has none the raise and the call collapse into a single call.
+    Amounts are computed from the real pot either way, so only the strategy
+    lookup moves, which is what translation does everywhere else. The re-read
+    history is kept beside the true one (`Hand.alt_history`), not in its
+    place: see that field for why.
+    """
+    node = hand.node
+    if not hand.pseudo_allins:
+        return
+    street_start = node.history.rfind("/") + 1
+    street = node.history[street_start:]
+    if not street.endswith(str(ALL_IN) + str(CHECK_CALL)):
+        hand.pseudo_allins = [p for p in hand.pseudo_allins if p[0] < street_start]
+        return
+    position = len(node.history) - 2
+    depths = [d for (pos, d) in hand.pseudo_allins if pos == position]
+    if not depths:
+        return
+    sized = [a for a in raise_sizes_at(schedule, depths[0]) if a != ALL_IN]
+    hand._edits.append((position, (str(sized[-1]) if sized else "") + str(CHECK_CALL)))
+    hand.pseudo_allins = [p for p in hand.pseudo_allins if p[0] < street_start]
+    hand.collapsed += 1
 
 
 def replay(state: dict, seat: int, rng: np.random.Generator,
@@ -143,6 +194,7 @@ def replay(state: dict, seat: int, rng: np.random.Generator,
 
         if entry.get("phase") != phase:
             phase = entry.get("phase")
+            _close_street(hand, schedule)
             node.prior = [node.prior[i] + node.committed[i] for i in (0, 1)]
             node.committed = [0, 0]
             node.raises_this_street = 0
@@ -191,6 +243,7 @@ def replay(state: dict, seat: int, rng: np.random.Generator,
         if index + 1 >= len(PHASES):
             break
         phase = PHASES[index + 1]
+        _close_street(hand, schedule)
         node.prior = [node.prior[i] + node.committed[i] for i in (0, 1)]
         node.committed = [0, 0]
         node.raises_this_street = 0
@@ -198,6 +251,11 @@ def replay(state: dict, seat: int, rng: np.random.Generator,
         node.street += 1
 
     node.to_act = seat
+    if hand._edits:
+        alt = node.history
+        for position, replacement in sorted(hand._edits, reverse=True):
+            alt = alt[:position] + replacement + alt[position + 2:]
+        hand.alt_history = alt
     return hand
 
 

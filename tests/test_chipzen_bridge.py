@@ -267,3 +267,32 @@ def test_an_unknown_post_is_dead_money_and_an_unknown_verb_is_passive(rng):
     hand = replay(st, 1, rng)                      # no TranslationError
     assert hand.node.pot == 20
     assert hand.node.history.endswith(str(CHECK_CALL))
+
+
+def test_a_pseudo_all_in_that_closed_a_street_is_re_read_as_the_largest_sized_raise(rng):
+    # v5f's burst, 21 Sept, hand 10 at 100bb: SB opens 250, BB 3-bets 1,250,
+    # SB 4-bets 2,250 with 7,750 behind, BB calls (scaled here to the fixture's 5/10 blinds); the flop is dealt. Under the
+    # (4, 2, 1) taper the third raise can only be read as all-in, so the flop
+    # keyed a history the tree treats as terminal and the rule played the
+    # hand. With the street closed and the hand continuing, the 4-bet is
+    # re-read: the taper has no sized third raise, so it collapses into a
+    # call and the flop keys the post-3-bet node.
+    hist = [entry(0, "raise", 25, "preflop"), entry(1, "raise", 125, "preflop"),
+            entry(0, "raise", 225, "preflop"), entry(1, "call", 100, "preflop")]
+    facing = replay(state(1, "preflop", hist[:3], 875, 775, 350, 100), 1, rng, schedule=(4, 2, 1))
+    assert facing.node.history.endswith(str(ALL_IN)), "facing the 4-bet it is still a fold-or-call spot"
+    assert facing.pseudo_allins and facing.collapsed == 0
+    flop = replay(state(1, "flop", hist, 775, 775, 450, 0, board=("2c", "7d", "Ts")), 1, rng, schedule=(4, 2, 1))
+    # The true history keeps the all-in; the re-read one is offered beside it.
+    # The open's size is translated stochastically, so only the tails are pinned.
+    assert flop.node.history[1:] == "4" + str(ALL_IN) + str(CHECK_CALL) + "/", flop.node.history
+    assert flop.alt_history[1:] == "4" + str(CHECK_CALL) + "/", flop.alt_history
+    assert flop.collapsed == 1 and flop.node.pot == 450
+    # Under a schedule with a sized third raise the same hand keys that raise.
+    flop2 = replay(state(1, "flop", hist, 775, 775, 450, 0, board=("2c", "7d", "Ts")), 1, rng, schedule=3)
+    assert flop2.node.history.endswith(str(CHECK_CALL) + "/") and flop2.collapsed == 0 and flop2.alt_history is None
+    # A real all-in is left alone: the hand did end.
+    allin = [entry(0, "raise", 25, "preflop"), entry(1, "raise", 125, "preflop"),
+             entry(0, "raise", 1000, "preflop"), entry(1, "call", 875, "preflop")]
+    ended = replay(state(1, "flop", allin, 0, 0, 2000, 0, board=("2c", "7d", "Ts")), 1, rng, schedule=(4, 2, 1))
+    assert ended.node.history[1:] == "4" + str(ALL_IN) + str(CHECK_CALL) + "/" and ended.alt_history is None

@@ -1,0 +1,96 @@
+{
+ "a": {
+  "dir": "results/cfr/ladder169l_h1",
+  "flags": "--deep-primary --stack-cap",
+  "label": "h1"
+ },
+ "b": {
+  "dir": "results/cfr/ladder169l_v5f",
+  "flags": "--deep-primary --stack-cap",
+  "label": "v5f"
+ },
+ "arena_matches": 2000,
+ "win_rate": 0.4975,
+ "stderr": 0.011180200132376878,
+ "hands_per_match": 44.8435,
+ "seed": 91,
+ "a_stats": {
+  "decisions": 227918,
+  "misses": 466,
+  "consulted": 227918,
+  "off_abstraction": 0,
+  "companion_hits": 0,
+  "river_shoves_to_companion": 0,
+  "shoves_softened": 0,
+  "bluffs_withheld": 0,
+  "shove_calls_declined": 0,
+  "river_solves": 0,
+  "blinds_opened": 0,
+  "three_bets_into_folders": 0,
+  "river_bets_believed": 0,
+  "big_bets_believed": 0,
+  "small_bets_called": 0,
+  "river_failures": 0,
+  "fallbacks": 466,
+  "collapsed_hits": 0,
+  "miss_depths": {},
+  "depths_used": {
+   "100bb": 60633,
+   "70bb": 36445,
+   "50bb": 43319,
+   "35bb": 36652,
+   "25bb": 24516,
+   "18bb": 15517,
+   "12bb": 7587,
+   "5bb": 1008,
+   "8bb": 2241
+  },
+  "actions_sent": {
+   "call": 53236,
+   "fold": 37170,
+   "check": 65493,
+   "raise": 72019
+  },
+  "slowest_ms": 166.1485080003331
+ },
+ "b_stats": {
+  "decisions": 228859,
+  "misses": 221,
+  "consulted": 228859,
+  "off_abstraction": 0,
+  "companion_hits": 0,
+  "river_shoves_to_companion": 0,
+  "shoves_softened": 0,
+  "bluffs_withheld": 0,
+  "shove_calls_declined": 0,
+  "river_solves": 0,
+  "blinds_opened": 0,
+  "three_bets_into_folders": 0,
+  "river_bets_believed": 0,
+  "big_bets_believed": 0,
+  "small_bets_called": 0,
+  "river_failures": 0,
+  "fallbacks": 221,
+  "collapsed_hits": 0,
+  "miss_depths": {},
+  "depths_used": {
+   "100bb": 61716,
+   "70bb": 36525,
+   "50bb": 43162,
+   "35bb": 36596,
+   "25bb": 24421,
+   "18bb": 15629,
+   "12bb": 7543,
+   "8bb": 2251,
+   "5bb": 1016
+  },
+  "actions_sent": {
+   "raise": 75899,
+   "call": 50883,
+   "check": 66116,
+   "fold": 35961
+  },
+  "slowest_ms": 223.5696600000665
+ },
+ "measured": "2026-09-21 16:07"
+}

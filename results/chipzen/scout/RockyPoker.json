@@ -1,0 +1,222 @@
+{
+ "summary": {
+  "name": "RockyPoker",
+  "matches": 27,
+  "hands": 1061,
+  "platform": {
+   "rating": 1834.535593800665,
+   "matches_played": 7,
+   "wins": 7,
+   "losses": 0,
+   "bb_per_100": 96.5028665028665,
+   "bb_hands_counted": 407,
+   "llm_author_model": null,
+   "bot_kind": "external_api"
+  },
+  "vpip": 0.5815268614514609,
+  "pfr": 0.37323279924599434,
+  "three_bet": 0.1737891737891738,
+  "fold_to_three_bet": 0.42105263157894735,
+  "fold_to_bet": 0.4805194805194805,
+  "call_share_of_answers": 0.7638888888888888,
+  "bets_faced": 693,
+  "raise_sizes": {
+   "1-2": 0.59,
+   "2-4": 0.06,
+   "4+": 0.0,
+   "<\u00bd": 0.05,
+   "\u00bd-1": 0.29
+  },
+  "showdown_rate": 0.0942507068803016,
+  "showdown_win": 0.58,
+  "river_bets": 28,
+  "river_bluff_rate": 0.2857142857142857,
+  "big_bets": 50,
+  "big_bet_air_rate": 0.18,
+  "small_bets": 117,
+  "small_bet_air_rate": 0.23076923076923078,
+  "bb_fold_to_open": 0.3665480427046263,
+  "bb_opens_faced": 281,
+  "shown_chen_mean": 4.405,
+  "station": false,
+  "fold_or_raise": false,
+  "top_opponents": [
+   [
+    "PluriBot",
+    20
+   ],
+   [
+    "r0ckGarden",
+    4
+   ],
+   [
+    "mr_hide",
+    2
+   ],
+   [
+    "hoops",
+    1
+   ]
+  ]
+ },
+ "counts": {
+  "name": "RockyPoker",
+  "matches": 27,
+  "hands": 1061,
+  "bets_faced": 693,
+  "folds": 333,
+  "calls": 275,
+  "raises": 85,
+  "by_history": {
+   "preflop:": {
+    "raise": 302,
+    "call": 104,
+    "fold": 131
+   },
+   "flop:Uc": {
+    "raise": 54,
+    "check": 20
+   },
+   "preflop:Ur": {
+    "call": 119,
+    "raise": 59,
+    "fold": 103
+   },
+   "flop:": {
+    "check": 95,
+    "raise": 80
+   },
+   "turn:": {
+    "check": 47,
+    "raise": 33
+   },
+   "turn:TcUr": {
+    "fold": 19,
+    "call": 8
+   },
+   "preflop:Uc": {
+    "check": 34,
+    "raise": 33
+   },
+   "river:": {
+    "check": 26,
+    "raise": 17
+   },
+   "river:TcUr": {
+    "fold": 8,
+    "call": 4,
+    "raise": 1
+   },
+   "preflop:UrTrUr": {
+    "raise": 1,
+    "fold": 1
+   },
+   "flop:TcUr": {
+    "fold": 47,
+    "call": 19,
+    "raise": 3
+   },
+   "turn:Uc": {
+    "check": 11,
+    "raise": 20
+   },
+   "river:Uc": {
+    "check": 10,
+    "raise": 9
+   },
+   "preflop:UcTrUr": {
+    "call": 1
+   },
+   "preflop:TrUr": {
+    "fold": 8,
+    "call": 9,
+    "raise": 1
+   },
+   "flop:TrUr": {
+    "call": 13,
+    "fold": 18,
+    "raise": 4
+   },
+   "flop:Ur": {
+    "call": 33,
+    "fold": 41,
+    "raise": 10
+   },
+   "turn:Ur": {
+    "raise": 1,
+    "call": 12,
+    "fold": 30
+   },
+   "turn:UrTrUr": {
+    "call": 1
+   },
+   "flop:UcTrUr": {
+    "raise": 1,
+    "call": 7,
+    "fold": 6
+   },
+   "river:Ur": {
+    "fold": 5,
+    "call": 7,
+    "raise": 1
+   },
+   "preflop:TcUr": {
+    "fold": 36,
+    "call": 32,
+    "raise": 2
+   },
+   "turn:TrUr": {
+    "call": 2,
+    "fold": 5,
+    "raise": 1
+   },
+   "flop:UrTrUr": {
+    "call": 4,
+    "fold": 1
+   },
+   "flop:TrUrTrUr": {
+    "call": 1,
+    "fold": 2
+   },
+   "river:TrUr": {
+    "fold": 2,
+    "call": 1
+   },
+   "flop:TcUrTrUr": {
+    "call": 1,
+    "fold": 1
+   },
+   "turn:UcTrUr": {
+    "call": 1
+   }
+  },
+  "vpip": 617,
+  "pfr": 396,
+  "three_bet": 61,
+  "three_bet_chances": 351,
+  "fold_to_three_bet": 8,
+  "three_bets_faced": 19,
+  "showdowns": 100,
+  "showdowns_won": 58,
+  "raise_sizes": {
+   "1-2": 374,
+   "\u00bd-1": 183,
+   "2-4": 40,
+   "<\u00bd": 34,
+   "4+": 2
+  },
+  "opponents": {
+   "mr_hide": 2,
+   "PluriBot": 20,
+   "r0ckGarden": 4,
+   "hoops": 1
+  },
+  "net_chips": 0,
+  "river_bets": 28,
+  "river_bluffs": 8,
+  "big_bets": 50,
+  "big_bets_air": 9,
+  "small_bets": 117,
+  "small_bets_air": 27
+ }
+}

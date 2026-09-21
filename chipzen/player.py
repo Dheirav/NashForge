@@ -82,6 +82,7 @@ class Stats:
     small_bets_called: int = 0
     river_failures: int = 0
     fallbacks: int = 0
+    collapsed_hits: int = 0            # answered on a re-read history after a pseudo all-in
     miss_depths: Dict[int, int] = field(default_factory=dict)
     depths_used: Dict[str, int] = field(default_factory=dict)
     actions_sent: Dict[str, int] = field(default_factory=dict)
@@ -331,6 +332,25 @@ class ArenaPlayer:
                             strength(deep) < self._top(deep):
                         choice = CHECK_CALL
                         self.stats.shoves_softened += 1
+            if companion_used is None:
+                # A pseudo all-in closed an earlier street and the hand went
+                # on (chipzen.bridge._close_street). Last resort before the
+                # rule: the same solvers on their own re-read histories.
+                candidates = [(solver, hand)]
+                if deep is not None:
+                    candidates.append((deep, deep_hand))
+                for candidate, c_hand in candidates:
+                    if c_hand.alt_history is None:
+                        continue
+                    c_before = candidate.misses[0]
+                    alt_mask = legal_mask(c_hand.node, valid_actions, candidate.schedule)
+                    answer = candidate.agent(_shim(hole, board, to_call, int(state.get("your_stack") or 0)), 0,
+                                             alt_mask, c_hand.alt_history)
+                    if candidate.misses[0] == c_before:
+                        choice = answer
+                        companion_used = f"collapsed:{c_hand.alt_history}"
+                        self.stats.collapsed_hits += 1
+                        break
             if companion_used is None:
                 fell_back = True
                 choice = self._fallback(solver, hole, board, arena, state)

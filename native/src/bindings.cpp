@@ -7,6 +7,7 @@
 #include <vector>
 #include "hand_eval.hpp"
 #include "equity.hpp"
+#include "bucket_table.hpp"
 #include "nolimit.hpp"
 #include "mccfr.hpp"
 #include "kuhn.hpp"
@@ -154,6 +155,56 @@ NB_MODULE(pokerbot_native, m) {
         return Abstraction::board_texture(board.data(), static_cast<int>(board.size()));
     }, nb::arg("board"), "Board texture class, mirroring abstraction.buckets.board_texture.");
 
+    nb::class_<BucketTable>(m, "BucketTable",
+        "Precomputed postflop buckets keyed by suit-isomorphic canonical form (bucket_table.hpp).")
+        .def("__init__", [](BucketTable* self, nb::ndarray<nb::numpy, const uint64_t, nb::ndim<1>> keys,
+                            nb::ndarray<nb::numpy, const uint8_t, nb::ndim<1>> buckets) {
+            if (keys.shape(0) != buckets.shape(0)) throw std::invalid_argument("BucketTable: keys and buckets differ in length");
+            new (self) BucketTable();
+            self->keys.assign(keys.data(), keys.data() + keys.shape(0));
+            self->buckets.assign(buckets.data(), buckets.data() + buckets.shape(0));
+            if (!std::is_sorted(self->keys.begin(), self->keys.end())) throw std::invalid_argument("BucketTable: keys must be sorted");
+        }, nb::arg("keys"), nb::arg("buckets"))
+        .def("__len__", [](const BucketTable& t) { return t.keys.size(); })
+        .def("lookup", [](const BucketTable& t, const std::vector<int>& hole, const std::vector<int>& board) {
+            if (hole.size() != 2 || board.size() < 3 || board.size() > 4)
+                throw std::invalid_argument("BucketTable.lookup: two hole cards and a flop or turn board");
+            return t.lookup(hole.data(), board.data(), static_cast<int>(board.size()));
+        }, nb::arg("hole"), nb::arg("board"), "The bucket without texture, or -1 when the situation is not in the table.")
+        .def("keys", [](const BucketTable& t) {
+            uint64_t* out = new uint64_t[t.keys.size()];
+            std::copy(t.keys.begin(), t.keys.end(), out);
+            nb::capsule own(out, [](void* p) noexcept { delete[] static_cast<uint64_t*>(p); });
+            return nb::ndarray<nb::numpy, uint64_t, nb::ndim<1>>(out, {t.keys.size()}, own);
+        })
+        .def("buckets", [](const BucketTable& t) {
+            uint8_t* out = new uint8_t[t.buckets.size()];
+            std::copy(t.buckets.begin(), t.buckets.end(), out);
+            nb::capsule own(out, [](void* p) noexcept { delete[] static_cast<uint8_t*>(p); });
+            return nb::ndarray<nb::numpy, uint8_t, nb::ndim<1>>(out, {t.buckets.size()}, own);
+        });
+
+    m.def("canonical_key", [](const std::vector<int>& hole, const std::vector<int>& board) {
+        if (hole.size() != 2 || board.size() > 5) throw std::invalid_argument("canonical_key: two hole cards, at most five board cards");
+        return canonical_key(hole.data(), board.data(), static_cast<int>(board.size()));
+    }, nb::arg("hole"), nb::arg("board"), "The smallest packing of the cards over all suit permutations.");
+
+    m.def("build_bucket_table", [](int board_n, const std::vector<std::vector<double>>& centroids,
+                                   int bins, int runouts, int opponents, int threads) {
+        if (board_n < 3 || board_n > 4) throw std::invalid_argument("build_bucket_table: board_n is 3 (flop) or 4 (turn)");
+        if (bins < 1 || bins > 64 || runouts < 1 || opponents < 1) throw std::invalid_argument("build_bucket_table: bins 1 to 64, runouts and opponents at least 1");
+        if (centroids.empty() || centroids.size() > 255) throw std::invalid_argument("build_bucket_table: 1 to 255 centroids");
+        for (const auto& row : centroids)
+            if (static_cast<int>(row.size()) != bins) throw std::invalid_argument("build_bucket_table: a centroid row is not bins wide");
+        BucketTable table;
+        {
+            nb::gil_scoped_release release;
+            table = build_bucket_table(board_n, centroids, bins, runouts, opponents, std::max(threads, 1));
+        }
+        return table;
+    }, nb::arg("board_n"), nb::arg("centroids"), nb::arg("bins"), nb::arg("runouts"), nb::arg("opponents"), nb::arg("threads") = 1,
+       "Every canonical situation's bucket for one street; minutes for the flop, tens of minutes for the turn.");
+
     nb::class_<MCCFR<NoLimitGame>>(m, "NoLimitSolver")
         .def("__init__", [](MCCFR<NoLimitGame>* self,
                             const std::vector<int>& preflop,
@@ -165,8 +216,11 @@ NB_MODULE(pokerbot_native, m) {
                             const std::vector<int>& schedule, uint64_t seed,
                             bool texture, const std::string& rule,
                             const std::vector<std::vector<std::vector<double>>>& hist_centroids,
-                            int hist_bins, int hist_runouts, int hist_opponents) {
+                            int hist_bins, int hist_runouts, int hist_opponents,
+                            const BucketTable* flop_table, const BucketTable* turn_table) {
             Abstraction abstraction;
+            if (flop_table) abstraction.hist_tables[0] = *flop_table;
+            if (turn_table) abstraction.hist_tables[1] = *turn_table;
             abstraction.preflop.assign(preflop.begin(), preflop.end());
             abstraction.centroids = {flop, turn, river};
             abstraction.equity_samples = equity_samples;
@@ -197,7 +251,8 @@ NB_MODULE(pokerbot_native, m) {
            nb::arg("small_blind"), nb::arg("big_blind"), nb::arg("schedule"),
            nb::arg("seed"), nb::arg("texture") = false, nb::arg("rule") = "vanilla",
            nb::arg("hist_centroids") = std::vector<std::vector<std::vector<double>>>{},
-           nb::arg("hist_bins") = 20, nb::arg("hist_runouts") = 100, nb::arg("hist_opponents") = 50)
+           nb::arg("hist_bins") = 20, nb::arg("hist_runouts") = 100, nb::arg("hist_opponents") = 50,
+           nb::arg("flop_table").none() = nullptr, nb::arg("turn_table").none() = nullptr)
         .def("set_common_random_numbers", [](MCCFR<NoLimitGame>& s, bool on) { s.game().set_common_random_numbers(on); },
              nb::arg("on"), "One deal per iteration shared across every branch (variance reduction); off by default.")
         .def("set_exact_terminals", [](MCCFR<NoLimitGame>& s, bool on) { s.game().set_exact_terminals(on); },

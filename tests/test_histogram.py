@@ -88,3 +88,58 @@ def test_the_native_histogram_matches_the_python_in_distribution_and_the_lookup_
     centroids = kmeans_emd(hists, 3, rng=rng)
     for h in hists[:12]:
         assert native.nearest_emd(centroids.tolist(), h.tolist()) == nearest_emd(centroids, h)
+
+
+def test_the_bucket_table_covers_every_flop_and_agrees_with_the_histogram():
+    # The table exists because a histogram costs 0.4 ms and a solve looked
+    # one up on unseen cards several times an iteration (5.0 ms/it against
+    # 0.30 with the histogram made cheap, 21 September 2026). Its key is the
+    # suit-isomorphic form, so it must be invariant under suit renaming,
+    # complete, and equal to the direct computation seeded from the same key.
+    native = __import__("pokerbot_native")
+    rng = np.random.default_rng(11)
+    for _ in range(500):
+        cards = rng.choice(52, 6, replace=False)
+        hole, board = [int(c) for c in cards[:2]], [int(c) for c in cards[2:2 + rng.integers(3, 5)]]
+        perm = rng.permutation(4)
+        renamed = lambda c: int(perm[c // 13]) * 13 + c % 13
+        assert native.canonical_key(hole, board) == native.canonical_key([renamed(h) for h in hole], [renamed(b) for b in board])
+        assert native.canonical_key(hole, board) == native.canonical_key(hole[::-1], board[::-1])
+    bins, runouts, opponents = 8, 3, 4
+    centroids = [[1.0 / bins] * bins, [0.0] * (bins - 1) + [1.0], [1.0] + [0.0] * (bins - 1)]
+    table = native.build_bucket_table(3, centroids, bins, runouts, opponents, 2)
+    assert len(table) == 1_286_792, "every canonical flop situation, exactly once"
+    for _ in range(300):
+        cards = [int(c) for c in rng.choice(52, 5, replace=False)]
+        hole, board = cards[:2], cards[2:]
+        got = table.lookup(hole, board)
+        assert got >= 0
+        # Direct computation on the table's own representative and seed.
+        key = native.canonical_key(hole, board)
+        rep = [(key >> s) & 63 for s in (24, 18, 12, 6, 0)]
+        hist = native.strength_histogram(rep[:2], rep[2:], bins, runouts, opponents, (key * 0x9E3779B97F4A7C15) % 2 ** 64)
+        assert got == native.nearest_emd(centroids, hist)
+
+
+def test_a_fitted_histogram_abstraction_with_tables_pickles_and_looks_up_through_them():
+    import pickle
+    from abstraction.buckets import CardAbstraction
+    native = __import__("pokerbot_native")
+    rng = np.random.default_rng(5)
+    abstraction = CardAbstraction(preflop_buckets=169, postflop_buckets=4, samples=40, equity_samples=20,
+                                  texture=True, strength="histogram", hist_bins=8, hist_runouts=1,
+                                  hist_opponents=1).fit(rng)
+    abstraction.build_tables(threads=2)
+    assert set(abstraction._hist_tables) == {"flop", "turn"}
+    again = pickle.loads(pickle.dumps(abstraction))
+    hole = _hand("Ah", "Kh")
+    for board in ([Card("2", "c"), Card("7", "d"), Card("T", "s")],
+                  [Card("2", "c"), Card("7", "d"), Card("T", "s"), Card("Q", "h")]):
+        expect = again.native_tables()["flop" if len(board) == 3 else "turn"].lookup(
+            [c.index for c in hole], [c.index for c in board])
+        expect += 4 * native.board_texture([c.index for c in board])
+        assert again.bucket(hole, board, np.random.default_rng(0)) == expect
+        assert abstraction.bucket(hole, board, np.random.default_rng(0)) == expect
+    # The river has no table and still answers.
+    river = [Card("2", "c"), Card("7", "d"), Card("T", "s"), Card("Q", "h"), Card("3", "h")]
+    assert 0 <= again.bucket(hole, river, np.random.default_rng(0)) < again.num_buckets("river")

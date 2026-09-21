@@ -490,3 +490,20 @@ def test_a_river_shove_is_handed_to_the_companion_only_when_asked():
             assert out["record"]["adjusted"].startswith("river shove:")
             seen.add(out["action"])
     assert handed.stats.river_shoves_to_companion > 0, "the companion was never asked"
+
+
+def test_a_flop_after_a_pseudo_all_in_is_answered_on_the_re_read_history(player_with_companion):
+    # v5f's burst, 21 Sept, hands 10 and 34: a preflop third raise the taper
+    # can only read as all-in, called, and then a flop. The true history is
+    # terminal in every tree, so the rule played those pots at about 1,600
+    # chips each. Now the companion is asked again on the street re-read
+    # with the pseudo all-in collapsed, and answers.
+    state = {"hand_number": 10, "phase": "flop", "board": ["Ah", "Tc", "4s"],
+             "your_hole_cards": ["Ts", "9h"], "pot": 3000, "your_stack": 8500,
+             "opponent_stacks": [8500], "to_call": 0, "min_raise": 100, "max_raise": 8500,
+             "action_history": blinds() + [entry(0, "raise", 200), entry(1, "raise", 525),
+                                           entry(0, "raise", 1500), entry(1, "call", 975)]}
+    out = player_with_companion.decide(state, ["fold", "check", "raise"], 1)
+    assert not out["record"]["fallback"], out["record"]
+    assert str(out["record"]["companion"]).startswith("collapsed:"), out["record"]
+    assert player_with_companion.stats.collapsed_hits == 1
