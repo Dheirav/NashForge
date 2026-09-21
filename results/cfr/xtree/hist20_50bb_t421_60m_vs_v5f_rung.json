@@ -1,0 +1,36 @@
+{
+ "first": "results/cfr/experiments/hist20_50bb_t421_60m.pkl",
+ "second": "results/cfr/experiments/cap2_50bb_t421_20m_warm.pkl",
+ "hands": 40000,
+ "seeds": [
+  0,
+  1
+ ],
+ "bb_per_100": [
+  8.65625,
+  6.313125
+ ],
+ "mean": 7.4846875,
+ "stderr": 1.1715624999999998,
+ "on_miss": "call",
+ "stack": 100,
+ "big_blind": 2,
+ "stack_cap": true,
+ "raise_caps": [
+  [
+   4,
+   2,
+   1
+  ],
+  [
+   4,
+   2,
+   1
+  ]
+ ],
+ "miss_rate": [
+  0.0,
+  0.0
+ ],
+ "measured": "2026-09-22 01:42"
+}

@@ -1,0 +1,32 @@
+{
+ "first": "results/cfr/experiments/hist20_50bb_t421_60m.pkl",
+ "second": "results/cfr/ladder169l/nolimit_50bb.pkl",
+ "hands": 40000,
+ "seeds": [
+  0,
+  1
+ ],
+ "bb_per_100": [
+  113.816875,
+  105.29625
+ ],
+ "mean": 109.5565625,
+ "stderr": 4.260312499999998,
+ "on_miss": "call",
+ "stack": 100,
+ "big_blind": 2,
+ "stack_cap": true,
+ "raise_caps": [
+  [
+   4,
+   2,
+   1
+  ],
+  1
+ ],
+ "miss_rate": [
+  0.0,
+  0.1005508010529582
+ ],
+ "measured": "2026-09-22 01:38"
+}
