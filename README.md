@@ -11,7 +11,8 @@ NashForge won season 6 of the [Chipzen](https://chipzen.ai) arena (15 to 20 Sept
 blinds rising every twenty hands. It went 4-1 in the round-robin as the top seed and 3-0
 through the playoffs, played remotely from a laptop, and won every match it played. The one
 loss was a walkover from a timer bug of my own, which turned out to be the most useful
-lesson of the week.
+lesson of the week. The record, with the platform's own pages and the match identifiers
+anyone with a free Chipzen login can resolve, is in [`docs/season6/`](docs/season6/README.md).
 
 The project started as a comparison. Three families of agent, CFR, evolutionary search and
 PPO, were trained on the same abstracted game and measured on the same panel, and the
@@ -146,7 +147,7 @@ the scouted profiles of other bots are not.
 | `training/`, `rl/` | Evolutionary search and PPO, both measured in the comparison above. Retained; not the current line of work. |
 | `results/` | Every measurement as JSON, one file per question; the arena ledger under `results/chipzen/`. |
 | `tests/` | 410 tests. Was an empty directory before the audit. |
-| `docs/` | The arena (`chipzen.md`, `arena-plan.md`), the training plan, the research notes. |
+| `docs/` | The arena (`chipzen.md`, `season6/`), the training plan, the research notes. |
 
 ## Reading the repository
 
