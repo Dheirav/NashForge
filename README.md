@@ -126,8 +126,8 @@ venv/bin/python -m gui.main                                     # play the solve
 
 The arena bot is started with `tools/chipzen-run.sh` and watched with
 `tools/chipzen-progress.sh --watch`; it needs a Chipzen bot token in the environment. The
-solved strategies are not in the repository. The code, the instruments, the match ledger and
-the scouted profiles are.
+solved strategies are not in the repository. The code, the instruments and the match ledger are;
+the scouted profiles of other bots are not.
 
 ---
 
@@ -150,8 +150,9 @@ the scouted profiles are.
 
 ## Reading the repository
 
-`NEXT.md` is one page, kept current, and holds the next thing to do and how to pick the
-project up cold. `CODEBASE_AUDIT.md` (12 August 2026) is authoritative on what in this
+`NEXT.md`, the working document that holds the next thing to do and the current state of
+every set, is kept locally from 22 September 2026 and is not in the repository; its history
+to that date is. `CODEBASE_AUDIT.md` (12 August 2026) is authoritative on what in this
 repository is and is not trustworthy. `docs/training-plan.md` holds the full phase plan
 and its results; `BACKLOG.md` the reasoning and everything closed. The arena week's rules,
 learnt the expensive way, are in `CLAUDE.md`.

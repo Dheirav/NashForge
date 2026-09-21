@@ -120,8 +120,16 @@ results/cfr/contender/
 results/chipzen/matches/
 results/chipzen/review.md
 # The scout's fetch cache of other bots' hands (18 MB of one-line JSON, refetched
-# from the arena on demand); the profiles built from it are tracked.
+# from the arena on demand), and the profiles and reads built from it: they say
+# what we noticed about each opponent, which is the one thing that would make
+# its owner fix it. Kept locally, like the weights and the read thresholds.
 results/chipzen/scout/hands/
+results/chipzen/scout/*.json
+results/chipzen/opponents.json
+# The working document. Kept locally from 22 September 2026: it is an honest
+# inventory of where the bot is weak, which is what it is for, and that is not
+# something to publish next to the code. Its history to that date is public.
+NEXT.md
 
 # Base papers for the course presentation: other people's PDFs, kept locally only.
 docs/base-papers/
