@@ -137,3 +137,4 @@ docs/base-papers/
 # PDF previews rendered from the Word and PowerPoint sources.
 docs/NashForge_*.pdf
 results/cfr/ladder169/cap2_100bb.pkl
+results/chipzen/scout/scout.md
