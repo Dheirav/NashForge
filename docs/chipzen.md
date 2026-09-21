@@ -313,6 +313,17 @@ older than the stamping are assigned by time from `results/chipzen/epochs.json`.
 Chips per hand is the number to compare versions on; a match win rate over
 twenty matches has an error of about ±10 points.
 
+## What stays out of the repository
+
+The code is public under PolyForm Noncommercial from 22 September 2026; three things are
+not in it. The solved strategies (`results/cfr/experiments/` and the real-file ladders,
+gitignored), because they are what plays rated matches. The scout's cache of other bots'
+hands, because it is refetched. And the tuned read thresholds, in `~/.chipzen/reads.toml`
+(`[thresholds]`, the upper-case names from `chipzen/opponents.py`), because a rival who
+knows the exact rate at which we start folding to a "never bluffs" profile can play to it;
+the module keeps the documented defaults and the file overrides them at import.
+`CHIPZEN_READS` points it elsewhere for a test.
+
 ## What has to be true during the season
 
 - The process must be in the lobby when a fixture opens, so

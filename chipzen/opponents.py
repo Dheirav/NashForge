@@ -60,6 +60,35 @@ EQUILIBRIUM_FOLD = 0.40
 EQUILIBRIUM_CALL_SHARE = 0.5
 
 
+def _private_overrides() -> dict:
+    """
+    Tuned thresholds from outside the repository.
+
+    The values above are the documented defaults and the reasoning behind
+    them. The numbers the live bot plays with are the exploitable part of it:
+    a rival who knows we fold to river bets from anyone profiled as never
+    bluffing can bluff us once it has built that profile. So, like the solved
+    strategies, the tuned values live outside the public tree, in
+    `~/.chipzen/reads.toml` (`[thresholds]`, upper-case keys as here), and
+    override the defaults at import. Absent file, defaults; unknown key, an
+    error, so a typo cannot silently leave a read on its default.
+    """
+    path = os.environ.get("CHIPZEN_READS") or os.path.expanduser("~/.chipzen/reads.toml")
+    if not os.path.exists(path):
+        return {}
+    import tomllib
+    with open(path, "rb") as handle:
+        table = tomllib.load(handle).get("thresholds", {})
+    known = {k for k, v in globals().items() if k.isupper() and isinstance(v, (int, float))}
+    unknown = set(table) - known
+    if unknown:
+        raise ValueError(f"{path}: unknown threshold(s) {sorted(unknown)}; known: {sorted(known)}")
+    return table
+
+
+globals().update(_private_overrides())
+
+
 def _upper_bound(successes: int, trials: int) -> float:
     """Upper end of the 95 percent Wald interval of a rate."""
     if trials <= 0:

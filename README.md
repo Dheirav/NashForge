@@ -4,7 +4,7 @@
 instrument it was measured on against evolutionary search and PPO.**
 
 [![Python 3.12](https://img.shields.io/badge/python-3.12-blue.svg)](https://www.python.org/downloads/)
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+[![License: PolyForm Noncommercial](https://img.shields.io/badge/License-PolyForm%20Noncommercial-blue.svg)](https://polyformproject.org/licenses/noncommercial/1.0.0)
 
 NashForge won season 6 of the [Chipzen](https://chipzen.ai) arena (15 to 20 September
 2026): a weekly heads-up no-limit Hold'em tournament for bots on a 30-second clock, with
@@ -175,4 +175,8 @@ imperfect-information games and, more to the point, comes with ways to check tha
 
 ## License
 
-MIT, see [LICENSE](LICENSE).
+[PolyForm Noncommercial 1.0.0](LICENSE), from 22 September 2026. Read it, run it,
+learn from it, build on it and share what you build, for any noncommercial purpose;
+entering it or a derivative of it in a prize competition is commercial use and is not
+licensed. The solved strategies are not distributed at all. Versions before this date were
+MIT-licensed and remain so.
