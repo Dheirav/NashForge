@@ -4,7 +4,7 @@ One page, kept current. [`BACKLOG.md`](BACKLOG.md) holds the reasoning and every
 [`docs/training-plan.md`](docs/training-plan.md) holds the full phase plan and its results. This
 file is only the next thing to do.
 
-**Last updated:** 21 September 2026, 16:40 IST · 410 tests, 6m32s (collection about half of that)
+**Last updated:** 21 September 2026, 21:20 IST · 410 tests, 6m32s (collection about half of that)
 
 ---
 
@@ -76,6 +76,24 @@ real improvement are compatible; the earlier phrasing denied the second.
 ---
 
 ## Now — the next thing to do
+
+**Monday 21 September, 21:20 IST: v5h, the histogram ladder, is the right direction and
+not yet a set.** Lane H2 finished at 18:59 (seven tapered rungs, 12 to 100bb, 0.03 to 0.12
+ms/it, 11 to 40 minutes each after 18 minutes of tables). v5h against v5f: **51.1 ± 0.7% of
+5,000 arena matches**; whole bot at a fixed 100/50/25bb −4.6 ± 9.3, +7.0 ± 6.8, +0.5 ± 4.3
+chips a hand. Rung against rung on the *same* tree, the abstraction alone: **+11.7 ± 2.8 at
+100bb, +6.3 ± 1.4 at 50bb** (with H1's +6.9 ± 1.7 on the two-raise tree, three readings of
+the same gain). Why the whole bot shows less: the rungs are under-trained. Twenty classes
+with texture make the tapered 100bb tree 11.45M information sets and a cold 20M iterations
+reached 1.48M of them (H1 on the two-raise tree reached 6.95M; the old six-class rungs sit at
+their tree's ceiling). A 25bb rung-level gate read −26.4 ± 0.2 and is an instrument artefact:
+a tapered tree against a two-raise tree in `play_pickles`, which has no translation, misses
+every half-pot and pot re-raise (10.9% of its decisions, called) — whole-bot at 25bb, where
+translation applies, is even. **Next lane: v5h's rungs warm-started from themselves to 60M**
+(a histogram rung can warm from a histogram rung; nothing else can), after the 05:35 burst
+window, with `--abstraction-from` so the ladder shares one clustering and `--fit-samples
+20000` for the fit when it is refitted. v5f or v7b plays Tuesday.
+
 
 **Monday 21 September, 16:40 IST: the histogram abstraction is worth +6.9 ± 1.7 BB/100 at
 a rung, and the whole ladder is retraining on it tonight (lane H2).** The chain today, in

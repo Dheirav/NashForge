@@ -388,12 +388,46 @@ class CardAbstraction:
 
     # ------------------------------------------------------------------
 
-    def fit(self, rng: Optional[np.random.Generator] = None) -> "CardAbstraction":
-        """Build the abstraction. Deterministic given ``rng``."""
+    def fit(self, rng: Optional[np.random.Generator] = None,
+            fit_samples: Optional[int] = None) -> "CardAbstraction":
+        """
+        Build the abstraction. Deterministic given ``rng``.
+
+        ``fit_samples``, histogram mode only, fits the postflop clustering on
+        that many situations per street through the native histogram instead
+        of `samples` through the Python one. The Python histogram costs about
+        17 ms, which is why the default sample is 800 a street; the native one
+        is 0.4 ms, so 20,000 a street is eight seconds. Twenty classes fitted
+        on 800 points is 40 a class; opt-in rather than the default so a
+        ladder mid-training keeps fitting the way its first rungs did.
+        """
         rng = rng if rng is not None else np.random.default_rng(0)
         self._fit_preflop()
-        self._fit_postflop(rng)
+        if fit_samples is not None and self.strength == "histogram":
+            self._fit_postflop_native(rng, int(fit_samples))
+        else:
+            self._fit_postflop(rng)
         return self
+
+    def _fit_postflop_native(self, rng: np.random.Generator, count: int) -> None:
+        """The histogram clustering on `count` native-sampled situations a street."""
+        import pokerbot_native as native
+        from abstraction.histogram import kmeans_emd
+        self._centroids = {}
+        self._centroid_list = {}
+        self._hist_centroids = {}
+        centres = (np.arange(self.hist_bins) + 0.5) / self.hist_bins
+        for street in POSTFLOP_STREETS:
+            values = np.array([
+                native.strength_histogram([c.index for c in hole], [c.index for c in board],
+                                          self.hist_bins, self.hist_runouts, self.hist_opponents,
+                                          int(rng.integers(0, 2 ** 63 - 1)))
+                for hole, board in sample_situations(STREET_BOARD_SIZE[street], count, rng)
+            ])
+            centroids = kmeans_emd(values, self.postflop_buckets, rng=rng)
+            self._hist_centroids[street] = centroids
+            self._centroids[street] = centroids @ centres
+            self._centroid_list[street] = self._centroids[street].tolist()
 
     def _fit_preflop(self) -> None:
         """

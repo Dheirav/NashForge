@@ -143,3 +143,22 @@ def test_a_fitted_histogram_abstraction_with_tables_pickles_and_looks_up_through
     # The river has no table and still answers.
     river = [Card("2", "c"), Card("7", "d"), Card("T", "s"), Card("Q", "h"), Card("3", "h")]
     assert 0 <= again.bucket(hole, river, np.random.default_rng(0)) < again.num_buckets("river")
+
+
+def test_the_native_large_sample_fit_orders_its_classes_and_the_default_fit_is_unchanged():
+    # Opt-in: the default fit must stay byte-for-byte what a ladder mid-training
+    # started with, so a rung fitted tonight matches one fitted this afternoon.
+    from abstraction.buckets import CardAbstraction
+    kwargs = dict(preflop_buckets=169, postflop_buckets=5, samples=30, equity_samples=20,
+                  texture=False, strength="histogram", hist_bins=8, hist_runouts=2, hist_opponents=3)
+    a = CardAbstraction(**kwargs).fit(np.random.default_rng(1))
+    b = CardAbstraction(**kwargs).fit(np.random.default_rng(1))
+    for street in ("flop", "turn", "river"):
+        assert np.array_equal(a._hist_centroids[street], b._hist_centroids[street])
+    c = CardAbstraction(**kwargs).fit(np.random.default_rng(1), fit_samples=400)
+    centres = (np.arange(8) + 0.5) / 8
+    for street in ("flop", "turn", "river"):
+        means = c._hist_centroids[street] @ centres
+        assert np.all(np.diff(means) >= 0), "classes are ordered weakest first"
+        assert c._hist_centroids[street].shape == (5, 8)
+        assert np.allclose(c._hist_centroids[street].sum(axis=1), 1.0)

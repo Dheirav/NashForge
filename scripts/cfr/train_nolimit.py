@@ -92,6 +92,14 @@ def parse_args():
     parser.add_argument("--hist-bins", type=int, default=20)
     parser.add_argument("--hist-runouts", type=int, default=100)
     parser.add_argument("--hist-opponents", type=int, default=50)
+    parser.add_argument("--fit-samples", type=int, default=None,
+                        help="histogram mode: fit the postflop classes on this many native-sampled "
+                             "situations a street (default: --abstraction-samples through the Python "
+                             "histogram, 800; 20,000 here costs eight seconds)")
+    parser.add_argument("--abstraction-from", metavar="PICKLE",
+                        help="reuse the fitted abstraction (and its bucket tables) of an existing "
+                             "solve instead of fitting one, so a ladder shares one clustering and one "
+                             "set of tables; the stack and tree may differ, the card classes do not")
     parser.add_argument("--table-threads", type=int, default=None,
                         help="threads for building the bucket tables (default: --threads); the build is "
                              "embarrassingly parallel and the tables are built once")
@@ -317,17 +325,30 @@ def main():
     print(f"  (raise cap is the parameter that decides feasibility — see "
           f"measure_abstraction.py)\n")
 
-    print(f"Fitting card abstraction ({args.abstraction_samples} situations/street)...")
     start = time.perf_counter()
-    abstraction = CardAbstraction(
-        preflop_buckets=args.preflop_buckets, postflop_buckets=args.buckets,
-        samples=args.abstraction_samples, equity_samples=args.equity_samples,
-        texture=args.texture, strength=args.strength,
-        hist_bins=args.hist_bins, hist_runouts=args.hist_runouts, hist_opponents=args.hist_opponents,
-    ).fit(rng)
-    print(f"  fitted in {time.perf_counter() - start:.1f}s")
+    if args.abstraction_from:
+        from cfr.flat import load_strategy
+        abstraction = load_strategy(args.abstraction_from)["abstraction"]
+        for name in ("buckets", "preflop_buckets", "strength", "texture"):
+            own = {"buckets": abstraction.postflop_buckets, "preflop_buckets": abstraction.preflop_buckets,
+                   "strength": getattr(abstraction, "strength", "equity"),
+                   "texture": bool(getattr(abstraction, "texture", False))}[name]
+            if getattr(args, name) != own:
+                raise SystemExit(f"--abstraction-from: the pickle's {name} is {own!r}, the run asks {getattr(args, name)!r}")
+        print(f"Card abstraction reused from {args.abstraction_from}"
+              + (" with its bucket tables" if getattr(abstraction, "_hist_tables", None) else ""))
+    else:
+        print(f"Fitting card abstraction ({args.fit_samples or args.abstraction_samples} situations/street"
+              + (", native histograms" if args.fit_samples else "") + ")...")
+        abstraction = CardAbstraction(
+            preflop_buckets=args.preflop_buckets, postflop_buckets=args.buckets,
+            samples=args.abstraction_samples, equity_samples=args.equity_samples,
+            texture=args.texture, strength=args.strength,
+            hist_bins=args.hist_bins, hist_runouts=args.hist_runouts, hist_opponents=args.hist_opponents,
+        ).fit(rng, fit_samples=args.fit_samples)
+        print(f"  fitted in {time.perf_counter() - start:.1f}s")
     print(abstraction.describe())
-    if args.strength == "histogram" and not args.no_hist_tables:
+    if args.strength == "histogram" and not args.no_hist_tables and not getattr(abstraction, "_hist_tables", None):
         # Once per abstraction: every canonical flop and turn situation's
         # bucket, so neither the solve nor the bot computes a histogram on
         # those streets again. Minutes for the flop, tens of minutes for the
