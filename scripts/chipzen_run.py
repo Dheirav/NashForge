@@ -327,7 +327,7 @@ def main():
     parser.add_argument("--label", default="",
                         help="one line naming the change this run tests, kept with every match it plays")
     parser.add_argument("--fixtures", action="store_true",
-                        help="print this bot's upcoming season fixtures, in IST, and exit")
+                        help="print this bot's upcoming season fixtures in this machine's time zone, with IST and UTC, and exit")
     parser.add_argument("--list-opponents", action="store_true",
                         help="log which remote bots can be challenged for a rated match now")
     parser.add_argument("--challenge", nargs="+", metavar="BOT",
@@ -351,18 +351,26 @@ def main():
         sys.exit(f"missing {', '.join(missing)}: put them in {CONFIG} or the environment")
 
     if args.fixtures:
-        # Times in IST first, the UTC the platform uses in brackets.
+        # This machine's own clock first, then IST, then the UTC the platform
+        # uses. The timers take wall-clock strings and compare them against
+        # the machine's clock, so the local column is the one to arm from: on
+        # 22 September the laptop moved to +04 and the IST labels would have
+        # armed tonight's fixture two hours late, which is how the Shadow
+        # walkover happened in season 6.
         import datetime
         reply = upcoming_fixtures(config["base_url"], config["token"])
         rows = reply.get("fixtures") or []
         if not rows:
             print(f"no upcoming fixtures for this bot ({reply.get('http_status')})")
         ist = datetime.timezone(datetime.timedelta(hours=5, minutes=30))
+        here = datetime.datetime.now().astimezone().tzinfo
         for row in rows:
             when = row.get("starts_at") or row.get("scheduled_at") or row.get("start_time") or ""
             try:
                 t = datetime.datetime.fromisoformat(when.replace("Z", "+00:00"))
-                when = f"{t.astimezone(ist):%a %d %b %H:%M IST} [{t.astimezone(datetime.timezone.utc):%H:%M} UTC]"
+                local = t.astimezone(here)
+                when = (f"{local:%a %d %b %H:%M} {local:%Z} (local, arm from this)"
+                        f"  [{t.astimezone(ist):%H:%M} IST, {t.astimezone(datetime.timezone.utc):%H:%M} UTC]")
             except ValueError:
                 pass
             print(f"{when}  vs {row.get('opponent_bot_name') or row.get('opponent') or row.get('opponent_name') or '?'}  "

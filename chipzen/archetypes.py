@@ -10,8 +10,8 @@ rule's answer in those spots is the solver's answer against a solver, and the
 question was never whether it is the right answer against a bot that 4-bets
 light. This module is the panel that asks that question.
 
-Four shapes, taken from the scout table of the season 6 and 7 field rather
-than invented: a **station** (Fold-ver-3, Maxwell, vpr: calls 84 to 92 percent
+Nine shapes. Five are calibrated to bots we have played, from the scout
+table of the season 6 and 7 field: a **station** (Fold-ver-3, Maxwell, vpr: calls 84 to 92 percent
 of the time it does not fold, never bluffs, folds to a bet about a third of
 the time), a **nit** (Shadow, mellyy: folds to a bet three quarters of the
 time, folds the blind to any open, wins its showdowns because it only gets
@@ -22,6 +22,16 @@ the rest). Each decides on Monte Carlo equity against a random hand (the
 native sampler, 200 runouts) plus a few thresholds, sizes bets as a fraction
 of the pot, and knows nothing about the opponent. They are crude by design:
 the point is that they are wrong in the field's way, not that they are good.
+
+The other four come from the platform's published corpus of 247,946 hands
+between eleven LLM-written bots (Kaggle, 23 August 2026), which is sixty
+times what the scout can fetch per bot and carries hole cards. It covers
+extremes nothing we have played reaches: a station that folds to a bet 5
+percent of the time rather than 35, a bot that never folds to a three-bet
+(nine of the eleven are at 0 or 1 percent, where every shape above folds
+half the time), a bot that folds every hand, and one that three-bets 46
+percent and then never folds after the flop. Those are the cases an
+exploiter's value turns on, and the panel had none of them.
 
 The interface is the duel's: `decide(state, valid, seat)` returning the arena's
 action dict, and a `stats` object with the four counters the duel prints.
@@ -35,7 +45,8 @@ import numpy as np
 
 from chipzen.bridge import parse_cards
 
-ARCHETYPES = ("station", "nit", "maniac", "foldraise", "hoops")
+ARCHETYPES = ("station", "nit", "maniac", "foldraise", "hoops",
+              "sticky", "nofold3bet", "folder", "wildpassive")
 
 #: Each shape is a parameter row; `scripts/chipzen_calibrate.py` measures the
 #: row with the scout's own statistics beside the bot it stands for, and the
@@ -62,6 +73,42 @@ PARAMS = {
     # won 42%. It takes pots before showdown.
     "hoops":    dict(open_eq=0.48, limp_eq=0.46, threebet_eq=0.58, fold_margin=0.09, raise_eq=0.80,
                      raise_p=0.4, bluff_p=0.05, call_p=0.80, defend_eq=0.45, defend3_eq=0.56, open_frac=1.0),
+
+    # The four below come from the platform's published corpus (247,946 hands
+    # between eleven LLM-written bots, Kaggle, 23 August 2026; the profiles are
+    # in the private repo's corpus_profiles.md). The five above are calibrated
+    # to bots we have actually played, and those stay the panel's core; these
+    # cover shapes nothing we have played reaches, which is where an
+    # exploiter's value is decided. Fitted to the corpus rows, not to a named
+    # opponent, so the calibration target is the row rather than a scout file.
+
+    # Agents 04, 08, 01, 05: enters 67 to 78% of hands, folds to a bet 0 to
+    # 11% of the time, calls 94 to 97% of its answers, shows down 82 to 96%
+    # of hands. Our "station" folds to a bet 35% of the time, which is three
+    # times as willing; against a bot that never folds the right answer is to
+    # stop bluffing and value bet much thinner, and that is the answer the
+    # exploiter has never been asked for.
+    "sticky":   dict(open_eq=0.52, limp_eq=0.20, threebet_eq=0.80, fold_margin=-0.30, raise_eq=0.85,
+                     raise_p=0.3, bluff_p=0.0, call_p=0.98, defend_eq=0.18, defend3_eq=0.25),
+
+    # Nine of the eleven fold to a three-bet 0 or 1% of the time, where every
+    # shape above folds 46 to 62%. So a value three-bet is worth far more
+    # against the real field than our panel says, and a three-bet bluff far
+    # less; the read that three-bets a folder must never fire here.
+    "nofold3bet": dict(open_eq=0.50, limp_eq=0.35, threebet_eq=0.62, fold_margin=-0.10, raise_eq=0.70,
+                       raise_p=0.4, bluff_p=0.05, call_p=0.85, defend_eq=0.22, defend3_eq=0.20),
+
+    # Agent 07: enters 0% of hands, folds 100% of blinds to an open, 3,188
+    # hands in the corpus. Trivial to beat, and in the panel because a set
+    # that fails to raise every hand against it is broken.
+    "folder":   dict(open_eq=0.95, limp_eq=0.95, threebet_eq=0.95, fold_margin=0.45, raise_eq=0.95,
+                     raise_p=0.1, bluff_p=0.0, call_p=0.9, defend_eq=0.90, defend3_eq=0.92),
+
+    # Agent 06: three-bets 46% of hands and then folds to a bet 0% of the
+    # time, calling 81% of its answers. Wild before the flop, immovable
+    # after it; our "maniac" is aggressive throughout and never plays this.
+    "wildpassive": dict(open_eq=0.36, limp_eq=0.20, threebet_eq=0.40, fold_margin=-0.25, raise_eq=0.82,
+                        raise_p=0.3, bluff_p=0.02, call_p=0.95, defend_eq=0.20, defend3_eq=0.24, open_frac=1.0),
 }
 
 

@@ -27,6 +27,19 @@ from scripts.chipzen_scout import profile, summarise  # noqa: E402
 
 ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 TARGETS = {"station": "Fold-ver-3", "nit": "Shadow", "maniac": "v003", "foldraise": "Blueprint", "hoops": "hoops"}
+#: The corpus shapes have no scout file; their target is the published row
+#: (private repo, corpus_profiles.md), as VPIP/PFR/3bet/fold-to-3bet/fold-to-bet/
+#: call share/showdown/won-SD/BB-folds-to-open, in percent.
+CORPUS_TARGETS = {
+    "sticky":      dict(vpip=71, pfr=9, three_bet=8, fold_to_three_bet=0, fold_to_bet=0,
+                        call_share_of_answers=97, showdown_rate=96, showdown_win=48, bb_fold_to_open=0),
+    "nofold3bet":  dict(vpip=74, pfr=47, three_bet=8, fold_to_three_bet=0, fold_to_bet=18,
+                        call_share_of_answers=88, showdown_rate=66, showdown_win=47, bb_fold_to_open=2),
+    "folder":      dict(vpip=0, pfr=0, three_bet=0, fold_to_three_bet=0, fold_to_bet=100,
+                        call_share_of_answers=60, showdown_rate=8, showdown_win=67, bb_fold_to_open=100),
+    "wildpassive": dict(vpip=82, pfr=61, three_bet=46, fold_to_three_bet=0, fold_to_bet=0,
+                        call_share_of_answers=81, showdown_rate=95, showdown_win=46, bb_fold_to_open=0),
+}
 COLUMNS = ("vpip", "pfr", "three_bet", "fold_to_three_bet", "fold_to_bet", "call_share_of_answers",
            "showdown_rate", "showdown_win", "bb_fold_to_open")
 
@@ -104,11 +117,14 @@ def main():
         stats = {"rating": 0, "matches_played": 0, "wins": 0, "losses": 0, "bb_per_100": 0.0,
                  "bb_hands_counted": 0, "llm_author_model": None, "bot_kind": "archetype"}
         summary = summarise(row, stats)
-        target = target_summary(TARGETS[kind])
+        target = target_summary(TARGETS[kind]) if kind in TARGETS else None
+        corpus = CORPUS_TARGETS.get(kind)
         fmt = lambda s, k: (f"{100 * s[k]:.0f}%" if isinstance(s.get(k), (int, float)) else "?")
         print(f"| {kind} ({row['hands']} hands) | " + " | ".join(fmt(summary, k) for k in COLUMNS) + " |")
         if target:
             print(f"| target {TARGETS[kind]} | " + " | ".join(fmt(target, k) for k in COLUMNS) + " |")
+        elif corpus:
+            print(f"| target corpus | " + " | ".join(f"{corpus.get(k, 0)}%" for k in COLUMNS) + " |")
 
 
 if __name__ == "__main__":
