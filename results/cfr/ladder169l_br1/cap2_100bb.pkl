@@ -1,1 +1,1 @@
-../experiments/br_station_100bb_t421_20m.pkl
+../experiments/br_station_100bb_t421_2m.pkl

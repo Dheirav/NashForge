@@ -70,7 +70,16 @@ def build(ladder_dir: str, flags: str, label: str, rng: np.random.Generator,
         player.label = label
         return player
     deep = "--deep-primary" in flags
-    _, ladder, companions = ladder_paths(ladder_dir, deep)
+    tokens = flags.split()
+    explicit = None
+    if "--companions" in tokens:
+        # The pickles after --companions, as chipzen_run.py takes them; an
+        # exploiter rung is played with the equilibrium rung as its companion.
+        start = tokens.index("--companions") + 1
+        explicit = []
+        while start < len(tokens) and not tokens[start].startswith("--"):
+            explicit.append(tokens[start]); start += 1
+    _, ladder, companions = ladder_paths(ladder_dir, deep, companions=explicit)
     player = ArenaPlayer(ladder, rng, companions=companions,
                          river_shove_companion="--river-shove-companion" in flags,
                          stack_cap="--stack-cap" in flags,

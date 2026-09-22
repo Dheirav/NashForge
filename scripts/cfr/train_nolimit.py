@@ -104,6 +104,9 @@ def parse_args():
                         help="native only: train a best response to this scripted field shape "
                              "(chipzen/archetypes.py's calibrated parameters) instead of an equilibrium; "
                              "the result is an exploiter, played only behind a confident read")
+    parser.add_argument("--opponent-share", type=float, default=0.5,
+                        help="how often the scripted opponent plays its script rather than its learned strategy: "
+                             "1.0 is a pure best response (overfits the script), 0.5 a restricted Nash response")
     parser.add_argument("--table-threads", type=int, default=None,
                         help="threads for building the bucket tables (default: --threads); the build is "
                              "embarrassingly parallel and the tables are built once")
@@ -237,8 +240,10 @@ def _train_native(args, abstraction, projected):
     solver.set_average_from(int(args.average_from * args.iterations))
     if args.opponent_archetype:
         from chipzen.archetypes import PARAMS
-        solver.set_opponent_archetype({k: float(v) for k, v in PARAMS[args.opponent_archetype].items()}, args.big_blind)
-        print(f"best response: the opponent plays the {args.opponent_archetype} archetype", flush=True)
+        solver.set_opponent_archetype({k: float(v) for k, v in PARAMS[args.opponent_archetype].items()}, args.big_blind,
+                                      args.opponent_share)
+        print(f"restricted best response: the opponent plays the {args.opponent_archetype} archetype "
+              f"{100 * args.opponent_share:.0f}% of the time", flush=True)
     solver.set_common_random_numbers(bool(args.common_random_numbers))
     solver.set_exact_terminals(bool(args.exact_terminals))
     solver.set_current_when_empty(bool(args.current_when_empty))
@@ -284,6 +289,14 @@ def _train_native(args, abstraction, projected):
               f"eta {eta:6.1f} min", flush=True)
     elapsed = time.perf_counter() - start
     print(f"  {elapsed:.1f}s ({elapsed / args.iterations * 1000:.3f} ms/iteration)")
+    if args.opponent_archetype:
+        # The exploiter's value against the exact opponent it was solved
+        # against, in the training game's chips per hand; the number the duel
+        # against the Python copy of that opponent cannot separate from the
+        # copy's mismatch.
+        value = solver.evaluate_against_policy(200000, args.seed + 7)
+        print(f"  against the {args.opponent_archetype} in the training game: {value:+.3f} chips/hand "
+              f"({100.0 * value / args.big_blind:+.1f} BB/100) over 200,000 hands", flush=True)
     print(f"  information sets reached: {solver.information_sets():,} "
           f"of {projected.information_sets:,} in the abstraction")
     if args.warm_start:

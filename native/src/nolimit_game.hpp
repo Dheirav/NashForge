@@ -167,6 +167,12 @@ public:
             if (!s.bet.dealt) {
                 next.hole[0] = {deal_[0], deal_[1]};
                 next.hole[1] = {deal_[2], deal_[3]};
+                // The betting state carries its own copy of the cards for
+                // anything handed only the betting state, the scripted
+                // opponent of archetype.hpp above all: without this it read
+                // {0, 0} for every hand and the first exploiter rungs
+                // (22 September) were best responses to a card-blind bot.
+                next.bet.hole = next.hole;
                 next.bet.dealt = true;
                 return next;
             }
@@ -188,6 +194,7 @@ public:
             }
             next.hole[0] = {deck[0], deck[1]};
             next.hole[1] = {deck[2], deck[3]};
+            next.bet.hole = next.hole;
             next.bet.dealt = true;
             return next;
         }

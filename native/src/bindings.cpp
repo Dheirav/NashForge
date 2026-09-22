@@ -45,6 +45,39 @@ NB_MODULE(pokerbot_native, m) {
     }, nb::arg("hole"), nb::arg("board"), nb::arg("samples"), nb::arg("seed"),
        "Equity by Monte Carlo. Same distribution as the Python, not the same stream.");
 
+
+    // ScriptedOpponent::act on an explicit betting state, so tests can pin the
+    // C++ copy of a field shape to chipzen/archetypes.py decision for decision.
+    m.def("archetype_act", [](const std::map<std::string, double>& params, int big_blind, int samples,
+                              int player, const std::vector<int>& hole, const std::vector<int>& board,
+                              const std::vector<int>& committed, const std::vector<int>& contributions,
+                              const std::vector<int>& stacks, const std::string& history,
+                              const std::vector<int>& legal, uint64_t seed) {
+        ArchetypeParams p;
+        const std::map<std::string, double*> fields = {
+            {"open_eq", &p.open_eq}, {"limp_eq", &p.limp_eq}, {"threebet_eq", &p.threebet_eq},
+            {"fold_margin", &p.fold_margin}, {"raise_eq", &p.raise_eq}, {"raise_p", &p.raise_p},
+            {"bluff_p", &p.bluff_p}, {"call_p", &p.call_p}, {"defend_eq", &p.defend_eq}, {"defend3_eq", &p.defend3_eq},
+            {"open_frac", &p.open_frac}};
+        for (const auto& [name, value] : params) *fields.at(name) = value;
+        ScriptedOpponent opponent(p, big_blind, samples);
+        pokerbot::State s;
+        s.dealt = true;
+        s.hole[static_cast<size_t>(player)] = {static_cast<int8_t>(hole[0]), static_cast<int8_t>(hole[1])};
+        for (size_t i = 0; i < board.size(); ++i) s.board[i] = static_cast<int8_t>(board[i]);
+        s.board_n = static_cast<int8_t>(board.size());
+        s.history = history;
+        s.committed = {committed[0], committed[1]};
+        s.contributions = {contributions[0], contributions[1]};
+        s.stacks = {stacks[0], stacks[1]};
+        std::vector<int8_t> l;
+        for (int a : legal) l.push_back(static_cast<int8_t>(a));
+        Rng rng(seed);
+        return static_cast<int>(opponent.act(s, player, l, rng));
+    }, nb::arg("params"), nb::arg("big_blind"), nb::arg("samples"), nb::arg("player"), nb::arg("hole"),
+       nb::arg("board"), nb::arg("committed"), nb::arg("contributions"), nb::arg("stacks"), nb::arg("history"),
+       nb::arg("legal"), nb::arg("seed"));
+
     // --- the betting game, exposed for equivalence testing ------------------
     //
     // Deliberately a replay function rather than a bound State class: the test
@@ -294,12 +327,13 @@ NB_MODULE(pokerbot_native, m) {
              nb::arg("on"), "One deal per iteration shared across every branch (variance reduction); off by default.")
         .def("set_exact_terminals", [](MCCFR<NoLimitGame>& s, bool on) { s.game().set_exact_terminals(on); },
              nb::arg("on"), "Score flop and turn all-ins over every runout instead of one sample; off by default.")
-        .def("set_opponent_archetype", [](MCCFR<NoLimitGame>& s, const std::map<std::string, double>& params, int big_blind) {
+        .def("set_opponent_archetype", [](MCCFR<NoLimitGame>& s, const std::map<std::string, double>& params, int big_blind, double share) {
             ArchetypeParams p;
             const std::map<std::string, double*> fields = {
                 {"open_eq", &p.open_eq}, {"limp_eq", &p.limp_eq}, {"threebet_eq", &p.threebet_eq},
                 {"fold_margin", &p.fold_margin}, {"raise_eq", &p.raise_eq}, {"raise_p", &p.raise_p},
-                {"bluff_p", &p.bluff_p}, {"call_p", &p.call_p}, {"defend_eq", &p.defend_eq}, {"defend3_eq", &p.defend3_eq}};
+                {"bluff_p", &p.bluff_p}, {"call_p", &p.call_p}, {"defend_eq", &p.defend_eq}, {"defend3_eq", &p.defend3_eq},
+                {"open_frac", &p.open_frac}};
             for (const auto& [name, value] : params) {
                 auto it = fields.find(name);
                 if (it == fields.end()) throw std::invalid_argument("set_opponent_archetype: unknown parameter " + name);
@@ -309,10 +343,40 @@ NB_MODULE(pokerbot_native, m) {
             s.set_opponent_policy([opponent](const NoLimitGame::State& state, int player,
                                              const std::vector<int8_t>& legal, Rng& rng) {
                 return opponent->act(state.bet, player, legal, rng);
-            });
-        }, nb::arg("params"), nb::arg("big_blind"),
+            }, share);
+        }, nb::arg("params"), nb::arg("big_blind"), nb::arg("share") = 1.0,
            "Train a best response: the opponent's nodes play this scripted policy (archetype.hpp, the "
            "parameter names of chipzen/archetypes.py) instead of the table.")
+        .def("evaluate_against_policy", [](MCCFR<NoLimitGame>& s, int64_t hands, uint64_t seed) {
+            nb::gil_scoped_release release;
+            return s.evaluate_against_policy(hands, seed);
+        }, nb::arg("hands"), nb::arg("seed") = 0,
+           "Mean chips a hand for the average strategy against the installed scripted opponent, in the training game.")
+
+        .def("opponent_sees_cards", [](MCCFR<NoLimitGame>& s, int64_t hands, uint64_t seed) {
+            // The share of opponent decisions at which the betting state
+            // handed to a scripted opponent carries the deal's cards. It was
+            // zero until 22 September: the game kept the cards in an outer
+            // field and the script read the inner one, so every exploiter
+            // solved before then was a best response to a card-blind bot.
+            NoLimitGame& game = s.game();
+            Rng rng(seed);
+            int64_t decisions = 0, correct = 0;
+            for (int64_t h = 0; h < hands; ++h) {
+                game.begin_iteration(rng);
+                NoLimitGame::State state = game.initial_state();
+                while (!game.is_terminal(state)) {
+                    if (game.is_chance(state)) { state = game.sample_chance(state, rng); continue; }
+                    const int player = game.current_player(state);
+                    const std::vector<int8_t> actions = game.legal_actions(state);
+                    ++decisions;
+                    if (state.bet.hole[static_cast<size_t>(player)] == state.hole[static_cast<size_t>(player)] &&
+                        state.bet.dealt) ++correct;
+                    state = game.next_state(state, actions[static_cast<size_t>(rng.below(static_cast<uint32_t>(actions.size())))]);
+                }
+            }
+            return decisions ? static_cast<double>(correct) / static_cast<double>(decisions) : 0.0;
+        }, nb::arg("hands"), nb::arg("seed") = 0)
         .def("set_current_when_empty", &MCCFR<NoLimitGame>::set_current_when_empty, nb::arg("on"),
              "Export the current strategy where the average is empty, instead of a uniform; off by default.")
         .def("set_average_from", &MCCFR<NoLimitGame>::set_average_from, nb::arg("iteration"),

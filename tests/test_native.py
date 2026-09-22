@@ -480,3 +480,23 @@ def test_the_current_strategy_replaces_only_the_empty_averages_when_asked():
         n = len(plain[k])
         assert np.allclose(plain[k], [1.0 / n] * n), "only a uniform average may be replaced"
         assert abs(sum(flagged[k]) - 1.0) < 1e-9
+
+
+def test_a_scripted_opponent_sees_its_cards_and_the_copy_matches_the_python_shape():
+    # 22 September: the game kept the deal in one field and the scripted
+    # opponent read another, so every best-response solve was against a bot
+    # holding "2c 2c" (+1,079 BB/100 in the solver's own game, -102 at the
+    # table). The betting state must carry the cards at every opponent
+    # decision, and the C++ copy of a shape must decide as the Python does on
+    # the same situation with the same equity.
+    import pokerbot_native as native
+    from chipzen.archetypes import PARAMS
+    solver = native.NoLimitSolver([168] * (52 * 52), [0.3, 0.6], [0.3, 0.6], [0.3, 0.6],
+                                  20, 200, 1, 2, [4, 2, 1], 0)
+    assert solver.opponent_sees_cards(300, 1) == 1.0
+    # The copy's rule for an unopened pot: open above open_eq, otherwise limp
+    # above limp_eq, else fold: aces open, seven-deuce offsuit limps.
+    params = {k: float(v) for k, v in PARAMS["station"].items()}
+    open_ = native.archetype_act(params, 2, 2000, 0, [12, 25], [], [1, 2], [1, 2], [199, 198], "", [0, 1, 2, 3, 4, 5], 3)
+    limp = native.archetype_act(params, 2, 2000, 0, [0, 18], [], [1, 2], [1, 2], [199, 198], "", [0, 1, 2, 3, 4, 5], 3)
+    assert open_ >= 2 and limp == 1

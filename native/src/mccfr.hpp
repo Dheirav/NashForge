@@ -329,8 +329,52 @@ public:
     /// created. Both seats learn, since each iteration traverses each seat
     /// as "us" against the policy in the other.
     using OpponentPolicy = std::function<int8_t(const typename Game::State&, int, const std::vector<int8_t>&, Rng&)>;
-    void set_opponent_policy(OpponentPolicy policy) { opponent_policy_ = std::move(policy); }
+    /// `share` is how often the opponent plays the script rather than its own
+    /// learned strategy: 1 is a pure best response, which overfits the script
+    /// (the first exploiter won 1,451 BB/100 against its own copy of the
+    /// station and lost 148 a hand to a slightly different copy); below 1 it
+    /// is a restricted Nash response (Johanson, Zinkevich and Bowling, 2008),
+    /// which exploits where the gain is large and stays near equilibrium
+    /// elsewhere, and visits the lines the script never takes.
+    void set_opponent_policy(OpponentPolicy policy, double share = 1.0) {
+        opponent_policy_ = std::move(policy);
+        policy_share_ = share;
+    }
     bool has_opponent_policy() const { return static_cast<bool>(opponent_policy_); }
+
+    /// Play the average strategy against the installed policy for `hands`
+    /// deals in the training game, the learner in each seat alternately, and
+    /// return its mean utility per hand in the game's chips. The exploiter's
+    /// value against the exact opponent it was solved against, which is the
+    /// number a duel against the Python copy of that opponent cannot give.
+    double evaluate_against_policy(int64_t hands, uint64_t seed) {
+        if (!opponent_policy_) throw std::runtime_error("evaluate_against_policy: no opponent policy installed");
+        Rng rng(seed);
+        double total = 0.0;
+        for (int64_t h = 0; h < hands; ++h) {
+            const int learner = static_cast<int>(h & 1);
+            game_.begin_iteration(rng);
+            typename Game::State state = game_.initial_state();
+            while (!game_.is_terminal(state)) {
+                if (game_.is_chance(state)) { state = game_.sample_chance(state, rng); continue; }
+                const int player = game_.current_player(state);
+                const std::vector<int8_t> actions = game_.legal_actions(state);
+                int8_t chosen;
+                if (player != learner) {
+                    chosen = opponent_policy_(state, player, actions, rng);
+                } else {
+                    const Key key = game_.information_set(state, player);
+                    const InfoSetNode* node = peek(key);
+                    std::vector<double> strategy = node ? node->average_strategy()
+                                                        : std::vector<double>(actions.size(), 1.0 / actions.size());
+                    chosen = actions[sample(rng, strategy.data(), actions.size())];
+                }
+                state = game_.next_state(state, chosen);
+            }
+            total += game_.utility(state, learner);
+        }
+        return total / static_cast<double>(hands);
+    }
 
     std::vector<double> strategy_for_export(const InfoSetNode& node) const {
         if (current_when_empty_) {
@@ -379,6 +423,13 @@ private:
                    && static_cast<double>(ctx.rng->next() >> 11) * 0x1.0p-53 < prune_fraction_;
         for (int player = 0; player < Game::num_players; ++player)
             walk(ctx, ctx.game->initial_state(), player, iteration);
+    }
+
+    const InfoSetNode* peek(const Key& key) const {
+        const size_t h = KeyHash<Key>{}(key);
+        const Shard& shard = *shards_[(h >> 24) % SHARDS];
+        auto it = shard.map.find(key);
+        return it == shard.map.end() ? nullptr : &it->second;
     }
 
     InfoSetNode& node_for(const Key& key, int num_actions) {
@@ -439,20 +490,22 @@ private:
         node.last_discounted = warm_weight_;
     }
 
-    double walk(Context& ctx, const typename Game::State& state, int traverser, int64_t iteration) {
+    double walk(Context& ctx, const typename Game::State& state, int traverser, int64_t iteration,
+                double own_reach = 1.0) {
         const Game& game = *ctx.game;
         if (game.is_terminal(state)) return game.utility(state, traverser);
 
         if (game.is_chance(state))
-            return walk(ctx, game.sample_chance(state, *ctx.rng), traverser, iteration);
+            return walk(ctx, game.sample_chance(state, *ctx.rng), traverser, iteration, own_reach);
 
         const int player = game.current_player(state);
         const std::vector<int8_t> actions = game.legal_actions(state);
-        if (player != traverser && opponent_policy_) {
+        if (player != traverser && opponent_policy_ &&
+            (policy_share_ >= 1.0 || unit(*ctx.rng) < policy_share_)) {
             // A scripted opponent: its move comes from the policy, and no node
             // is touched, so the table holds only what "we" learned.
             const int8_t chosen = opponent_policy_(state, player, actions, *ctx.rng);
-            return walk(ctx, game.next_state(state, chosen), traverser, iteration);
+            return walk(ctx, game.next_state(state, chosen), traverser, iteration, own_reach);
         }
         const Key key = game.information_set(state, player);
         InfoSetNode& node = node_for(key, static_cast<int>(actions.size()));
@@ -465,16 +518,30 @@ private:
             strategy_at(key, node, iteration, strategy);
             discount_once(node, iteration);
             const double weight = rule_.strategy_weight(iteration);
-            if (iteration - 1 >= average_from_)
+            if (iteration - 1 >= average_from_ && !opponent_policy_)   // with a script installed the traverser branch accumulates
                 for (size_t i = 0; i < actions.size(); ++i)
                     node.strategy_sum[i] += weight * strategy[i];
             if (parallel_) node.unlock();
             return walk(ctx, game.next_state(state, actions[sample(*ctx.rng, strategy, actions.size())]),
-                        traverser, iteration);
+                        traverser, iteration, own_reach);
         }
 
         if (parallel_) node.lock();
         strategy_at(key, node, iteration, strategy);
+        if (opponent_policy_) {
+            // Against a scripted opponent the learner's nodes are only ever
+            // reached as the traverser, so its average strategy has to be
+            // accumulated here, weighted by its own reach carried down the
+            // walk (in self-play the opponent branch does this with a sampled
+            // reach, and these nodes are skipped there). The first exploiter
+            // rung, 22 September, was trained without this line: its regrets
+            // were right and its saved strategy was uniform, and it lost 324
+            // chips a hand to the station it was solved against.
+            discount_once(node, iteration);
+            const double weight = rule_.strategy_weight(iteration) * own_reach;
+            if (iteration - 1 >= average_from_)
+                for (size_t i = 0; i < actions.size(); ++i) node.strategy_sum[i] += weight * strategy[i];
+        }
         if (parallel_) node.unlock();
 
         double values[MAX_ACTIONS];
@@ -492,7 +559,7 @@ private:
                     continue;
                 }
             }
-            values[i] = walk(ctx, game.next_state(state, actions[i]), traverser, iteration);
+            values[i] = walk(ctx, game.next_state(state, actions[i]), traverser, iteration, own_reach * strategy[i]);
             value += strategy[i] * values[i];
         }
 
@@ -530,6 +597,8 @@ private:
 
     Game game_;
     OpponentPolicy opponent_policy_;
+    double policy_share_ = 1.0;
+    static double unit(Rng& rng) { return (rng.next() >> 11) * (1.0 / 9007199254740992.0); }
     UpdateRule rule_;
     Rng rng_;
     uint64_t seed_;
