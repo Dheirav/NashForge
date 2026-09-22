@@ -108,3 +108,30 @@ def test_the_dealer_asks_the_opponent_to_answer_a_shove():
     bb = _Scripted([("call", 0)])
     net = Dealer([sb, bb], cards, [10000, 3000], 50, 100, 1, ("x", "y")).play()
     assert bb.stats.decisions == 1 and abs(net[0]) == 3000 and net[0] + net[1] == 0
+
+
+def test_the_field_archetypes_read_even_against_themselves_and_carry_every_parameter():
+    # The panel (chipzen/archetypes.py) is an instrument like the duel, so its
+    # players are pinned to zero on a mirror too; a shape that favours one
+    # seat would read as a set's strength. The parameter rows are checked
+    # complete because a missing key would raise mid-duel, an hour in.
+    from chipzen.archetypes import ARCHETYPES, PARAMS, build_archetype
+    from scripts.chipzen_duel import Dealer
+    keys = {"open_eq", "limp_eq", "threebet_eq", "fold_margin", "raise_eq", "raise_p", "bluff_p",
+            "call_p", "defend_eq", "defend3_eq"}
+    for kind in ARCHETYPES:
+        assert set(PARAMS[kind]) == keys, kind
+    rng = np.random.default_rng(0)
+    deck = np.arange(52)
+    for kind in ("station", "maniac"):
+        a, b = build_archetype(kind, np.random.default_rng(1)), build_archetype(kind, np.random.default_rng(2))
+        diffs = []
+        for i in range(400):
+            rng.shuffle(deck)
+            cards = [int(c) for c in deck[:9]]
+            first = Dealer([a, b], cards, [2500, 2500], 50, 100, 2 * i + 1, ("b", "a")).play()
+            second = Dealer([b, a], cards, [2500, 2500], 50, 100, 2 * i + 2, ("a", "b")).play()
+            diffs.append((first[0] + second[1]) / 2.0)
+        diffs = np.array(diffs)
+        se = diffs.std() / np.sqrt(diffs.size)
+        assert abs(diffs.mean()) < 4 * max(se, 1.0), f"{kind} mirror read {diffs.mean():+.1f} ± {se:.1f}"

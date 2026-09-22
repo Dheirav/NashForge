@@ -37,6 +37,26 @@ from chipzen.bridge import parse_cards
 
 ARCHETYPES = ("station", "nit", "maniac", "foldraise")
 
+#: Each shape is a parameter row; `scripts/chipzen_calibrate.py` measures the
+#: row with the scout's own statistics beside the bot it stands for, and the
+#: numbers here are tuned by hand until the two columns agree. Equities are
+#: against a random hand. `fold_margin` is how far below the pot's price the
+#: hand's equity may fall before the shape folds (negative: it calls worse than
+#: the price says); `call_p` is how often it calls rather than raises when it
+#: could do either; `defend_eq` is the least equity it defends a raise with
+#: preflop, and `defend3_eq` a re-raise, since a bot that opens light and
+#: folds to 3-bets (v003) needs the two apart.
+PARAMS = {
+    "station":  dict(open_eq=0.56, limp_eq=0.30, threebet_eq=0.58, fold_margin=0.12, raise_eq=0.78,
+                     raise_p=0.5, bluff_p=0.0, call_p=0.75, defend_eq=0.30, defend3_eq=0.48),
+    "nit":      dict(open_eq=0.47, limp_eq=0.55, threebet_eq=0.60, fold_margin=0.04, raise_eq=0.58,
+                     raise_p=0.6, bluff_p=0.05, call_p=0.05, defend_eq=0.55, defend3_eq=0.58),
+    "maniac":   dict(open_eq=0.50, limp_eq=0.45, threebet_eq=0.53, fold_margin=0.02, raise_eq=0.52,
+                     raise_p=0.6, bluff_p=0.15, call_p=0.50, defend_eq=0.45, defend3_eq=0.78),
+    "foldraise": dict(open_eq=0.54, limp_eq=0.68, threebet_eq=0.58, fold_margin=0.20, raise_eq=0.55,
+                      raise_p=0.7, bluff_p=0.05, call_p=0.30, defend_eq=0.62, defend3_eq=0.58),
+}
+
 
 @dataclass
 class ArchetypeStats:
@@ -47,12 +67,13 @@ class ArchetypeStats:
 
 
 class Archetype:
-    """A scripted opponent; `kind` is one of ARCHETYPES."""
+    """A scripted opponent; `kind` is one of ARCHETYPES, `params` a row of PARAMS."""
 
-    def __init__(self, kind: str, rng: np.random.Generator, samples: int = 200):
+    def __init__(self, kind: str, rng: np.random.Generator, samples: int = 200, params: dict = None):
         if kind not in ARCHETYPES:
             raise ValueError(f"archetype must be one of {ARCHETYPES}, got {kind!r}")
         self.kind = kind
+        self.p = dict(PARAMS[kind], **(params or {}))
         self.rng = rng
         self.samples = samples
         self.stats = ArchetypeStats()
@@ -60,14 +81,12 @@ class Archetype:
         self.opponent = None
         self.profiles = None
 
-    # -- the hand's strength, as the bot sees it --------------------------
     def _equity(self, state: dict) -> float:
         import pokerbot_native as native
         hole = [c.index for c in parse_cards(state["your_hole_cards"])]
         board = [c.index for c in parse_cards(state.get("board") or [])]
         return float(native.equity_vs_random(hole, board, self.samples, int(self.rng.integers(0, 2 ** 62))))
 
-    # -- sizing ----------------------------------------------------------
     @staticmethod
     def _raise_to(state: dict, fraction: float, allin: bool = False) -> dict:
         """A raise to about `fraction` of the pot after the call, clipped to the arena's bounds."""
@@ -86,67 +105,61 @@ class Archetype:
     def _fold(valid: Sequence[str]) -> dict:
         return {"action": "fold" if "fold" in valid else "check", "params": {}}
 
-    def _short(self, state: dict) -> bool:
-        """Under about twelve big blinds, judged from the blinds in the history."""
-        bb = max((int(a.get("amount") or 0) for a in state.get("action_history", [])
-                  if a.get("action") == "post_big_blind"), default=100)
-        return int(state["your_stack"]) + int(state["to_call"]) <= 12 * bb
+    @staticmethod
+    def _blind(state: dict) -> int:
+        return max((int(a.get("amount") or 0) for a in state.get("action_history", [])
+                    if a.get("action") == "post_big_blind"), default=100)
 
-    # -- the shapes --------------------------------------------------------
+    def _short(self, state: dict) -> bool:
+        return int(state["your_stack"]) + int(state["to_call"]) <= 12 * self._blind(state)
+
+    @staticmethod
+    def _raises_before(state: dict) -> int:
+        """Raises so far on the current street, from the arena's history."""
+        hist = state.get("action_history") or []
+        phase = state.get("phase") or "preflop"
+        return sum(1 for a in hist if a.get("phase") == phase and a.get("action") == "raise")
+
     def decide(self, state: dict, valid: Sequence[str], seat: int) -> dict:  # noqa: ARG002 (the duel passes it)
         self.stats.decisions += 1
+        p = self.p
         e = self._equity(state)
         to_call = int(state["to_call"])
         pot = int(state["pot"])
         facing = to_call > 0
-        price = to_call / (pot + to_call) if facing else 0.0      # pot odds as a fraction
+        price = to_call / (pot + to_call) if facing else 0.0
         preflop = not state.get("board")
         can_raise = "raise" in valid
+        raises = self._raises_before(state)
         u = float(self.rng.random())
 
-        if self.kind == "station":
-            # Calls with any equity near the price, folds only far below it,
-            # raises only a made hand, never bluffs.
-            if facing and e < price - 0.15:
+        if preflop:
+            if raises == 0:
+                # Unopened, or the big blind facing a limp: open, limp, or fold.
+                if can_raise and e >= p["open_eq"]:
+                    return self._raise_to(state, 0.5)
+                if e >= p["limp_eq"] or not facing:
+                    return self._passive(valid)
                 return self._fold(valid)
-            if can_raise and e > 0.80 and u < 0.7:
-                return self._raise_to(state, 0.75)
-            if can_raise and preflop and not facing and e > 0.55 and u < 0.4:
-                return self._raise_to(state, 0.5)
-            return self._passive(valid)
-
-        if self.kind == "nit":
-            # Folds to pressure unless strong, opens only good hands, and
-            # shoves short with a premium.
-            if facing:
-                if e >= 0.72 and can_raise and u < 0.5:
-                    return self._raise_to(state, 1.0, allin=self._short(state))
-                return self._passive(valid) if e >= 0.62 else self._fold(valid)
-            if can_raise and e >= 0.62:
-                return self._raise_to(state, 0.66)
-            return self._passive(valid)
-
-        if self.kind == "maniac":
-            # Raises anything with equity, 3-bets and 4-bets light, shoves
-            # short, and still calls rather than folds when raising is off.
-            if can_raise and (e > 0.40 or u < 0.25):
-                allin = self._short(state) or (facing and e > 0.6 and u < 0.5)
-                return self._raise_to(state, 1.0, allin=allin)
-            if facing and e < price - 0.10 and u < 0.7:
-                return self._fold(valid)
-            return self._passive(valid)
-
-        # fold-or-raise: calling is the rare action.
-        if facing:
-            if e >= 0.55 and can_raise:
-                return self._raise_to(state, 1.0, allin=self._short(state) and e > 0.6)
-            if e >= 0.50 and u < 0.35:
+            # Facing a raise (or more).
+            if can_raise and e >= p["threebet_eq"] and u > p["call_p"] * 0.5:
+                return self._raise_to(state, 1.0, allin=self._short(state) or raises >= 2)
+            defend = p["defend3_eq"] if raises >= 2 else p["defend_eq"]
+            if e >= defend and e >= price + p["fold_margin"]:
                 return self._passive(valid)
             return self._fold(valid)
-        if can_raise and e >= 0.50:
+
+        # Postflop.
+        if facing:
+            if e < price + p["fold_margin"]:
+                return self._fold(valid)
+            if can_raise and e >= p["raise_eq"] and u > p["call_p"]:
+                return self._raise_to(state, 1.0, allin=self._short(state))
+            return self._passive(valid)
+        if can_raise and ((e >= p["raise_eq"] and u < p["raise_p"]) or u < p["bluff_p"]):
             return self._raise_to(state, 0.66)
         return self._passive(valid)
 
 
-def build_archetype(kind: str, rng: np.random.Generator) -> Archetype:
-    return Archetype(kind, rng)
+def build_archetype(kind: str, rng: np.random.Generator, params: dict = None) -> Archetype:
+    return Archetype(kind, rng, params=params)
