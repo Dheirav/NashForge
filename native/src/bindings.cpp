@@ -8,6 +8,7 @@
 #include "hand_eval.hpp"
 #include "equity.hpp"
 #include "bucket_table.hpp"
+#include "river.hpp"
 #include "nolimit.hpp"
 #include "mccfr.hpp"
 #include "kuhn.hpp"
@@ -204,6 +205,41 @@ NB_MODULE(pokerbot_native, m) {
         return table;
     }, nb::arg("board_n"), nb::arg("centroids"), nb::arg("bins"), nb::arg("runouts"), nb::arg("opponents"), nb::arg("threads") = 1,
        "Every canonical situation's bucket for one street; minutes for the flop, tens of minutes for the turn.");
+
+    nb::class_<RiverSolver>(m, "RiverSolver",
+        "The river re-solver's CFR+ core (river.hpp); the tree and ranges come from cfr/river.py.")
+        .def("__init__", [](RiverSolver* self, const std::vector<int>& pairs_a, const std::vector<int>& pairs_b,
+                            const std::vector<int64_t>& ranks, const std::vector<int>& kind,
+                            const std::vector<int>& player, const std::vector<int>& contrib0,
+                            const std::vector<int>& contrib1, const std::vector<int>& folder,
+                            const std::vector<std::vector<int>>& children,
+                            const std::vector<std::vector<int>>& actions,
+                            const std::vector<double>& range0, const std::vector<double>& range1) {
+            const size_t H = ranks.size(), N = kind.size();
+            if (pairs_a.size() != H || pairs_b.size() != H || range0.size() != H || range1.size() != H)
+                throw std::invalid_argument("RiverSolver: pairs, ranks and ranges must all have one entry per hand");
+            if (player.size() != N || contrib0.size() != N || contrib1.size() != N || folder.size() != N ||
+                children.size() != N || actions.size() != N)
+                throw std::invalid_argument("RiverSolver: every node array must have one entry per node");
+            if (N == 0 || kind[0] != 0) throw std::invalid_argument("RiverSolver: node 0 must be the root decision");
+            for (size_t n = 0; n < N; ++n) {
+                if (kind[n] == 0 && (children[n].empty() || children[n].size() != actions[n].size()))
+                    throw std::invalid_argument("RiverSolver: a decision node needs one action per child");
+                for (int c : children[n])
+                    if (c <= static_cast<int>(n) || c >= static_cast<int>(N))
+                        throw std::invalid_argument("RiverSolver: children must come after their parent");
+            }
+            RiverTree tree{kind, player, contrib0, contrib1, folder, children, actions};
+            new (self) RiverSolver(pairs_a, pairs_b, ranks, std::move(tree), range0, range1);
+        }, nb::arg("pairs_a"), nb::arg("pairs_b"), nb::arg("ranks"), nb::arg("kind"), nb::arg("player"),
+           nb::arg("contrib0"), nb::arg("contrib1"), nb::arg("folder"), nb::arg("children"), nb::arg("actions"),
+           nb::arg("range0"), nb::arg("range1"))
+        .def("solve", [](RiverSolver& s, int iterations, double budget_s) {
+            nb::gil_scoped_release release;
+            return s.solve(iterations, budget_s);
+        }, nb::arg("iterations"), nb::arg("budget_s"))
+        .def("iterations", &RiverSolver::iterations)
+        .def("root_strategy", &RiverSolver::root_strategy, nb::arg("hand"));
 
     nb::class_<MCCFR<NoLimitGame>>(m, "NoLimitSolver")
         .def("__init__", [](MCCFR<NoLimitGame>* self,

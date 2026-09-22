@@ -144,3 +144,32 @@ def test_facing_a_bet_from_the_top_half_the_answer_follows_equity(hands):
     assert king_high[FOLD] > 0.9
     assert queens[FOLD] < 0.1
     assert aces[FOLD] < 0.05 and sum(p for a, p in aces.items() if a >= 2) > 0.5
+
+
+def test_the_native_solver_matches_the_python_reference_and_is_much_faster(hands):
+    # The C++ core (native/src/river.hpp) does the same arithmetic as the
+    # Python; both are run on the same tree and ranges and their root
+    # strategies pinned to each other. Floating-point order differs, so the
+    # pin is loose enough for that and tight enough to catch a wrong sign,
+    # a missing blocker correction or an off-by-one in the rank order.
+    from cfr.river import NativeRiverSolver
+    rng = np.random.default_rng(4)
+    ranges = (rng.random(hands.size), rng.random(hands.size))
+    for args in ((1000, 0, (5000, 5000), 0, 2, 0), (1000, 1000, (4000, 5000), 1, 2, 0),
+                 (600, 300, (900, 2500), 1, (4, 2, 1), 0)):
+        root, decisions = build_tree(*args)
+        py = RiverSolver(hands, root, decisions, (ranges[0].copy(), ranges[1].copy()))
+        cc = NativeRiverSolver(hands, root, decisions, (ranges[0].copy(), ranges[1].copy()))
+        py.solve(60, 60); cc.solve(60, 60)
+        assert cc.iterations == 60
+        worst = 0.0
+        for h in (index(hands, "As", "Ac"), index(hands, "3h", "4h"), index(hands, "Kd", "Qd")):
+            a, b = py.root_strategy(h), cc.root_strategy(h)
+            assert list(a) == list(b)
+            worst = max(worst, max(abs(a[k] - b[k]) for k in a))
+        assert worst < 0.02, f"native and python root strategies differ by {worst:.3f} on {args}"
+    root, decisions = build_tree(1500, 0, (8000, 8000), 0, 2, 0)
+    cc = NativeRiverSolver(hands, root, decisions, (np.ones(hands.size), np.ones(hands.size)))
+    started = time.perf_counter()
+    assert cc.solve(400, 30) == 400
+    assert time.perf_counter() - started < 1.0, "400 native iterations should take well under a second"

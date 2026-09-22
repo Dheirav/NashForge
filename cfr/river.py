@@ -43,6 +43,11 @@ from slumbot.bridge import RAISE_FRACTIONS
 #: converged by a few hundred; the cap is what the arena's clock allows.
 ITERATIONS = 400
 TIME_BUDGET_S = 8.0
+#: What the native core runs by default. Measured 22 September on a two-raise
+#: river against a 6,000-iteration solve: at 400 iterations 311 of 1,081 hands
+#: had a root probability more than 0.1 off, at 2,000 (1.4 s native) 65, at
+#: 3,000 (2.1 s) 24. The Python's 400 was the clock's limit, not convergence.
+NATIVE_ITERATIONS = 2000
 
 
 # ---------------------------------------------------------------------------
@@ -355,6 +360,60 @@ class RiverSolver:
         return {code: float(p) for code, p in zip(self.root.actions, probabilities)}
 
 
+class NativeRiverSolver:
+    """
+    The same solve in C++ (native/src/river.hpp), fifty-odd times faster.
+
+    The Python solver above stays as the reference it is pinned against: the
+    tree is built here, flattened in creation order (every child after its
+    parent, which is what lets the native passes be loops), and handed over
+    with the hand set's pairs and ranks and the two ranges.
+    """
+
+    def __init__(self, hands: HandSet, root: Node, decisions: List[Node],
+                 ranges: Tuple[np.ndarray, np.ndarray]):
+        import pokerbot_native as native
+        nodes: List[Node] = []
+
+        def collect(node: Node) -> None:
+            nodes.append(node)
+            for child in node.children:
+                collect(child)
+
+        collect(root)
+        index = {id(n): i for i, n in enumerate(nodes)}
+        kind = [0 if n.kind == "decision" else (1 if n.kind == "fold" else 2) for n in nodes]
+        self.root_actions = list(root.actions)
+        self._native = native.RiverSolver(
+            [int(p) for p in hands.pairs[:, 0]], [int(p) for p in hands.pairs[:, 1]],
+            [int(r) for r in hands.ranks], kind, [n.player for n in nodes],
+            [n.contrib[0] for n in nodes], [n.contrib[1] for n in nodes], [n.folder for n in nodes],
+            [[index[id(c)] for c in n.children] for n in nodes], [list(n.actions) for n in nodes],
+            [float(x) for x in ranges[0]], [float(x) for x in ranges[1]])
+        self.iterations = 0
+
+    def solve(self, iterations: int = ITERATIONS, budget_s: float = TIME_BUDGET_S) -> int:
+        self.iterations = self._native.solve(iterations, budget_s)
+        return self.iterations
+
+    def root_strategy(self, hand_index: int) -> Dict[int, float]:
+        probabilities = self._native.root_strategy(hand_index)
+        return {code: float(p) for code, p in zip(self.root_actions, probabilities)}
+
+
+def make_solver(hands: HandSet, root: Node, decisions: List[Node],
+                ranges: Tuple[np.ndarray, np.ndarray], native: Optional[bool] = None):
+    """The native solver when it is importable (or asked for), else the Python reference."""
+    if native is False:
+        return RiverSolver(hands, root, decisions, ranges)
+    try:
+        return NativeRiverSolver(hands, root, decisions, ranges)
+    except ImportError:
+        if native:
+            raise
+        return RiverSolver(hands, root, decisions, ranges)
+
+
 # ---------------------------------------------------------------------------
 # Ranges from the blueprint
 # ---------------------------------------------------------------------------
@@ -455,7 +514,9 @@ def decide_river(state: dict, hole: Sequence[Card], board: Sequence[Card], histo
     root, decisions = build_tree(pot - to_call, to_call, (ours, theirs), raises_so_far,
                                  schedule if isinstance(schedule, int) else schedule, 0)
     ranges = blueprint_ranges(hands, strategy, abstraction, schedule, history, board, we_are_small_blind)
-    solver = RiverSolver(hands, root, decisions, ranges)
+    solver = make_solver(hands, root, decisions, ranges)
+    if isinstance(solver, NativeRiverSolver) and iterations == ITERATIONS:
+        iterations = NATIVE_ITERATIONS
     remaining = budget_s - (time.perf_counter() - started)
     done = solver.solve(iterations, max(0.5, remaining))
     ours_index = hands.index_of[tuple(sorted(c.index for c in hole))]
