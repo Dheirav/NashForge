@@ -283,6 +283,59 @@ def play_match(players, rng: np.random.Generator, opponents) -> dict:
     return {"winner": winner, "hands": hand, "net0": stacks[0] - ARENA_STACK}
 
 
+#: The players, set by the parent before it forks its workers: a forked child
+#: inherits them, which is what lets the tables be shared and is also the only
+#: way to hand over players whose agents are closures (they do not pickle).
+_PLAYERS = None
+
+
+def _run_matches(args_tuple):
+    """A worker's share of arena matches: (wins, hands, nets, a_stats, b_stats)."""
+    a_label, b_label, first, count, seed = args_tuple
+    a, b = _PLAYERS
+    rng = np.random.default_rng(seed)
+    a.rng, b.rng = np.random.default_rng(seed + 1), np.random.default_rng(seed + 2)
+    wins = np.empty(count); hands = np.empty(count); nets = np.empty(count)
+    for j in range(count):
+        i = first + j
+        if i % 2 == 0:
+            r = play_match([a, b], rng, (b_label, a_label)); won = 0.5 if r["winner"] < 0 else float(r["winner"] == 0); net = r["net0"]
+        else:
+            r = play_match([b, a], rng, (a_label, b_label)); won = 0.5 if r["winner"] < 0 else float(r["winner"] == 1); net = -r["net0"]
+        wins[j], hands[j], nets[j] = won, r["hands"], net
+    return wins, hands, nets, vars(a.stats), vars(b.stats)
+
+
+def _run_deals(args_tuple):
+    """A worker's share of duplicate deals: (diffs, a_stats, b_stats)."""
+    a_label, b_label, first, count, seed, stack, sb, big_blind = args_tuple
+    a, b = _PLAYERS
+    rng = np.random.default_rng(seed)
+    a.rng, b.rng = np.random.default_rng(seed + 1), np.random.default_rng(seed + 2)
+    deck = np.arange(52)
+    diffs = np.empty(count)
+    for j in range(count):
+        i = first + j
+        rng.shuffle(deck)
+        cards = [int(c) for c in deck[:9]]
+        one = Dealer([a, b], cards, stack, sb, big_blind, 2 * i + 1, (b_label, a_label)).play()
+        two = Dealer([b, a], cards, stack, sb, big_blind, 2 * i + 2, (a_label, b_label)).play()
+        diffs[j] = (one[0] + two[1]) / 2.0
+    return diffs, vars(a.stats), vars(b.stats)
+
+
+def _merge_stats(target, parts):
+    """Sum the counters of the workers' stats dicts into the parent's stats object."""
+    for part in parts:
+        for key, value in part.items():
+            current = getattr(target, key)
+            if isinstance(current, (int, float)) and not isinstance(current, bool):
+                setattr(target, key, current + value if key != "slowest_ms" else max(current, value))
+            elif isinstance(current, dict):
+                for k, v in value.items():
+                    current[k] = current.get(k, 0) + v
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--arena-matches", type=int, default=0,
@@ -300,6 +353,9 @@ def main():
     parser.add_argument("--seed", type=int, default=0)
     parser.add_argument("--profiles", help="opponents.json for the reads (default: none, so no read fires)")
     parser.add_argument("--output")
+    parser.add_argument("--workers", type=int, default=1,
+                        help="processes to split the matches or deals across; the players are built once "
+                             "and the workers forked, so the tables are shared")
     args = parser.parse_args()
 
     rng = np.random.default_rng(args.seed)
@@ -311,6 +367,34 @@ def main():
     what = (f"{args.arena_matches:,} arena matches (10,000 chips, the arena's blind schedule)" if args.arena_matches
             else f"{args.hands:,} duplicate deals at {args.stack_bb:g}bb, blinds {sb}/{args.big_blind}")
     print(f"{args.a_label} ({args.a} {args.a_flags!r}) vs {args.b_label} ({args.b} {args.b_flags!r}): {what}", flush=True)
+
+    if args.arena_matches and args.workers > 1:
+        import multiprocessing as mp
+        started = time.perf_counter()
+        shares = [(args.arena_matches * w // args.workers, args.arena_matches * (w + 1) // args.workers) for w in range(args.workers)]
+        jobs = [(args.a_label, args.b_label, lo, hi - lo, args.seed + 100 * (w + 1)) for w, (lo, hi) in enumerate(shares)]
+        globals()["_PLAYERS"] = (a, b)
+        with mp.get_context("fork").Pool(args.workers) as pool:
+            parts = pool.map(_run_matches, jobs)
+        wins = np.concatenate([p[0] for p in parts]); hands = np.concatenate([p[1] for p in parts]); nets = np.concatenate([p[2] for p in parts])
+        _merge_stats(a.stats, [p[3] for p in parts]); _merge_stats(b.stats, [p[4] for p in parts])
+        taken = time.perf_counter() - started
+        print(f"  {args.arena_matches:,} matches on {args.workers} workers in {taken:.0f}s", flush=True)
+        p = float(wins.mean()); se = float(np.sqrt(p * (1 - p) / args.arena_matches))
+        print(f"\n{args.a_label} vs {args.b_label}: {args.a_label} wins {100 * p:.1f}% ± {100 * se:.1f} of "
+              f"{args.arena_matches:,} arena matches, {hands.mean():.1f} hands a match; "
+              f"A: {a.stats.decisions} decisions, {a.stats.misses} misses, {a.stats.companion_hits} companion, "
+              f"{a.stats.fallbacks} rule; B: {b.stats.decisions}, {b.stats.misses}, {b.stats.companion_hits}, {b.stats.fallbacks}")
+        if args.output:
+            import json
+            with open(args.output, "w") as handle:
+                json.dump({"a": {"dir": args.a, "flags": args.a_flags, "label": args.a_label},
+                           "b": {"dir": args.b, "flags": args.b_flags, "label": args.b_label},
+                           "arena_matches": args.arena_matches, "win_rate": p, "stderr": se,
+                           "hands_per_match": float(hands.mean()), "seed": args.seed, "workers": args.workers,
+                           "a_stats": vars(a.stats), "b_stats": vars(b.stats),
+                           "measured": time.strftime("%Y-%m-%d %H:%M")}, handle, indent=1, default=str)
+        return
 
     if args.arena_matches:
         wins = np.empty(args.arena_matches); hands = np.empty(args.arena_matches); nets = np.empty(args.arena_matches)
@@ -345,10 +429,26 @@ def main():
                            "measured": time.strftime("%Y-%m-%d %H:%M")}, handle, indent=1, default=str)
         return
 
+    if args.workers > 1:
+        import multiprocessing as mp
+        started = time.perf_counter()
+        shares = [(args.hands * w // args.workers, args.hands * (w + 1) // args.workers) for w in range(args.workers)]
+        jobs = [(args.a_label, args.b_label, lo, hi - lo, args.seed + 100 * (w + 1), stack, sb, args.big_blind)
+                for w, (lo, hi) in enumerate(shares)]
+        globals()["_PLAYERS"] = (a, b)
+        with mp.get_context("fork").Pool(args.workers) as pool:
+            parts = pool.map(_run_deals, jobs)
+        diffs = np.concatenate([p[0] for p in parts])
+        _merge_stats(a.stats, [p[1] for p in parts]); _merge_stats(b.stats, [p[2] for p in parts])
+        print(f"  {args.hands:,} deals on {args.workers} workers in {time.perf_counter() - started:.0f}s", flush=True)
+    else:
+        diffs = None
+
     deck = np.arange(52)
-    diffs = np.empty(args.hands)
     started = time.perf_counter()
-    for i in range(args.hands):
+    if diffs is None:
+        diffs = np.empty(args.hands)
+    for i in (range(args.hands) if args.workers <= 1 else ()):
         rng.shuffle(deck)
         cards = [int(c) for c in deck[:9]]
         first = Dealer([a, b], cards, stack, sb, args.big_blind, 2 * i + 1, (args.b_label, args.a_label)).play()

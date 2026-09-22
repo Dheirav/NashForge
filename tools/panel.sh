@@ -13,7 +13,7 @@ row="| $LABEL |"
 for kind in station nit maniac foldraise; do
   out=results/chipzen/panel/${LABEL}_vs_${kind}.json
   line=$(venv/bin/python scripts/chipzen_duel.py --a "$DIR" "--a-flags=$FLAGS" --a-label "$LABEL" --b archetype:$kind --b-label $kind \
-         --arena-matches "$N" --seed 7 --output "$out" 2>&1 | grep -E "arena matches, " | tail -1)
+         --arena-matches "$N" --seed 7 --workers ${WORKERS:-4} --output "$out" 2>&1 | grep -E "arena matches, " | tail -1)
   pct=$(echo "$line" | grep -oE "wins +[0-9.]+% ± +[0-9.]+" | sed -E 's/wins +//')
   row="$row $pct |"
 done
