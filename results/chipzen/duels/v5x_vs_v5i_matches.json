@@ -1,0 +1,97 @@
+{
+ "a": {
+  "dir": "results/cfr/ladder169l_v5x",
+  "flags": "--deep-primary --stack-cap",
+  "label": "v5x"
+ },
+ "b": {
+  "dir": "results/cfr/ladder169l_v5i",
+  "flags": "--deep-primary --stack-cap",
+  "label": "v5i"
+ },
+ "arena_matches": 5000,
+ "win_rate": 0.4568,
+ "stderr": 0.007044625753012008,
+ "hands_per_match": 43.3334,
+ "seed": 41,
+ "workers": 4,
+ "a_stats": {
+  "decisions": 593896,
+  "misses": 984,
+  "consulted": 593896,
+  "off_abstraction": 0,
+  "companion_hits": 0,
+  "river_shoves_to_companion": 0,
+  "shoves_softened": 0,
+  "bluffs_withheld": 0,
+  "shove_calls_declined": 0,
+  "river_solves": 0,
+  "blinds_opened": 0,
+  "three_bets_into_folders": 0,
+  "river_bets_believed": 0,
+  "big_bets_believed": 0,
+  "small_bets_called": 0,
+  "river_failures": 0,
+  "fallbacks": 984,
+  "collapsed_hits": 0,
+  "miss_depths": {},
+  "depths_used": {
+   "100bb": 183761,
+   "50bb": 111789,
+   "70bb": 102975,
+   "35bb": 83827,
+   "18bb": 33061,
+   "25bb": 55351,
+   "5bb": 2437,
+   "12bb": 15774,
+   "8bb": 4921
+  },
+  "actions_sent": {
+   "call": 131403,
+   "raise": 213825,
+   "check": 167231,
+   "fold": 81437
+  },
+  "slowest_ms": 443.62582999747247
+ },
+ "b_stats": {
+  "decisions": 595166,
+  "misses": 1637,
+  "consulted": 595166,
+  "off_abstraction": 0,
+  "companion_hits": 0,
+  "river_shoves_to_companion": 0,
+  "shoves_softened": 0,
+  "bluffs_withheld": 0,
+  "shove_calls_declined": 0,
+  "river_solves": 0,
+  "blinds_opened": 0,
+  "three_bets_into_folders": 0,
+  "river_bets_believed": 0,
+  "big_bets_believed": 0,
+  "small_bets_called": 0,
+  "river_failures": 0,
+  "fallbacks": 1637,
+  "collapsed_hits": 0,
+  "miss_depths": {},
+  "depths_used": {
+   "100bb": 181606,
+   "50bb": 113811,
+   "70bb": 104551,
+   "35bb": 82497,
+   "18bb": 33105,
+   "25bb": 55884,
+   "5bb": 2444,
+   "12bb": 16288,
+   "8bb": 4980
+  },
+  "actions_sent": {
+   "raise": 181475,
+   "check": 170764,
+   "fold": 92421,
+   "call": 150506
+  },
+  "slowest_ms": 419.22834201250225
+ },
+ "measured": "2026-09-22 22:18"
+}

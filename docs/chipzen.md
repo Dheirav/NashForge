@@ -313,6 +313,30 @@ older than the stamping are assigned by time from `results/chipzen/epochs.json`.
 Chips per hand is the number to compare versions on; a match win rate over
 twenty matches has an error of about ±10 points.
 
+## Before a set plays: gate, replay, sweep, burst
+
+Three of the four existed by season 6. The sweep was added on 22 September
+after a season 7 fixture was lost to a single node: v5f's 70bb rung held 27
+percent of nine-ten suited on an all-in facing a two-blind open, and 98
+percent of pocket jacks facing a pot-sized one, so with 77 big blinds it put
+the stack in and lost to king-queen. Three sets sharing the same betting tree
+held 0 to 1 percent on that line, so it was that solve's convergence rather
+than the design. The gate and the replay could not see it: both judge a set by
+what it scores over tens of thousands of hands, and this is one node that is
+wrong a quarter of the time in a spot that arises once a match.
+
+    tools/xtree-gate.sh <pickle>                       # not broken
+    scripts/chipzen_replay.py --ladder-dir <dir>       # covers the hands we have seen
+    tools/strategy-sweep.sh <dir>                      # does nothing unexplainable
+    burst, then scripts/chipzen_decompose.py           # survives real opponents
+
+The sweep lists, per rung, the nodes where a hand class puts heavy weight on
+an all-in although a sized raise is legal, preflop first, and how many entries
+are still uniform, which is how undertrained the rung is. A shove is not wrong
+by itself; an unexplainable one is. For comparison at 70bb facing an open:
+v5f flagged jacks at 98 percent and eights at 93, v5i flagged ace-king suited
+at 97, v5x four nodes, v5d six hand classes at 57 percent or less.
+
 ## What stays out of the repository
 
 The code is public under PolyForm Noncommercial from 22 September 2026; three things are

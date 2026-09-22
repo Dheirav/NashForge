@@ -144,3 +144,11 @@ first match 22 Sep 05:35 IST. **21 matches, 16 won (76%), 1,461 hands, net +110,
 | mr_hide | 1 | 1 | 31 | +10,000 | +323 |
 | RockyPoker | 1 | 1 | 49 | +10,000 | +204 |
 
+## bb02f9a | results/cfr/ladder169l_v5f | deep-primary | v5f: v5d with tapered (4,2,1) deep rungs at 50/70/100bb, 20M warm, stack cap on
+
+first match 22 Sep 23:01 IST. **1 matches, 0 won (0%), 14 hands, net -10,000 chips, -714 ± 545 chips/hand**, showdowns 0 won / 2 lost.
+
+| opponent | matches | won | hands | net | chips/hand |
+|---|---|---|---|---|---|
+| lil-bot-v2 | 1 | 0 | 14 | -10,000 | -714 |
+
