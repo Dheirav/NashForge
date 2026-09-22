@@ -100,6 +100,10 @@ def parse_args():
                         help="reuse the fitted abstraction (and its bucket tables) of an existing "
                              "solve instead of fitting one, so a ladder shares one clustering and one "
                              "set of tables; the stack and tree may differ, the card classes do not")
+    parser.add_argument("--opponent-archetype", choices=["station", "nit", "maniac", "foldraise"],
+                        help="native only: train a best response to this scripted field shape "
+                             "(chipzen/archetypes.py's calibrated parameters) instead of an equilibrium; "
+                             "the result is an exploiter, played only behind a confident read")
     parser.add_argument("--table-threads", type=int, default=None,
                         help="threads for building the bucket tables (default: --threads); the build is "
                              "embarrassingly parallel and the tables are built once")
@@ -231,6 +235,10 @@ def _train_native(args, abstraction, projected):
         texture=bool(getattr(abstraction, "texture", False)),
         rule=args.update_rule, **hist)
     solver.set_average_from(int(args.average_from * args.iterations))
+    if args.opponent_archetype:
+        from chipzen.archetypes import PARAMS
+        solver.set_opponent_archetype({k: float(v) for k, v in PARAMS[args.opponent_archetype].items()}, args.big_blind)
+        print(f"best response: the opponent plays the {args.opponent_archetype} archetype", flush=True)
     solver.set_common_random_numbers(bool(args.common_random_numbers))
     solver.set_exact_terminals(bool(args.exact_terminals))
     solver.set_current_when_empty(bool(args.current_when_empty))

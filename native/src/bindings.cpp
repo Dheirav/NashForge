@@ -9,6 +9,7 @@
 #include "equity.hpp"
 #include "bucket_table.hpp"
 #include "river.hpp"
+#include "archetype.hpp"
 #include "nolimit.hpp"
 #include "mccfr.hpp"
 #include "kuhn.hpp"
@@ -293,6 +294,25 @@ NB_MODULE(pokerbot_native, m) {
              nb::arg("on"), "One deal per iteration shared across every branch (variance reduction); off by default.")
         .def("set_exact_terminals", [](MCCFR<NoLimitGame>& s, bool on) { s.game().set_exact_terminals(on); },
              nb::arg("on"), "Score flop and turn all-ins over every runout instead of one sample; off by default.")
+        .def("set_opponent_archetype", [](MCCFR<NoLimitGame>& s, const std::map<std::string, double>& params, int big_blind) {
+            ArchetypeParams p;
+            const std::map<std::string, double*> fields = {
+                {"open_eq", &p.open_eq}, {"limp_eq", &p.limp_eq}, {"threebet_eq", &p.threebet_eq},
+                {"fold_margin", &p.fold_margin}, {"raise_eq", &p.raise_eq}, {"raise_p", &p.raise_p},
+                {"bluff_p", &p.bluff_p}, {"call_p", &p.call_p}, {"defend_eq", &p.defend_eq}, {"defend3_eq", &p.defend3_eq}};
+            for (const auto& [name, value] : params) {
+                auto it = fields.find(name);
+                if (it == fields.end()) throw std::invalid_argument("set_opponent_archetype: unknown parameter " + name);
+                *it->second = value;
+            }
+            auto opponent = std::make_shared<ScriptedOpponent>(p, big_blind);
+            s.set_opponent_policy([opponent](const NoLimitGame::State& state, int player,
+                                             const std::vector<int8_t>& legal, Rng& rng) {
+                return opponent->act(state.bet, player, legal, rng);
+            });
+        }, nb::arg("params"), nb::arg("big_blind"),
+           "Train a best response: the opponent's nodes play this scripted policy (archetype.hpp, the "
+           "parameter names of chipzen/archetypes.py) instead of the table.")
         .def("set_current_when_empty", &MCCFR<NoLimitGame>::set_current_when_empty, nb::arg("on"),
              "Export the current strategy where the average is empty, instead of a uniform; off by default.")
         .def("set_average_from", &MCCFR<NoLimitGame>::set_average_from, nb::arg("iteration"),

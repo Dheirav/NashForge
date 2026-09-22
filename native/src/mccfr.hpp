@@ -322,6 +322,16 @@ public:
     /// final iteration in search for the same reason. Off by default.
     void set_current_when_empty(bool on) { current_when_empty_ = on; }
 
+    /// A fixed policy for the opponent's nodes (archetype.hpp): given the
+    /// state, the player to act and the legal actions, the action it takes.
+    /// With one installed the traversal learns a best response to it rather
+    /// than an equilibrium, and the opponent's nodes are neither updated nor
+    /// created. Both seats learn, since each iteration traverses each seat
+    /// as "us" against the policy in the other.
+    using OpponentPolicy = std::function<int8_t(const typename Game::State&, int, const std::vector<int8_t>&, Rng&)>;
+    void set_opponent_policy(OpponentPolicy policy) { opponent_policy_ = std::move(policy); }
+    bool has_opponent_policy() const { return static_cast<bool>(opponent_policy_); }
+
     std::vector<double> strategy_for_export(const InfoSetNode& node) const {
         if (current_when_empty_) {
             double total = 0.0;
@@ -438,6 +448,12 @@ private:
 
         const int player = game.current_player(state);
         const std::vector<int8_t> actions = game.legal_actions(state);
+        if (player != traverser && opponent_policy_) {
+            // A scripted opponent: its move comes from the policy, and no node
+            // is touched, so the table holds only what "we" learned.
+            const int8_t chosen = opponent_policy_(state, player, actions, *ctx.rng);
+            return walk(ctx, game.next_state(state, chosen), traverser, iteration);
+        }
         const Key key = game.information_set(state, player);
         InfoSetNode& node = node_for(key, static_cast<int>(actions.size()));
 
@@ -513,6 +529,7 @@ private:
     }
 
     Game game_;
+    OpponentPolicy opponent_policy_;
     UpdateRule rule_;
     Rng rng_;
     uint64_t seed_;
