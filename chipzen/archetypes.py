@@ -35,7 +35,7 @@ import numpy as np
 
 from chipzen.bridge import parse_cards
 
-ARCHETYPES = ("station", "nit", "maniac", "foldraise")
+ARCHETYPES = ("station", "nit", "maniac", "foldraise", "hoops")
 
 #: Each shape is a parameter row; `scripts/chipzen_calibrate.py` measures the
 #: row with the scout's own statistics beside the bot it stands for, and the
@@ -55,6 +55,13 @@ PARAMS = {
                      raise_p=0.6, bluff_p=0.15, call_p=0.50, defend_eq=0.45, defend3_eq=0.78),
     "foldraise": dict(open_eq=0.54, limp_eq=0.68, threebet_eq=0.58, fold_margin=0.20, raise_eq=0.55,
                       raise_p=0.7, bluff_p=0.05, call_p=0.30, defend_eq=0.62, defend3_eq=0.58),
+    # hoops: the queue's one bot with a better record than ours (+18 bb/100 in
+    # the shared pool to our +16, 3 of 11 against us in September). Opens 42%
+    # of hands at one to two times the pot, folds to a 3-bet half the time,
+    # then calls 86% of the time postflop and rarely raises; showdown 13%,
+    # won 42%. It takes pots before showdown.
+    "hoops":    dict(open_eq=0.48, limp_eq=0.46, threebet_eq=0.58, fold_margin=0.09, raise_eq=0.80,
+                     raise_p=0.4, bluff_p=0.05, call_p=0.80, defend_eq=0.45, defend3_eq=0.56, open_frac=1.0),
 }
 
 
@@ -137,7 +144,7 @@ class Archetype:
             if raises == 0:
                 # Unopened, or the big blind facing a limp: open, limp, or fold.
                 if can_raise and e >= p["open_eq"]:
-                    return self._raise_to(state, 0.5)
+                    return self._raise_to(state, p.get("open_frac", 0.5))
                 if e >= p["limp_eq"] or not facing:
                     return self._passive(valid)
                 return self._fold(valid)

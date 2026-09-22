@@ -120,7 +120,7 @@ def test_the_field_archetypes_read_even_against_themselves_and_carry_every_param
     keys = {"open_eq", "limp_eq", "threebet_eq", "fold_margin", "raise_eq", "raise_p", "bluff_p",
             "call_p", "defend_eq", "defend3_eq"}
     for kind in ARCHETYPES:
-        assert set(PARAMS[kind]) == keys, kind
+        assert keys <= set(PARAMS[kind]) <= keys | {"open_frac"}, kind
     rng = np.random.default_rng(0)
     deck = np.arange(52)
     for kind in ("station", "maniac"):

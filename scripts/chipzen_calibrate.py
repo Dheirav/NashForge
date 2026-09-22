@@ -26,7 +26,7 @@ from scripts.chipzen_duel import ARENA_STACK, Dealer, arena_big_blind, build  # 
 from scripts.chipzen_scout import profile, summarise  # noqa: E402
 
 ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
-TARGETS = {"station": "Fold-ver-3", "nit": "Shadow", "maniac": "v003", "foldraise": "Blueprint"}
+TARGETS = {"station": "Fold-ver-3", "nit": "Shadow", "maniac": "v003", "foldraise": "Blueprint", "hoops": "hoops"}
 COLUMNS = ("vpip", "pfr", "three_bet", "fold_to_three_bet", "fold_to_bet", "call_share_of_answers",
            "showdown_rate", "showdown_win", "bb_fold_to_open")
 
