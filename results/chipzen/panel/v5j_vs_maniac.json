@@ -1,0 +1,66 @@
+{
+ "a": {
+  "dir": "results/cfr/ladder169l_v5j",
+  "flags": "--deep-primary --stack-cap",
+  "label": "v5j"
+ },
+ "b": {
+  "dir": "archetype:maniac",
+  "flags": "",
+  "label": "maniac"
+ },
+ "arena_matches": 1000,
+ "win_rate": 0.606,
+ "stderr": 0.015451990163082553,
+ "hands_per_match": 13.22,
+ "seed": 7,
+ "a_stats": {
+  "decisions": 30694,
+  "misses": 452,
+  "consulted": 30902,
+  "off_abstraction": 0,
+  "companion_hits": 0,
+  "river_shoves_to_companion": 0,
+  "shoves_softened": 0,
+  "bluffs_withheld": 0,
+  "shove_calls_declined": 0,
+  "river_solves": 0,
+  "blinds_opened": 0,
+  "three_bets_into_folders": 0,
+  "river_bets_believed": 0,
+  "big_bets_believed": 0,
+  "small_bets_called": 0,
+  "river_failures": 0,
+  "fallbacks": 244,
+  "collapsed_hits": 208,
+  "miss_depths": {
+   "2": 618,
+   "1": 11
+  },
+  "depths_used": {
+   "100bb": 12676,
+   "70bb": 8012,
+   "35bb": 2238,
+   "50bb": 4852,
+   "18bb": 784,
+   "25bb": 1401,
+   "5bb": 184,
+   "8bb": 154,
+   "12bb": 393
+  },
+  "actions_sent": {
+   "raise": 7974,
+   "fold": 10193,
+   "check": 4616,
+   "call": 7911
+  },
+  "slowest_ms": 350.1744749955833
+ },
+ "b_stats": {
+  "decisions": 24256,
+  "misses": 0,
+  "companion_hits": 0,
+  "fallbacks": 0
+ },
+ "measured": "2026-09-22 11:38"
+}

@@ -134,3 +134,13 @@ first match 21 Sep 13:13 IST. **20 matches, 12 won (60%), 748 hands, net +40,000
 | hoops | 7 | 3 | 307 | -10,000 | -33 |
 | mr_hide | 3 | 2 | 122 | +10,000 | +82 |
 
+## 5082ff8 | results/cfr/ladder169l_v5f | deep-primary | v5f: v5d with tapered (4,2,1) deep rungs at 50/70/100bb, 20M warm, stack cap on
+
+first match 22 Sep 05:35 IST. **21 matches, 16 won (76%), 1,461 hands, net +110,000 chips, +75 ± 29 chips/hand**, showdowns 63 won / 54 lost.
+
+| opponent | matches | won | hands | net | chips/hand |
+|---|---|---|---|---|---|
+| Blueprint | 19 | 14 | 1381 | +90,000 | +65 |
+| mr_hide | 1 | 1 | 31 | +10,000 | +323 |
+| RockyPoker | 1 | 1 | 49 | +10,000 | +204 |
+
