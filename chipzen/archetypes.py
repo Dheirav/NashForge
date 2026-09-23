@@ -46,7 +46,7 @@ import numpy as np
 from chipzen.bridge import parse_cards
 
 ARCHETYPES = ("station", "nit", "maniac", "foldraise", "hoops",
-              "sticky", "nofold3bet", "folder", "wildpassive", "meek")
+              "sticky", "nofold3bet", "folder", "wildpassive", "meek", "bully")
 
 #: Each shape is a parameter row; `scripts/chipzen_calibrate.py` measures the
 #: row with the scout's own statistics beside the bot it stands for, and the
@@ -130,6 +130,28 @@ PARAMS = {
     # passive-or-aggressive had an empty cell and this fills it.
     "meek":     dict(open_eq=0.44, limp_eq=0.40, threebet_eq=0.82, fold_margin=0.12, raise_eq=0.85,
                      raise_p=0.25, bluff_p=0.0, call_p=0.85, defend_eq=0.42, defend3_eq=0.46),
+
+    # Shadow, which plays us on Friday and which we have never played: the
+    # season 6 fixture was the walkover, so all 613 observations are scouted.
+    # `scripts/opponent_coverage.py` found it on 24 September by asking which
+    # statistics vary across the field and have no read, and it is the opposite
+    # extreme from `meek`:
+    #
+    #   first to act    bets 74% of flops, 84% of turns, 86% of rivers
+    #   facing a bet    RAISES 53% on the flop, against 2 to 36% for the field
+    #   river bets      48, of which 23 were bluffs (48%)
+    #   big bets        260, of which 79 were air (30%)
+    #   but            folds 63% to our open, 58% to our three-bet, 51% overall
+    #
+    # It bets and raises constantly and folds to pressure, which is the one
+    # shape where calling down light and re-raising both pay. Not one of our
+    # seven reads fires on it: 63% is under folds_blind's 70%, 58% is under
+    # folds_to_three_bet's 75%, it bluffs far too much for never_bluffs and
+    # folds far too much for never_folds. Our "maniac" is aggressive AND
+    # sticky (fold_margin 0.02); this one gives up.
+    "bully":    dict(open_eq=0.47, limp_eq=0.60, threebet_eq=0.56, fold_margin=0.16, raise_eq=0.45,
+                     raise_p=0.80, bluff_p=0.45, call_p=0.25, defend_eq=0.52, defend3_eq=0.60,
+                     open_frac=1.0),
 }
 
 
