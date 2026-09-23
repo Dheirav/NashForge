@@ -46,7 +46,7 @@ import numpy as np
 from chipzen.bridge import parse_cards
 
 ARCHETYPES = ("station", "nit", "maniac", "foldraise", "hoops",
-              "sticky", "nofold3bet", "folder", "wildpassive")
+              "sticky", "nofold3bet", "folder", "wildpassive", "meek")
 
 #: Each shape is a parameter row; `scripts/chipzen_calibrate.py` measures the
 #: row with the scout's own statistics beside the bot it stands for, and the
@@ -109,6 +109,27 @@ PARAMS = {
     # after it; our "maniac" is aggressive throughout and never plays this.
     "wildpassive": dict(open_eq=0.36, limp_eq=0.20, threebet_eq=0.40, fold_margin=-0.25, raise_eq=0.82,
                         raise_p=0.3, bluff_p=0.02, call_p=0.95, defend_eq=0.20, defend3_eq=0.24, open_frac=1.0),
+
+    # wsp, which beat us on 23 September and is the first opponent of its kind
+    # the field has produced. It is not a rock: it opens 76% of hands. What
+    # defines it is that it never re-raises anything, at any level, and folds
+    # heavily once it is bet into. Its own record, by node:
+    #
+    #   first to act preflop   raises 76%, folds 24%        (n=1,113)
+    #   facing our open        calls 55%, folds 43%, RAISES 1%   (n=392)
+    #   facing our three-bet   calls 60%, folds 40%, RAISES 0%   (n=100)
+    #   flop first to act      checks 76%, bets 24%         (n=634)
+    #   facing a flop bet      folds 57%, calls 35%, raises 8%   (n=166)
+    #   river bets             298, of which bluffs 0
+    #
+    # Every other shape in this table raises 9 to 30% of the time it faces a
+    # bet and three-bets 4 to 40% of our opens. This one is at 3% and 1%, three
+    # times outside the field's range on both, which is why nothing we had
+    # could read it: the whole panel varied in how LOOSE a bot is and never in
+    # how OFTEN it raises. The two-by-two of loose-or-tight against
+    # passive-or-aggressive had an empty cell and this fills it.
+    "meek":     dict(open_eq=0.44, limp_eq=0.40, threebet_eq=0.82, fold_margin=0.12, raise_eq=0.85,
+                     raise_p=0.25, bluff_p=0.0, call_p=0.85, defend_eq=0.42, defend3_eq=0.46),
 }
 
 

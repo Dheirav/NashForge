@@ -563,3 +563,50 @@ def test_the_solved_ranges_price_the_call_against_the_range_that_shoved():
     assert wide > tight
     # Deeper than the table reaches, and it declines to answer.
     assert ranges.calls(aces, 60.0, 500, 1100, reraise=False) is None
+
+
+def _profiles_with(tmp_path, **row):
+    from chipzen.opponents import Profiles
+    p = Profiles(str(tmp_path / "opp.json"), scout_reads=True)
+    p.rows["villain"] = row
+    return p
+
+
+def test_a_re_raise_from_a_bot_that_never_re_raises_is_not_four_bet(tmp_path, player):
+    """
+    23 September, wsp: 5 re-raises in 392 chances, so a re-raise is kings. We
+    four-bet all in with ace-king at 53bb and lost the fixture. At a price of
+    0.27 the hand continues for 510 instead of 12,065; beyond the threshold it
+    gives up. Every other profile on file re-raises 4 to 40% of the time, so
+    this must not fire against them.
+    """
+    player.profiles = _profiles_with(tmp_path, bets_faced=400, hands=400, folds=170, calls=217, raises=5,
+                                     by_history={"preflop:Ur": {"call": 217, "fold": 170, "raise": 5}})
+    player.opponent = "villain"
+    try:
+        cheap = {"hand_number": 29, "phase": "preflop", "board": [], "your_hole_cards": ["Ac", "Ks"],
+                 "pot": 1410, "your_stack": 12065, "opponent_stacks": [7935], "to_call": 510,
+                 "min_raise": 1020, "max_raise": 12065,
+                 "action_history": blinds() + [entry(0, "raise", 450), entry(1, "raise", 960)]}
+        outs = [player.decide(cheap, ["fold", "call", "raise"], 0) for _ in range(12)]
+        assert all(o["action"] != "raise" for o in outs), "the stack must not go in"
+        assert any(o["record"]["adjusted"] == "their re-raise is value" for o in outs)
+        # The same node against a bot that re-raises normally is left alone.
+        player.profiles.rows["villain"]["by_history"]["preflop:Ur"] = {"call": 200, "fold": 150, "raise": 50}
+        outs = [player.decide(cheap, ["fold", "call", "raise"], 0) for _ in range(12)]
+        assert all(o["record"]["adjusted"] != "their re-raise is value" for o in outs)
+    finally:
+        player.profiles = None
+        player.opponent = None
+
+
+def test_the_honest_river_extension_is_a_fraction_of_the_scale_not_a_step():
+    """
+    v5i's deep rungs carry 20 strength classes and its short rungs 6, so an
+    absolute "one more class" is two different hands depending on which rung
+    answered. On 23 September's audit the absolute form folded the nut flush
+    (class 18 of 19) while doing nothing useful on a six-class rung.
+    """
+    fraction = ArenaPlayer.HONEST_RIVER_CLASS
+    assert fraction * 5 >= 4, "top pair on a six-class rung must be reachable"
+    assert fraction * 19 < 18, "the top two of twenty must not be"
