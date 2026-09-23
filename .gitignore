@@ -131,6 +131,11 @@ results/chipzen/opponents.json
 # something to publish next to the code. Its history to that date is public.
 NEXT.md
 
+# The same rule, for anything else that inventories the bot's weaknesses or
+# carries an opponent's reads: the council of 23 September is a list of what
+# our sets cannot do, beside what each queue bot folds to.
+docs/council-*.md
+
 # Base papers for the course presentation: other people's PDFs, kept locally only.
 docs/base-papers/
 
