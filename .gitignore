@@ -15,6 +15,10 @@ build/
 
 # Virtual Environment
 venv/
+# and the bare name: a `venv` SYMLINK is not matched by `venv/`, and on 24
+# September a cherry-pick that carried one from a worktree replaced the real
+# virtualenv with a link to itself and deleted it.
+venv
 env/
 ENV/
 .venv
