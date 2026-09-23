@@ -115,7 +115,8 @@ async def _main(args, config):
     player = ArenaPlayer(ladder, rng, companions=companions, purify=args.purify,
                          river=args.river_solve, river_budget_s=args.river_budget,
                          river_shove_companion=args.river_shove_companion,
-                         stack_cap=args.stack_cap)
+                         stack_cap=args.stack_cap,
+                         short_solution=not args.no_short_solution)
     player.profiles = Profiles(os.path.join(ROOT, "results", "chipzen", "opponents.json"),
                                sequential=args.sequential_triggers, bankroll=args.exploit_bankroll,
                                scout_reads=args.scout_reads) \
@@ -311,6 +312,9 @@ def main():
     parser.add_argument("--river-shove-companion", action="store_true",
                         help="facing an all-in on the river, take the cap-2 companion's answer over the "
                              "one-raise primary's (its river calling range comes from a game without re-raises)")
+    parser.add_argument("--no-short-solution", action="store_true",
+                        help="answer a short-stack preflop all-in with the old rule instead of the "
+                             "exact push-fold solution (chipzen/pushfold.py); the control arm")
     parser.add_argument("--deep-primary", action="store_true",
                         help="play the cap2_*bb.pkl solvers as the main solver at their depths")
     parser.add_argument("--ladder-dir", help="use this directory's nolimit_*bb.pkl, cap2_*bb.pkl "

@@ -48,6 +48,7 @@ from cfr.flat import load_strategy
 from chipzen.bridge import Hand, cards, legal_mask, replay, to_chipzen
 from cfr.river import decide_river
 from chipzen.opponents import Profiles
+from chipzen.pushfold import ShortStackRanges
 from evaluation.benchmark import cfr_agent
 
 
@@ -82,6 +83,7 @@ class Stats:
     small_bets_called: int = 0
     river_failures: int = 0
     fallbacks: int = 0
+    short_stack_answers: int = 0   # a preflop all-in answered by the exact solution
     collapsed_hits: int = 0            # answered on a re-read history after a pseudo all-in
     miss_depths: Dict[int, int] = field(default_factory=dict)
     depths_used: Dict[str, int] = field(default_factory=dict)
@@ -189,7 +191,8 @@ class ArenaPlayer:
     def __init__(self, paths: Sequence[str], rng: Optional[np.random.Generator] = None,
                  companions: Sequence[str] = (), purify: str = "none",
                  river: bool = False, river_budget_s: float = 8.0,
-                 river_shove_companion: bool = False, stack_cap: bool = False):
+                 river_shove_companion: bool = False, stack_cap: bool = False,
+                 short_solution: bool = True):
         self.rng = rng if rng is not None else np.random.default_rng()
         self.purify = purify
         #: Honour the trees' stack cap in every lookup (see `_shim`). Off by
@@ -214,6 +217,12 @@ class ArenaPlayer:
             raise ValueError("an empty ladder cannot play")
         self.companions = sorted((load_solver(p, self.rng, purify, stack_cap) for p in companions),
                                  key=lambda s: s.depth_bb)
+        #: The exact shove-or-fold solution, for preflop all-ins at short
+        #: depths where the rule was provably wrong (chipzen/pushfold.py).
+        #: None if the table has not been built or the caller turned it off,
+        #: and then the rule stands: that is the arm the change is measured
+        #: against, and the switch back if it ever misbehaves in a match.
+        self.short_ranges = ShortStackRanges.load() if short_solution else None
         self.stats = Stats()
         self.probe: List = []
         #: Set by the client at match start; read by the one adjustment below.
@@ -235,6 +244,13 @@ class ArenaPlayer:
     #: Pot odds beyond which a fold to an all-in opponent is never sent: the
     #: outstanding call is at most a tenth of what is already in the pot.
     POT_ODDS_FLOOR = 10
+    #: The exact push-fold solution answers a preflop all-in at this effective
+    #: stack or shorter. Fourteen blinds is where the solved game stops being
+    #: the whole hand: deeper than that a shove is a real decision with a flop
+    #: behind it, and the solution's assumption that the hand ends preflop is
+    #: the wrong model. The table itself is solved to 20bb so the boundary can
+    #: move on a measurement rather than on a rebuild.
+    SHORT_STACK_MAX_BB = 14.0
     #: The three-bet-into-a-folder read fires only this deep, so a four-bet
     #: can be folded to without having committed the stack.
     THREE_BET_MIN_BB = 30.0
@@ -296,6 +312,7 @@ class ArenaPlayer:
         choice = solver.agent(_shim(hole, board, to_call, int(state.get("your_stack") or 0)), 0, mask, node.history)
         missed = solver.misses[0] > before[0]
         fell_back = False
+        short_stack = None
         companion_used = None
         river_shove = None
         if self.river_shove_companion and not missed and len(board) == 5 and to_call > 0 \
@@ -353,7 +370,13 @@ class ArenaPlayer:
                         break
             if companion_used is None:
                 fell_back = True
-                choice = self._fallback(solver, hole, board, arena, state)
+                answer = self._short_stack_answer(hole, board, hand.effective_bb, arena, state, seat)
+                if answer is None:
+                    choice = self._fallback(solver, hole, board, arena, state)
+                else:
+                    choice = answer
+                    short_stack = "short-stack solution"
+                    self.stats.short_stack_answers += 1
         river = None
         if self.river and len(board) == 5:
             try:
@@ -371,7 +394,7 @@ class ArenaPlayer:
             except Exception as error:          # the blueprint's answer stands
                 river = {"error": f"{type(error).__name__}: {error}"[:200]}
                 self.stats.river_failures += 1
-        adjusted = river_shove
+        adjusted = river_shove or short_stack
         if self.profiles is not None and choice == FOLD and not board and node.history == "" \
                 and arena[RAISE_HALF] and self.profiles.folds_blind(self.opponent):
             # First to act preflop against a big blind that folds to most
@@ -505,6 +528,37 @@ class ArenaPlayer:
     @staticmethod
     def _top(solver: Solver) -> int:
         return int(getattr(solver.abstraction, "postflop_buckets", 6)) - 1
+
+    def _short_stack_answer(self, hole, board, effective_bb: float, mask, state, seat: int):
+        """
+        A preflop all-in at a short stack, answered exactly rather than by the rule.
+
+        Only this spot, because only here is the rule provably wrong: it folds
+        to any bet of the pot or more it has no read on, which after our own
+        raise at eight blinds folded 45% of the hands that should call, 0.69
+        big blinds each (23 September, `scripts/push_fold_cost.py` and the duel
+        against exact play). Returns None whenever the solution does not apply,
+        and then `fallback_choice` answers as before.
+
+        The range that shoved is read from our own history: over a raise of
+        ours it is the solution's calling range, which is the tighter of the
+        two, and an open shove is priced against its shoving range.
+        """
+        if self.short_ranges is None or board or effective_bb > self.SHORT_STACK_MAX_BB:
+            return None
+        to_call = int(state.get("to_call") or 0)
+        opponent_stack = int((state.get("opponent_stacks") or [0])[0])
+        all_in = to_call > 0 and (opponent_stack <= 0 or to_call >= int(state.get("your_stack") or 0))
+        if not all_in or not mask[FOLD] or not mask[CHECK_CALL]:
+            return None
+        raised = any(a.get("seat") == seat and a.get("action") == "raise"
+                     and a.get("phase") == "preflop"
+                     for a in state.get("action_history") or [])
+        calls = self.short_ranges.calls(hole, effective_bb, to_call,
+                                        int(state.get("pot") or 0), reraise=raised)
+        if calls is None:
+            return None
+        return CHECK_CALL if calls else FOLD
 
     def _fallback(self, solver: Solver, hole, board, mask, state) -> int:
         """A policy for a node the strategy never stored; see `fallback_choice`."""

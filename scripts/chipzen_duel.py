@@ -64,6 +64,11 @@ def build(ladder_dir: str, flags: str, label: str, rng: np.random.Generator,
     bot, so a set can be measured against the field's mistakes and not only
     against our own solver.
     """
+    if ladder_dir == "pushfold":
+        from chipzen.pushfold_player import PushFoldPlayer
+        player = PushFoldPlayer(rng)
+        player.label = label
+        return player
     if ladder_dir.startswith("archetype:"):
         from chipzen.archetypes import build_archetype
         player = build_archetype(ladder_dir.split(":", 1)[1], rng)
@@ -83,6 +88,7 @@ def build(ladder_dir: str, flags: str, label: str, rng: np.random.Generator,
     player = ArenaPlayer(ladder, rng, companions=companions,
                          river_shove_companion="--river-shove-companion" in flags,
                          stack_cap="--stack-cap" in flags,
+                         short_solution="--no-short-solution" not in flags,
                          river="--river-solve" in flags)
     if profiles_path:
         player.profiles = Profiles(profiles_path, sequential="--sequential-triggers" in flags,
@@ -353,7 +359,7 @@ def main():
     parser.add_argument("--a", required=True, help="ladder directory for A")
     parser.add_argument("--a-flags", default="", help='runner flags for A, e.g. "--deep-primary"')
     parser.add_argument("--a-label", default="A")
-    parser.add_argument("--b", required=True, help="ladder directory for B, or archetype:{station,nit,maniac,foldraise}")
+    parser.add_argument("--b", required=True, help="ladder directory for B, archetype:{station,nit,maniac,foldraise,hoops,...}, or pushfold")
     parser.add_argument("--b-flags", default="")
     parser.add_argument("--b-label", default="B")
     parser.add_argument("--hands", type=int, default=2000, help="duplicate deals (each played twice)")

@@ -507,3 +507,59 @@ def test_a_flop_after_a_pseudo_all_in_is_answered_on_the_re_read_history(player_
     assert not out["record"]["fallback"], out["record"]
     assert str(out["record"]["companion"]).startswith("collapsed:"), out["record"]
     assert player_with_companion.stats.collapsed_hits == 1
+
+
+def short_shove(hole):
+    """8bb effective: we raise to 300 of an 800 stack, the big blind shoves over it."""
+    return {"hand_number": 12, "phase": "preflop", "board": [], "your_hole_cards": hole,
+            "pot": 1100, "your_stack": 500, "opponent_stacks": [0], "to_call": 500,
+            "min_raise": 0, "max_raise": 0,
+            "action_history": blinds() + [entry(0, "raise", 300), entry(1, "raise", 800)]}
+
+
+def test_a_short_stack_all_in_is_answered_by_the_solution_not_the_rule(player):
+    """
+    The rule folds to any bet of the pot or more it has no read on, which is
+    right at 100bb and wrong here: we raised first, so 300 of the 800 is
+    already in and the call is 500 to win 1,600. Against the solved re-shoving
+    range that is a call with king-six and a fold with seven-deuce, and the
+    rule folded both. 23 September: 1,139 hands of a duel against exact play
+    went through this node, -13.6 chips a hand.
+    """
+    called = player.decide(short_shove(["Kh", "6d"]), ["fold", "call"], 0)
+    folded = player.decide(short_shove(["7h", "2d"]), ["fold", "call"], 0)
+    for out in (called, folded):
+        assert out["record"]["effective_bb"] <= ArenaPlayer.SHORT_STACK_MAX_BB
+        assert out["record"]["adjusted"] == "short-stack solution"
+    assert called["action"] == "call"
+    assert folded["action"] == "fold"
+
+
+def test_the_solution_is_not_consulted_deep_or_after_the_flop(player):
+    deep = short_shove(["Kh", "6d"])
+    deep.update(pot=11000, your_stack=5000, to_call=5000,
+                action_history=blinds() + [entry(0, "raise", 3000), entry(1, "raise", 8000)])
+    flop = short_shove(["Kh", "6d"])
+    flop.update(phase="flop", board=["Qs", "7h", "3d"])
+    for state in (deep, flop):
+        out = player.decide(state, ["fold", "call"], 0)
+        assert out["record"]["adjusted"] != "short-stack solution"
+
+
+def test_the_solved_ranges_price_the_call_against_the_range_that_shoved():
+    from chipzen.pushfold import ShortStackRanges
+    from engine.cards import Card
+    ranges = ShortStackRanges.load()
+    assert ranges is not None, "run scripts/push_fold_table.py"
+    aces = [Card("A", "s"), Card("A", "h")]
+    trash = [Card("7", "s"), Card("2", "h")]
+    # Aces call at any price; seven-deuce at none of them.
+    assert ranges.calls(aces, 8.0, 500, 1100, reraise=True) is True
+    assert ranges.calls(trash, 8.0, 500, 1100, reraise=True) is False
+    # An open shove is a wider range than a re-shove, so the same hand can call
+    # the first and fold the second at the same price.
+    wide = ranges.equity(ranges.class_of([Card("K", "s"), Card("6", "h")]), ranges.shove[ranges._row(8.0)])
+    tight = ranges.equity(ranges.class_of([Card("K", "s"), Card("6", "h")]), ranges.call[ranges._row(8.0)])
+    assert wide > tight
+    # Deeper than the table reaches, and it declines to answer.
+    assert ranges.calls(aces, 60.0, 500, 1100, reraise=False) is None
