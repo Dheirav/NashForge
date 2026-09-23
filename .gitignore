@@ -135,6 +135,7 @@ NEXT.md
 # carries an opponent's reads: the council of 23 September is a list of what
 # our sets cannot do, beside what each queue bot folds to.
 docs/council-*.md
+docs/models-*.md
 
 # Base papers for the course presentation: other people's PDFs, kept locally only.
 docs/base-papers/
