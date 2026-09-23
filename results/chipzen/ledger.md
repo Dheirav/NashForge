@@ -152,3 +152,21 @@ first match 22 Sep 23:01 IST. **1 matches, 0 won (0%), 14 hands, net -10,000 chi
 |---|---|---|---|---|---|
 | lil-bot-v2 | 1 | 0 | 14 | -10,000 | -714 |
 
+## ce6ded5 | results/cfr/ladder169l_v5c | deep-primary | v5d: cap-2 primary at every depth, 20M warm-started rungs, stack cap on
+
+first match 23 Sep 01:00 IST. **1 matches, 1 won (100%), 7 hands, net +10,000 chips, +1429 ± 1239 chips/hand**, showdowns 2 won / 0 lost.
+
+| opponent | matches | won | hands | net | chips/hand |
+|---|---|---|---|---|---|
+| RiverReasonBot | 1 | 1 | 7 | +10,000 | +1429 |
+
+## ce6ded5+ | results/cfr/ladder169l_v5i | deep-primary | v5i: v5f with 20-class histogram rungs at 50/70/100bb, 60M, stack cap on
+
+first match 23 Sep 05:35 IST. **20 matches, 15 won (75%), 1,130 hands, net +100,000 chips, +88 ± 37 chips/hand**, showdowns 54 won / 39 lost.
+
+| opponent | matches | won | hands | net | chips/hand |
+|---|---|---|---|---|---|
+| Blueprint | 16 | 13 | 1018 | +100,000 | +98 |
+| r0ckGarden | 3 | 1 | 74 | -10,000 | -135 |
+| hoops | 1 | 1 | 38 | +10,000 | +263 |
+
