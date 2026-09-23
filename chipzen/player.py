@@ -156,8 +156,11 @@ def fallback_choice(bucket: int, top: int, mask, pot: int, to_call: int) -> int:
     """
     A policy for a node the strategy never stored. Crude on purpose.
 
-    Buckets run from 0 (weakest) to `top` (strongest). The price of a call is
-    measured against the pot with the bet included. Shared by the arena player
+    Buckets run from 0 (weakest) to `top` (strongest), and the cuts are shares
+    of the scale rather than steps down from the top: these numbers were chosen
+    on six classes, and a step means something else entirely on the twenty-class
+    deep rungs. On six classes the arithmetic is identical to what it replaces.
+    The price of a call is measured against the pot with the bet included. Shared by the arena player
     and the Slumbot player: until 15 September the Slumbot player guessed
     uniformly at random on a miss, a shove one time in six, and at 3,000 hands
     the 135 hands with a miss carried 68 percent of the loss while the hands
@@ -169,16 +172,17 @@ def fallback_choice(bucket: int, top: int, mask, pot: int, to_call: int) -> int:
                 return int(action)
         return int(np.flatnonzero(mask)[0])
 
-    if bucket >= top:
+    classes = top + 1
+    if bucket >= (5.0 / 6.0) * classes:
         return first_legal(RAISE_POT, ALL_IN, CHECK_CALL)
     if to_call > 0 and to_call >= pot - to_call:
         # A bet of the pot or more, and the rule has no read on the bettor:
         # 14 September's T-5 calling a shove with a pair of fives is what
         # this line prevents.
         return first_legal(FOLD, CHECK_CALL)
-    if bucket >= top - 1:
+    if bucket >= (4.0 / 6.0) * classes:
         return first_legal(CHECK_CALL, FOLD)
-    if bucket >= top - 2:
+    if bucket >= (3.0 / 6.0) * classes:
         return first_legal(CHECK_CALL, FOLD) if to_call <= pot * 0.5 \
             else first_legal(FOLD, CHECK_CALL)
     return first_legal(CHECK_CALL, FOLD) if to_call <= pot * 0.15 \
@@ -253,8 +257,14 @@ class ArenaPlayer:
         #: (PoetAndCoder copy) points at 20,000 matches, 30 Sept, and lost nowhere. On until gated and burst.
         self.withhold_preflop = True
 
-    #: A raise with a hand this weak or weaker is a bluff for the purpose of
-    #: withholding it: the bottom two of six strength classes.
+    #: The shares of the strength scale the rules cut at, written as the
+    #: fractions they were tuned to when every rung had six classes: the bottom
+    #: two of six is a third, the bottom four is two thirds, everything but the
+    #: top class is five sixths. See `_cut`.
+    CUT_BLUFF = 2.0 / 6.0
+    CUT_TOP_TWO = 4.0 / 6.0
+    CUT_TOP_CLASS = 5.0 / 6.0
+    #: Kept for the Slumbot player, which is six-class throughout.
     BLUFF_STRENGTH = 1
     #: The shove-call rule fires only at this effective stack or deeper. It
     #: was written for 100bb three-bet shoves, and on 15 September v4's burst
@@ -398,7 +408,7 @@ class ArenaPlayer:
                     # jacks. A shove from the companion is taken as "raise",
                     # and only the top bucket gets to make it a shove.
                     if choice == ALL_IN and arena[CHECK_CALL] and \
-                            strength(deep) < self._top(deep):
+                            strength(deep) < self._cut(deep, self.CUT_TOP_CLASS):
                         choice = CHECK_CALL
                         self.stats.shoves_softened += 1
             if companion_used is None:
@@ -478,7 +488,7 @@ class ArenaPlayer:
         if self.profiles is not None and choice == CHECK_CALL and to_call > 0 and len(board) == 5 \
                 and arena[FOLD] and hand.effective_bb >= self.SHOVE_RULE_MIN_BB \
                 and self.profiles.never_bluffs(self.opponent) \
-                and (strength(solver) < self._top(solver) - 1
+                and (strength(solver) < self._cut(solver, self.CUT_TOP_TWO)
                      or (self.profiles.river_never_bluffs(self.opponent)
                          and strength(solver) <= self.HONEST_RIVER_CLASS * self._top(solver))):
             # A river bet from a bot whose river bets are never bluffs is paid
@@ -493,12 +503,12 @@ class ArenaPlayer:
                 and self.profiles.big_bets_are_value(self.opponent):
             size = to_call / pot_before
             cls = strength(solver)
-            if size >= 0.7 and choice != FOLD and arena[FOLD] and cls < self._top(solver) - 1:
+            if size >= 0.7 and choice != FOLD and arena[FOLD] and cls < self._cut(solver, self.CUT_TOP_TWO):
                 # Its big bets were never air: below the top two classes, fold.
                 choice = FOLD
                 adjusted = "big bet believed"
                 self.stats.big_bets_believed += 1
-            elif size <= 0.6 and choice == FOLD and arena[CHECK_CALL] and cls >= 3:
+            elif size <= 0.6 and choice == FOLD and arena[CHECK_CALL] and cls >= self._cut(solver, 0.5):
                 # Its small bets were air two times in five: a middling hand calls.
                 choice = CHECK_CALL
                 adjusted = "small bet called"
@@ -525,7 +535,7 @@ class ArenaPlayer:
         if choice in RAISE_ACTIONS and arena[CHECK_CALL] and self.profiles is not None \
                 and (self.withhold_preflop or board) \
                 and self.profiles.never_folds(self.opponent) \
-                and strength(solver) <= self.BLUFF_STRENGTH:
+                and strength(solver) < self._cut(solver, self.CUT_BLUFF):
             # A measured station: bluffing it only builds a pot we are behind
             # in. Facing a bet, the alternative to the bluff-raise is the fold,
             # not a call with the bottom class: 114 of 286 firings had turned a
@@ -537,7 +547,7 @@ class ArenaPlayer:
         if choice == CHECK_CALL and big_bet and arena[FOLD] and self.profiles is not None \
                 and hand.effective_bb >= self.SHOVE_RULE_MIN_BB \
                 and self.profiles.never_calls(self.opponent) \
-                and strength(solver) < self._top(solver):
+                and strength(solver) < self._cut(solver, self.CUT_TOP_CLASS):
             # A fold-or-raise bot's bet of the pot or more is a made hand.
             choice = FOLD
             adjusted = "shove call declined"
@@ -658,6 +668,20 @@ class ArenaPlayer:
     @staticmethod
     def _top(solver: Solver) -> int:
         return int(getattr(solver.abstraction, "postflop_buckets", 6)) - 1
+
+    def _cut(self, solver: Solver, share: float) -> float:
+        """
+        A strength threshold as a share of the scale rather than a step from
+        the top.
+
+        Every rule below was tuned when every rung had six classes, where
+        `< top - 1` passes the bottom four, two thirds of the scale. v5i's deep
+        rungs carry twenty, and there the same line passes eighteen of twenty,
+        nine tenths, so the identical rule is far harsher deep than short and
+        nobody chose that. The shares here reproduce the six-class behaviour on
+        any scale: two thirds stays two thirds.
+        """
+        return share * (self._top(solver) + 1)
 
     def _short_stack_answer(self, hole, board, effective_bb: float, mask, state, seat: int):
         """
