@@ -85,9 +85,15 @@ NB_MODULE(pokerbot_native, m) {
     // sequences and compares chips, so that is the surface it needs.
     m.def("replay", [](const std::vector<int>& actions, int starting_stack,
                        int small_blind, int big_blind,
-                       const std::vector<int>& schedule) {
+                       const std::vector<int>& schedule,
+                       const std::vector<std::vector<int>>& raise_sizes) {
         RaiseSchedule sched;
         for (int n : schedule) sched.sizes.push_back(n);
+        for (const auto& level : raise_sizes) {
+            std::vector<int8_t> row;
+            for (int action : level) row.push_back(static_cast<int8_t>(action));
+            sched.chosen.push_back(row);
+        }
         NoLimitHoldem game(starting_stack, small_blind, big_blind, sched);
 
         State s = game.initial_state();
@@ -112,6 +118,7 @@ NB_MODULE(pokerbot_native, m) {
         return std::make_tuple(pot, stacks, s.history, legal_at_each);
     }, nb::arg("actions"), nb::arg("starting_stack"), nb::arg("small_blind"),
        nb::arg("big_blind"), nb::arg("schedule"),
+       nb::arg("raise_sizes") = std::vector<std::vector<int>>{},
        "Drive the betting game through a sequence. Returns (pot, stacks, history, "
        "legal-at-each-step); pot is -1 if the sequence ran past a terminal node, "
        "-2 at a chance node, -3 if an action was not legal.");
@@ -287,7 +294,8 @@ NB_MODULE(pokerbot_native, m) {
                             bool texture, const std::string& rule,
                             const std::vector<std::vector<std::vector<double>>>& hist_centroids,
                             int hist_bins, int hist_runouts, int hist_opponents,
-                            const BucketTable* flop_table, const BucketTable* turn_table) {
+                            const BucketTable* flop_table, const BucketTable* turn_table,
+                            const std::vector<std::vector<int>>& raise_sizes) {
             Abstraction abstraction;
             if (flop_table) abstraction.hist_tables[0] = *flop_table;
             if (turn_table) abstraction.hist_tables[1] = *turn_table;
@@ -312,6 +320,11 @@ NB_MODULE(pokerbot_native, m) {
             }
             RaiseSchedule sched;
             for (int n : schedule) sched.sizes.push_back(n);
+            for (const auto& level : raise_sizes) {
+                std::vector<int8_t> row;
+                for (int action : level) row.push_back(static_cast<int8_t>(action));
+                sched.chosen.push_back(row);
+            }
             new (self) MCCFR<NoLimitGame>(
                 NoLimitGame(std::move(abstraction), starting_stack, small_blind,
                             big_blind, std::move(sched)),
@@ -322,7 +335,8 @@ NB_MODULE(pokerbot_native, m) {
            nb::arg("seed"), nb::arg("texture") = false, nb::arg("rule") = "vanilla",
            nb::arg("hist_centroids") = std::vector<std::vector<std::vector<double>>>{},
            nb::arg("hist_bins") = 20, nb::arg("hist_runouts") = 100, nb::arg("hist_opponents") = 50,
-           nb::arg("flop_table").none() = nullptr, nb::arg("turn_table").none() = nullptr)
+           nb::arg("flop_table").none() = nullptr, nb::arg("turn_table").none() = nullptr,
+           nb::arg("raise_sizes") = std::vector<std::vector<int>>{})
         .def("set_common_random_numbers", [](MCCFR<NoLimitGame>& s, bool on) { s.game().set_common_random_numbers(on); },
              nb::arg("on"), "One deal per iteration shared across every branch (variance reduction); off by default.")
         .def("set_exact_terminals", [](MCCFR<NoLimitGame>& s, bool on) { s.game().set_exact_terminals(on); },

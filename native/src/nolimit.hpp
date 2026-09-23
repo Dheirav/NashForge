@@ -46,16 +46,27 @@ inline double raise_fraction(int action) {
 /// raise, which is what makes a deeper betting tree affordable.
 struct RaiseSchedule {
     std::vector<int> sizes;
+    /// The actions themselves, one list per raise depth, when the schedule
+    /// names its sizes instead of counting them from the largest end. Empty
+    /// means counted, which is what every solve before 23 September used.
+    /// Keeping the largest k is a choice: at a two-wide level it leaves
+    /// "2x pot or all-in", and the pot-sized re-raise that is the ordinary
+    /// three-bet cannot be made at all. Naming costs nothing, since the tree
+    /// grows with how many sizes a level holds and not with which.
+    std::vector<std::vector<int8_t>> chosen;
 
     static RaiseSchedule uniform(int depth) {
         RaiseSchedule s;
         s.sizes.assign(static_cast<size_t>(depth), 4);
         return s;
     }
-    int depth() const { return static_cast<int>(sizes.size()); }
-    /// Raise actions legal at `at_depth`, largest kept when tapering.
+    int depth() const {
+        return static_cast<int>(chosen.empty() ? sizes.size() : chosen.size());
+    }
+    /// Raise actions legal at `at_depth`: as named, or largest kept when tapering.
     std::vector<int8_t> at(int at_depth) const {
         if (at_depth >= depth()) return {};
+        if (!chosen.empty()) return chosen[static_cast<size_t>(at_depth)];
         int keep = sizes[static_cast<size_t>(at_depth)];
         if (keep < 0) keep = 0;
         if (keep > 4) keep = 4;

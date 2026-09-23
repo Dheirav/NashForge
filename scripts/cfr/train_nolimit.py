@@ -33,7 +33,7 @@ sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..",
 
 import numpy as np  # noqa: E402
 
-from abstraction.betting import STREETS, measure  # noqa: E402
+from abstraction.betting import RAISE_ACTIONS, STREETS, measure, parse_level  # noqa: E402
 from abstraction.buckets import CardAbstraction, preflop_key
 from abstraction.equity import FULL_DECK  # noqa: E402
 from cfr import ALL_RULES, MCCFRSolver  # noqa: E402
@@ -58,9 +58,13 @@ def parse_args():
     #: values taper: `--raise-cap 4 1` allows four sizes for the opening bet and
     #: only all-in for the raise, which buys a re-raise for 347,136 information
     #: sets where carrying all four sizes to depth 2 costs 7,560,240.
-    parser.add_argument("--raise-cap", type=int, nargs="+", default=[1],
-                        help="uniform depth, or a tapered schedule of sizes "
-                             "per raise depth (e.g. --raise-cap 4 1)")
+    parser.add_argument("--raise-cap", type=parse_level, nargs="+", default=[1],
+                        help="uniform depth, or a tapered schedule of sizes per raise "
+                             "depth (e.g. --raise-cap 4 1). A level may name its sizes "
+                             "instead of counting them from the largest end: "
+                             "--raise-cap half,pot,jam half,pot,jam jam keeps the "
+                             "pot-sized re-raise and drops the 2x-pot one, at the same "
+                             "tree size")
     parser.add_argument("--stack", type=int, default=200)
     parser.add_argument("--big-blind", type=int, default=2)
     parser.add_argument("--abstraction-samples", type=int, default=800)
@@ -222,8 +226,18 @@ def _train_native(args, abstraction, projected):
     """
     import pokerbot_native
 
-    schedule = ([4] * args.raise_cap if isinstance(args.raise_cap, int)
-                else list(args.raise_cap))
+    # Counts go in `schedule`, named levels in `raise_sizes`; the native side
+    # takes the named form when it is given one. A schedule is one or the
+    # other, never a mixture, so the saved args describe one game.
+    if isinstance(args.raise_cap, int):
+        schedule, raise_sizes = [4] * args.raise_cap, []
+    elif any(isinstance(level, (tuple, list)) for level in args.raise_cap):
+        schedule = []
+        raise_sizes = [list(level) if isinstance(level, (tuple, list))
+                       else list(RAISE_ACTIONS[len(RAISE_ACTIONS) - int(level):])
+                       for level in args.raise_cap]
+    else:
+        schedule, raise_sizes = list(args.raise_cap), []
     preflop, flop, turn, river = _native_tables(abstraction)
 
     print(f"\nTraining MCCFR (native) for {args.iterations:,} iterations"
@@ -241,7 +255,7 @@ def _train_native(args, abstraction, projected):
         preflop, flop, turn, river, args.equity_samples, args.stack,
         args.big_blind // 2, args.big_blind, schedule, args.seed,
         texture=bool(getattr(abstraction, "texture", False)),
-        rule=args.update_rule, **hist)
+        rule=args.update_rule, raise_sizes=raise_sizes, **hist)
     solver.set_average_from(int(args.average_from * args.iterations))
     if args.opponent_archetype:
         from chipzen.archetypes import PARAMS
@@ -338,6 +352,9 @@ def main():
     # which game produced the strategy.
     args.raise_cap = (args.raise_cap[0] if len(args.raise_cap) == 1
                       else tuple(args.raise_cap))
+    if isinstance(args.raise_cap, (tuple, list)):
+        args.raise_cap = tuple(tuple(level) if isinstance(level, (tuple, list)) else int(level)
+                               for level in args.raise_cap)
     rng = np.random.default_rng(args.seed)
     if args.preflop_buckets is None:
         args.preflop_buckets = args.buckets

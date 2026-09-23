@@ -52,12 +52,32 @@ def normalise_schedule(spec: int | Tuple[int, ...]) -> Tuple[Tuple[int, ...], ..
     and 347,136 if it carries only all-in, a 22-fold difference for a tree that
     contains a re-raise either way.
 
+    A level may also be a tuple of action ids, which names the sizes rather
+    than counting them: ``((RAISE_HALF, RAISE_POT, ALL_IN), (ALL_IN,))`` is a
+    two-level schedule whose opening menu skips the 2x-pot raise. Mixed forms
+    are allowed, and the ids are sorted into :data:`RAISE_ACTIONS` order so the
+    tree's action indices never depend on how the schedule was written.
+
     Cached because this sits on the hot path of every traversal.
     """
     if isinstance(spec, int):
         return tuple(RAISE_ACTIONS for _ in range(spec))
-    sizes = len(RAISE_ACTIONS)
-    return tuple(RAISE_ACTIONS[sizes - max(0, min(int(n), sizes)):] for n in spec)
+    width = len(RAISE_ACTIONS)
+    levels = []
+    for entry in spec:
+        if isinstance(entry, (tuple, list)):
+            # A level that names its sizes. Counting from the largest end is a
+            # choice, not a rule, and it is the wrong one where the menu is
+            # short: over a 2bb open the kept pair is "10bb or all-in", and the
+            # 6bb three-bet every solver makes does not exist. Naming the sizes
+            # buys it back at no cost, since the tree's size depends on how many
+            # are kept and not on which: (4,2,1), (4,3) and (3,3,1) are all
+            # 3,438,484 information sets.
+            chosen = tuple(action for action in RAISE_ACTIONS if action in tuple(entry))
+            levels.append(chosen)
+        else:
+            levels.append(RAISE_ACTIONS[width - max(0, min(int(entry), width)):])
+    return tuple(levels)
 
 
 def raise_sizes_at(spec: int | Tuple[int, ...], depth: int) -> Tuple[int, ...]:
@@ -209,3 +229,30 @@ def measure(buckets: Dict[str, int], raise_cap: int = 2,
         information_sets=total,
         table_bytes=entries * bytes_per_entry,
     )
+
+
+#: Names for the raise sizes, for schedules written on a command line.
+SIZE_NAMES_TO_ACTION = {"half": RAISE_HALF, "pot": RAISE_POT, "2x": RAISE_TWO,
+                        "two": RAISE_TWO, "jam": ALL_IN, "allin": ALL_IN, "all-in": ALL_IN}
+
+
+def parse_level(text: str):
+    """
+    One level of a schedule as written for `--raise-cap`: a count, or names.
+
+    ``"3"`` keeps the largest three sizes, as it always has. ``"half,pot,jam"``
+    names them, which is the only way to keep a small size and drop a large one.
+    """
+    text = str(text).strip()
+    if text.isdigit():
+        return int(text)
+    chosen = []
+    for name in text.split(","):
+        key = name.strip().lower()
+        if key not in SIZE_NAMES_TO_ACTION:
+            raise ValueError(f"unknown raise size {name!r}; use a count or "
+                             f"{', '.join(sorted(set(SIZE_NAMES_TO_ACTION)))}")
+        chosen.append(SIZE_NAMES_TO_ACTION[key])
+    if not chosen:
+        raise ValueError("a named level needs at least one size")
+    return tuple(action for action in RAISE_ACTIONS if action in tuple(chosen))

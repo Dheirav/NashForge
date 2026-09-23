@@ -116,14 +116,24 @@ def test_the_cpp_betting_game_agrees_over_the_enumerated_tree():
             state = game.next_state(state, action)
         return sum(state.contributions), list(state.stacks), state.history, legal_each
 
-    schedules = [(1, [4]), (2, [4, 4]), ((4, 1), [4, 1]), ((4, 2), [4, 2])]
+    # The last three name their sizes rather than counting them from the
+    # largest end (23 September). A named level is exactly the kind of change
+    # that splits two implementations apart, because the C++ has its own copy
+    # of "which raises are legal here", so every one of them is driven through
+    # the same sequences as the counted schedules.
+    from abstraction.betting import ALL_IN, RAISE_HALF, RAISE_POT, RAISE_TWO
+    named = ((RAISE_HALF, RAISE_POT, ALL_IN), (RAISE_HALF, RAISE_POT, ALL_IN), (ALL_IN,))
+    schedules = [(1, [4], []), (2, [4, 4], []), ((4, 1), [4, 1], []), ((4, 2), [4, 2], []),
+                 (named, [], [list(level) for level in named]),
+                 (((RAISE_POT, ALL_IN),), [], [[RAISE_POT, ALL_IN]]),
+                 (((RAISE_HALF, RAISE_TWO), (ALL_IN,)), [], [[RAISE_HALF, RAISE_TWO], [ALL_IN]])]
     compared = 0
-    for python_schedule, cpp_schedule in schedules:
+    for python_schedule, cpp_schedule, cpp_sizes in schedules:
         for depth in (1, 2, 3):
             for actions in itertools.product(range(6), repeat=depth):
                 expected = python_replay(list(actions), python_schedule)
                 got = native.replay(list(actions), stack, small_blind, big_blind,
-                                    cpp_schedule)
+                                    cpp_schedule, cpp_sizes)
                 compared += 1
                 assert expected[0] == got[0], (
                     f"schedule={python_schedule} actions={actions}: "
