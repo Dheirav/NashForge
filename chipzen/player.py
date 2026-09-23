@@ -84,6 +84,7 @@ class Stats:
     river_failures: int = 0
     fallbacks: int = 0
     short_stack_answers: int = 0   # a preflop all-in answered by the exact solution
+    reraises_believed: int = 0     # a re-raise from a bot that never re-raises
     collapsed_hits: int = 0            # answered on a re-read history after a pseudo all-in
     miss_depths: Dict[int, int] = field(default_factory=dict)
     depths_used: Dict[str, int] = field(default_factory=dict)
@@ -244,6 +245,19 @@ class ArenaPlayer:
     #: Pot odds beyond which a fold to an all-in opponent is never sent: the
     #: outstanding call is at most a tenth of what is already in the pot.
     POT_ODDS_FLOOR = 10
+    #: Against a bot with a large river sample and not one bluff, the river read
+    #: extends to hands this far up the strength scale. A FRACTION of the top
+    #: class, not an absolute step: v5i's deep rungs carry 20 classes and its
+    #: short rungs 6, so "one below the top" is two very different hands
+    #: depending on which rung answered. An absolute step folded the nut flush
+    #: on a 20-class rung in the audit of 23 September.
+    HONEST_RIVER_CLASS = 0.85
+    #: Facing a re-raise from a bot that never re-raises, continue at this price
+    #: or better and give up beyond it. A range of queens, kings, aces and
+    #: ace-king leaves the hands that wanted to raise about a third of the pot,
+    #: so a third is the break-even and 0.30 keeps a margin. On 23 September the
+    #: price was 0.27, which is a call for 510 chips; the jam cost 7,935.
+    VALUE_RERAISE_PRICE = 0.30
     #: The exact push-fold solution answers a preflop all-in at this effective
     #: stack or shorter. Fourteen blinds is where the solved game stops being
     #: the whole hand: deeper than that a shove is a real decision with a flop
@@ -417,7 +431,9 @@ class ArenaPlayer:
         if self.profiles is not None and choice == CHECK_CALL and to_call > 0 and len(board) == 5 \
                 and arena[FOLD] and hand.effective_bb >= self.SHOVE_RULE_MIN_BB \
                 and self.profiles.never_bluffs(self.opponent) \
-                and strength(solver) < self._top(solver) - 1:
+                and (strength(solver) < self._top(solver) - 1
+                     or (self.profiles.river_never_bluffs(self.opponent)
+                         and strength(solver) <= self.HONEST_RIVER_CLASS * self._top(solver))):
             # A river bet from a bot whose river bets are never bluffs is paid
             # off only by the top two strength classes. Deep only, and river
             # only: the same shape of rule folded good hands short in v4.
@@ -440,6 +456,25 @@ class ArenaPlayer:
                 choice = CHECK_CALL
                 adjusted = "small bet called"
                 self.stats.small_bets_called += 1
+        if choice in RAISE_ACTIONS and not board and to_call > 0 and self.profiles is not None \
+                and self.profiles.never_three_bets(self.opponent) \
+                and any(a.get("seat") == seat and a.get("action") == "raise"
+                        and a.get("phase") == "preflop"
+                        for a in state.get("action_history") or []):
+            # They re-raised our open, and they do that once in eighty hands.
+            # There is no bluff in a range that narrow, so the stack does not
+            # go in: we continue at the price or we give up. 23 September, wsp:
+            # ace-king four-bet all in for 53bb into kings, which was the
+            # fixture. Calling there was 510 into 1,920 and correct. No hand is
+            # exempt: a six-class abstraction cannot tell aces from ace-king,
+            # and ace-king is precisely the hand this is here to stop, so the
+            # first version of this rule excluded the only case it was written
+            # for. Aces lose nothing by calling a range they are ahead of.
+            price = to_call / float(int(state.get("pot") or 0) + to_call)
+            choice = CHECK_CALL if arena[CHECK_CALL] and price <= self.VALUE_RERAISE_PRICE else \
+                (FOLD if arena[FOLD] else CHECK_CALL)
+            adjusted = "their re-raise is value"
+            self.stats.reraises_believed += 1
         if choice in RAISE_ACTIONS and arena[CHECK_CALL] and self.profiles is not None \
                 and self.profiles.never_folds(self.opponent) \
                 and strength(solver) <= self.BLUFF_STRENGTH:

@@ -53,6 +53,18 @@ NEVER_BLUFF_MIN = 40
 NEVER_BLUFF_RATE = 0.05
 THREE_BET_MIN = 25
 THREE_BET_FOLD_RATE = 0.75
+#: A bot whose re-raise is always value: it re-raises our open at or below
+#: RARE_RAISE_RATE over at least RARE_RAISE_MIN chances. wsp, scouted before we
+#: ever played it: 5 of 392, and 0 of 100 facing a three-bet. Every other bot on
+#: file re-raises 4 to 40% of the time, so this is not a matter of degree: at
+#: one in eighty there is no room in the range for a bluff.
+RARE_RAISE_MIN = 120
+RARE_RAISE_RATE = 0.04
+#: The river-bet read is allowed one more strength class when the sample is
+#: this large and the bluff count is exactly zero. 23 September: wsp had bet the
+#: river 298 times without a bluff and we called 4,477 into 16,093 with top
+#: pair, which was the rest of the match.
+HONEST_RIVER_MIN = 100
 BIG_BET_MIN = 100
 BIG_BET_AIR_RATE = 0.05
 SMALL_BET_AIR_RATE = 0.20
@@ -183,6 +195,37 @@ class Profiles:
         row = self.rows.get(name or "") or {}
         bets = row.get("river_bets", 0)
         return bets >= NEVER_BLUFF_MIN and row.get("river_bluffs", 0) / bets < NEVER_BLUFF_RATE
+
+    def never_three_bets(self, name: Optional[str]) -> bool:
+        """
+        A bot that re-raises our open almost never, so its re-raise is value.
+
+        The same node `folds_blind` already reads, looking at the other key in
+        it. On 23 September that dictionary was in memory during the match,
+        `{'call': 217, 'fold': 170, 'raise': 5}`, and nothing asked how often
+        it raised; we four-bet all in with ace-king into kings and lost the
+        fixture. The distinction is not close: every other profile on file
+        re-raises between 4 and 40% of the time.
+        """
+        if not self.scout_reads or not self.exploits_allowed(name):
+            return False
+        node = (self.rows.get(name or "") or {}).get("by_history", {}).get("preflop:Ur", {})
+        n = sum(node.values())
+        return n >= RARE_RAISE_MIN and node.get("raise", 0) / n <= RARE_RAISE_RATE
+
+    def river_never_bluffs(self, name: Optional[str]) -> bool:
+        """
+        A stronger form of `never_bluffs`: a large sample and not one bluff.
+
+        `never_bluffs` allows a few, because a rate below 5% of 40 bets is
+        already worth acting on. This one is the case where the count is
+        exactly zero over at least HONEST_RIVER_MIN bets, which is where a
+        hand we would normally pay off should also fold.
+        """
+        if not self.scout_reads or not self.exploits_allowed(name):
+            return False
+        row = self.rows.get(name or "") or {}
+        return row.get("river_bets", 0) >= HONEST_RIVER_MIN and row.get("river_bluffs", 0) == 0
 
     def folds_to_three_bet(self, name: Optional[str]) -> bool:
         """
