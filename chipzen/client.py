@@ -34,6 +34,12 @@ import websockets
 
 logger = logging.getLogger("chipzen")
 
+#: The platform's bot profile lags a finished match. Poll briefly for the
+#: counter to move rather than recording a row that describes the match before
+#: this one (23 September: a loss recorded as a win).
+RATING_RETRIES = 6
+RATING_RETRY_S = 5.0
+
 PROTOCOL_VERSIONS = ["1.0"]
 CLIENT_NAME = "nashforge"
 CLIENT_VERSION = "0.1.0"
@@ -374,8 +380,25 @@ class Arena:
         must not touch the match.
         """
         try:
+            # The profile lags: the platform has not counted the match that just
+            # ended when it answers. On 23 September the row stamped with the
+            # wsp match we LOST reported a win, because the win it had caught up
+            # on was the previous one, and two consecutive rows in the file
+            # carry identical counters wherever that has happened. Every
+            # per-version rating attribution in the history is therefore shifted
+            # by one match. Wait for the counter to move, briefly, and record
+            # whether it did, so a row can never silently describe the match
+            # before it.
             stats = _http(self.base, self.token, "GET", f"/api/bots/{self.bot_id}")
-            row = {"at": time.time(), "match_id": match_id, "label": self.version.get("label"),
+            before = stats.get("matches_played")
+            for _ in range(RATING_RETRIES):
+                if stats.get("matches_played") != before or before is None:
+                    break
+                time.sleep(RATING_RETRY_S)
+                stats = _http(self.base, self.token, "GET", f"/api/bots/{self.bot_id}")
+            counted = stats.get("matches_played") != before
+            row = {"at": time.time(), "match_id": match_id, "counted": counted,
+                   "label": self.version.get("label"),
                    "rating": stats.get("rating"), "rating_deviation": stats.get("rating_deviation"),
                    "matches_played": stats.get("matches_played"), "wins": stats.get("wins"),
                    "losses": stats.get("losses"), "bb_per_100": stats.get("bb_per_100")}
