@@ -5,6 +5,9 @@
 # the scout's own code, and prints the archetype's frequencies beside the real
 # bot's. Until those two columns agree, a panel row about them means nothing.
 set -u
+set -o pipefail   # a step that fails inside a pipeline must not report success
 cd "$HOME/Code/PokerBot"
 venv/bin/python scripts/chipzen_calibrate.py --kinds meek bully sticky nofold3bet folder wildpassive \
   --matches 300 --ladder results/cfr/ladder169l_v5i 2>&1 | tail -60
+
+:  # the calibration prints its comparison to stdout and has no artefact to check

@@ -11,6 +11,7 @@
 # saturates there (389,086 entries against 390,110 at 60M) and this is an
 # experiment, not a set that plays. If it wins it gets the 60M pass afterwards.
 set -u
+set -o pipefail   # a step that fails inside a pipeline must not report success
 cd "$HOME/Code/PokerBot"
 E=results/cfr/experiments
 out=$E/cap432_70bb_20m.pkl
@@ -31,3 +32,5 @@ echo
 echo "The bar, written before the run: more than +6 chips a hand at 70bb, which"
 echo "is two standard errors on this instrument, and no new heavy-shove node in"
 echo "the sweep. Anything less and the extra twelve times the tree is not paying."
+
+[ -s "$out" ] || { echo "the four-bet rung was never written to $out" >&2; exit 1; }

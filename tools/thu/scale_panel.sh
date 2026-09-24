@@ -11,6 +11,7 @@
 # is read from differs. The main tree has the old thresholds, the worktree the
 # new ones.
 set -u
+set -o pipefail   # a step that fails inside a pipeline must not report success
 MAIN=$HOME/Code/PokerBot
 TREE=$HOME/Code/PokerBot-reads
 OUT=$HOME/pokerbot-scratch/hist/thu_scale_panel.md
@@ -36,3 +37,7 @@ echo "Read it as: if the new arm is not clearly better on any shape, the fix is"
 echo "correct in principle and worth nothing in play, and it can wait for the"
 echo "close season. If it is worse anywhere, the old thresholds were doing"
 echo "something the six-class tuning did not intend and that is worth knowing."
+
+# Prove it: the table must carry both arms with real percentages in them.
+rows=$(grep -cE '^\| (old|new) \|.*%' "$OUT" || true)
+[ "${rows:-0}" -ge 2 ] || { echo "scale-panel produced $rows arm rows, expected 2" >&2; exit 1; }

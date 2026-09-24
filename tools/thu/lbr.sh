@@ -13,6 +13,7 @@
 # failed, not that the rung is sound. That asymmetry is the whole point of the
 # bound and it goes in every sentence that quotes the number.
 set -u
+set -o pipefail   # a step that fails inside a pipeline must not report success
 cd "$HOME/Code/PokerBot"
 HANDS=${HANDS:-1500}
 venv/bin/python scripts/lbr_ladder.py --rungs 70bb --hands "$HANDS" \
@@ -23,3 +24,7 @@ venv/bin/python scripts/lbr_ladder.py --rungs 70bb --hands "$HANDS" --between-si
 echo
 venv/bin/python scripts/lbr_ladder.py --rungs 100bb --hands "$HANDS" \
   --out results/cfr/lbr_v5i_100bb.json 2>&1 | tail -5
+
+for f in results/cfr/lbr_v5i_70bb.json results/cfr/lbr_v5i_70bb_between.json results/cfr/lbr_v5i_100bb.json; do
+  [ -s "$f" ] || { echo "LBR did not write $f" >&2; exit 1; }
+done

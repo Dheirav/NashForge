@@ -100,7 +100,12 @@ def parse_args():
                         help="reuse the fitted abstraction (and its bucket tables) of an existing "
                              "solve instead of fitting one, so a ladder shares one clustering and one "
                              "set of tables; the stack and tree may differ, the card classes do not")
-    parser.add_argument("--opponent-archetype", choices=["station", "nit", "maniac", "foldraise"],
+    # The list comes from chipzen.archetypes, not from a copy here. On 24
+    # September a copy that still held four shapes rejected `bully` seven times
+    # in two seconds, the lane assembled a ladder with no exploiter rungs in
+    # it, and every measurement that followed was v5i against itself.
+    from chipzen.archetypes import ARCHETYPES
+    parser.add_argument("--opponent-archetype", choices=sorted(ARCHETYPES),
                         help="native only: train a best response to this scripted field shape "
                              "(chipzen/archetypes.py's calibrated parameters) instead of an equilibrium; "
                              "the result is an exploiter, played only behind a confident read")

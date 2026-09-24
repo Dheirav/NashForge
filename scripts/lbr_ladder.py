@@ -60,7 +60,16 @@ def main():
         if not matches:
             print(f"{rung}: not in {args.ladder}")
             continue
+        # A ladder directory holds both the cap-2 rungs the bot plays under
+        # --deep-primary and the older one-raise `nolimit_*` solves beside them.
+        # Taking the first match measured nolimit_70bb.pkl, 131,693 information
+        # sets, when v5i's 70bb rung has 1,170,732: an exploitability number for
+        # a solver we retired. Prefer what the bot actually plays, and say so.
+        matches.sort(key=lambda q: (not os.path.basename(q).startswith("cap2_"), q))
         path = matches[0]
+        if len(matches) > 1:
+            others = ", ".join(os.path.basename(q) for q in matches[1:])
+            print(f"{rung}: using {os.path.basename(path)} (also present: {others})")
         saved = load_strategy(path)
         saved_args = saved["args"]
         cap = saved_args["raise_cap"]
