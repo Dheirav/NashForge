@@ -170,3 +170,29 @@ first match 23 Sep 05:35 IST. **20 matches, 15 won (75%), 1,130 hands, net +100,
 | r0ckGarden | 3 | 1 | 74 | -10,000 | -135 |
 | hoops | 1 | 1 | 38 | +10,000 | +263 |
 
+## a026590 | results/cfr/ladder169l_v5i | deep-primary | v5i: v5f's rungs at 5 to 35bb with the 60M histogram solves at 50/70/100bb, stack cap on
+
+first match 23 Sep 22:50 IST. **1 matches, 0 won (0%), 67 hands, net -10,000 chips, -149 ± 196 chips/hand**, showdowns 2 won / 7 lost.
+
+| opponent | matches | won | hands | net | chips/hand |
+|---|---|---|---|---|---|
+| wsp | 1 | 0 | 67 | -10,000 | -149 |
+
+## be0feec+ | results/cfr/ladder169l_v5i | deep-primary | v5i: v5f's rungs at 5 to 35bb with the 60M histogram solves at 50/70/100bb, stack cap on
+
+first match 24 Sep 00:40 IST. **1 matches, 1 won (100%), 85 hands, net +10,000 chips, +118 ± 77 chips/hand**, showdowns 11 won / 3 lost.
+
+| opponent | matches | won | hands | net | chips/hand |
+|---|---|---|---|---|---|
+| Fold-ver-3 | 1 | 1 | 85 | +10,000 | +118 |
+
+## d751242+ | results/cfr/ladder169l_v5x | deep-primary | v5x: station best response at share 0.25, six-class cards on v5f's tree, gate/replay/sweep clean
+
+first match 24 Sep 05:35 IST. **23 matches, 15 won (65%), 1,399 hands, net +70,000 chips, +50 ± 36 chips/hand**, showdowns 58 won / 62 lost.
+
+| opponent | matches | won | hands | net | chips/hand |
+|---|---|---|---|---|---|
+| Blueprint | 20 | 13 | 1306 | +60,000 | +46 |
+| r0ckGarden | 2 | 2 | 65 | +20,000 | +308 |
+| hoops | 1 | 0 | 28 | -10,000 | -357 |
+

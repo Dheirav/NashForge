@@ -1,0 +1,17 @@
+{
+ "70bb": {
+  "path": "nolimit_70bb.pkl",
+  "mean": -0.894,
+  "stderr": 0.6526699397518826,
+  "ci95": [
+   -2.17323308191369,
+   0.3852330819136899
+  ],
+  "proves_exploitable": false,
+  "hands": 1500,
+  "bb_per_100": -44.7,
+  "between_sizes": true,
+  "seconds": 28.5,
+  "information_sets": 131693
+ }
+}

@@ -1,0 +1,99 @@
+{
+ "a": {
+  "dir": "results/cfr/ladder169l_v5y",
+  "flags": "--deep-primary --stack-cap",
+  "label": "v5y"
+ },
+ "b": {
+  "dir": "results/cfr/ladder169l_v5i",
+  "flags": "--deep-primary --stack-cap",
+  "label": "v5i"
+ },
+ "arena_matches": 5000,
+ "win_rate": 0.4732,
+ "stderr": 0.007060903058391327,
+ "hands_per_match": 43.8004,
+ "seed": 81,
+ "workers": 4,
+ "a_stats": {
+  "decisions": 588328,
+  "misses": 998,
+  "consulted": 588328,
+  "off_abstraction": 0,
+  "companion_hits": 0,
+  "river_shoves_to_companion": 0,
+  "shoves_softened": 0,
+  "bluffs_withheld": 0,
+  "shove_calls_declined": 0,
+  "river_solves": 0,
+  "blinds_opened": 0,
+  "three_bets_into_folders": 0,
+  "river_bets_believed": 0,
+  "big_bets_believed": 0,
+  "small_bets_called": 0,
+  "river_failures": 0,
+  "fallbacks": 998,
+  "short_stack_answers": 0,
+  "collapsed_hits": 0,
+  "miss_depths": {},
+  "depths_used": {
+   "100bb": 166402,
+   "70bb": 105357,
+   "50bb": 112157,
+   "35bb": 88634,
+   "18bb": 33975,
+   "12bb": 14754,
+   "8bb": 4622,
+   "25bb": 60073,
+   "5bb": 2354
+  },
+  "actions_sent": {
+   "raise": 223115,
+   "check": 157908,
+   "call": 125592,
+   "fold": 81713
+  },
+  "slowest_ms": 1966.7388550005853
+ },
+ "b_stats": {
+  "decisions": 595100,
+  "misses": 1739,
+  "consulted": 595100,
+  "off_abstraction": 0,
+  "companion_hits": 0,
+  "river_shoves_to_companion": 0,
+  "shoves_softened": 0,
+  "bluffs_withheld": 0,
+  "shove_calls_declined": 0,
+  "river_solves": 0,
+  "blinds_opened": 0,
+  "three_bets_into_folders": 0,
+  "river_bets_believed": 0,
+  "big_bets_believed": 0,
+  "small_bets_called": 0,
+  "river_failures": 0,
+  "fallbacks": 1739,
+  "short_stack_answers": 44,
+  "collapsed_hits": 0,
+  "miss_depths": {},
+  "depths_used": {
+   "100bb": 170130,
+   "70bb": 107644,
+   "50bb": 113928,
+   "35bb": 86823,
+   "18bb": 34265,
+   "12bb": 15292,
+   "8bb": 4602,
+   "25bb": 60048,
+   "5bb": 2368
+  },
+  "actions_sent": {
+   "fold": 95200,
+   "call": 156530,
+   "raise": 178820,
+   "check": 164550
+  },
+  "slowest_ms": 2238.949726015562
+ },
+ "measured": "2026-09-23 20:46"
+}

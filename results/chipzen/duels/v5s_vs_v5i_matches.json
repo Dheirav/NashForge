@@ -1,0 +1,101 @@
+{
+ "a": {
+  "dir": "results/cfr/ladder169l_v5s",
+  "flags": "--deep-primary --stack-cap",
+  "label": "v5s"
+ },
+ "b": {
+  "dir": "results/cfr/ladder169l_v5i",
+  "flags": "--deep-primary --stack-cap",
+  "label": "v5i"
+ },
+ "arena_matches": 5000,
+ "win_rate": 0.4992,
+ "stderr": 0.007071058760892883,
+ "hands_per_match": 43.0242,
+ "seed": 91,
+ "workers": 4,
+ "a_stats": {
+  "decisions": 564328,
+  "misses": 352,
+  "consulted": 564328,
+  "off_abstraction": 0,
+  "companion_hits": 0,
+  "river_shoves_to_companion": 0,
+  "shoves_softened": 0,
+  "bluffs_withheld": 0,
+  "shove_calls_declined": 0,
+  "river_solves": 0,
+  "blinds_opened": 0,
+  "three_bets_into_folders": 0,
+  "river_bets_believed": 0,
+  "big_bets_believed": 0,
+  "small_bets_called": 0,
+  "river_failures": 0,
+  "fallbacks": 352,
+  "short_stack_answers": 0,
+  "reraises_believed": 0,
+  "collapsed_hits": 0,
+  "miss_depths": {},
+  "depths_used": {
+   "100bb": 148488,
+   "70bb": 98467,
+   "35bb": 84970,
+   "50bb": 110150,
+   "25bb": 59526,
+   "18bb": 36895,
+   "5bb": 2804,
+   "12bb": 17739,
+   "8bb": 5289
+  },
+  "actions_sent": {
+   "raise": 178735,
+   "call": 128476,
+   "fold": 85514,
+   "check": 171603
+  },
+  "slowest_ms": 412.6544980099425
+ },
+ "b_stats": {
+  "decisions": 564778,
+  "misses": 348,
+  "consulted": 564778,
+  "off_abstraction": 0,
+  "companion_hits": 0,
+  "river_shoves_to_companion": 0,
+  "shoves_softened": 0,
+  "bluffs_withheld": 0,
+  "shove_calls_declined": 0,
+  "river_solves": 0,
+  "blinds_opened": 0,
+  "three_bets_into_folders": 0,
+  "river_bets_believed": 0,
+  "big_bets_believed": 0,
+  "small_bets_called": 0,
+  "river_failures": 0,
+  "fallbacks": 348,
+  "short_stack_answers": 0,
+  "reraises_believed": 0,
+  "collapsed_hits": 0,
+  "miss_depths": {},
+  "depths_used": {
+   "100bb": 148560,
+   "70bb": 98191,
+   "35bb": 85000,
+   "50bb": 110664,
+   "25bb": 59563,
+   "18bb": 37071,
+   "5bb": 2783,
+   "12bb": 17688,
+   "8bb": 5258
+  },
+  "actions_sent": {
+   "raise": 177928,
+   "call": 129004,
+   "check": 172109,
+   "fold": 85737
+  },
+  "slowest_ms": 573.4228799992707
+ },
+ "measured": "2026-09-24 04:35"
+}
