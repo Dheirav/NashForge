@@ -128,12 +128,21 @@ class LocalBestResponse:
 
     def __init__(self, game, strategy: Dict[Hashable, np.ndarray],
                  rollout_samples: int = 60, candidates: int = 32,
-                 bet_sizes: Sequence[float] = DEFAULT_BET_SIZES):
+                 bet_sizes: Sequence[float] = DEFAULT_BET_SIZES,
+                 trace: Optional[list] = None):
         self.game = game
         self.strategy = strategy
         self.rollout_samples = rollout_samples
         self.candidates = candidates
         self.bet_sizes = tuple(bet_sizes)
+        #: When a list, one record per sized bet LBR makes: street, size, its
+        #: equity against the range, how the strategy answered and the hand's
+        #: result. On 26 Sept every single-size menu lost while a menu of
+        #: sizes won 31 to 57 BB/100, so the leak is in which size LBR picks
+        #: for which hand, and only a record of the picks can show it. The
+        #: strength estimate draws from its own generator, so tracing does not
+        #: change the hands played.
+        self.trace = trace
 
     # ------------------------------------------------------------------
 
@@ -480,6 +489,7 @@ class LocalBestResponse:
         state = game.initial_state()
         candidate_range = None
         guard = 0
+        records, awaiting = [], None
 
         while not game.is_terminal(state):
             guard += 1
@@ -496,8 +506,19 @@ class LocalBestResponse:
             actions = list(game.legal_actions(state))
 
             if player == me:
-                state = self._apply_move(
-                    state, self._choose(state, me, candidate_range, rng), rng)
+                move = self._choose(state, me, candidate_range, rng)
+                record = None
+                if self.trace is not None and move.fraction is not None:
+                    own = np.random.default_rng(7919 * (len(self.trace) + len(records)) + 1)
+                    record = {"street": int(state.street), "size": float(move.fraction),
+                              "raise": bool(state.committed[1 - me] > state.committed[me]),
+                              "pot_bb": sum(state.contributions) / game.big_blind,
+                              "equity": float(self._win_probability(state, me, candidate_range, own))}
+                state = self._apply_move(state, move, rng)
+                if record is not None:
+                    record["perceived"] = int(state.history[-1])       # the size the strategy saw
+                    records.append(record)
+                    awaiting = record
                 continue
 
             key = game.information_set(state, player)
@@ -505,16 +526,26 @@ class LocalBestResponse:
             if probabilities is None or probabilities.size != len(actions):
                 probabilities = np.full(len(actions), 1.0 / len(actions))
             index = int(rng.choice(len(actions), p=probabilities))
+            if awaiting is not None:
+                answer = actions[index]
+                awaiting["answer"] = "fold" if answer == FOLD else ("call" if answer == CHECK_CALL else "raise")
+                awaiting = None
             self._update_belief(candidate_range, state, index)
             state = game.next_state(state, actions[index])
 
-        return game.utility(state, me)
+        result = game.utility(state, me)
+        if records:
+            for record in records:
+                record["result_bb"] = result / game.big_blind
+            self.trace.extend(records)
+        return result
 
 
 def lbr_value(game, strategy: Dict[Hashable, np.ndarray], hands: int = 2000,
               rng: Optional[np.random.Generator] = None,
               rollout_samples: int = 60, candidates: int = 32,
-              bet_sizes: Sequence[float] = DEFAULT_BET_SIZES) -> LBRResult:
+              bet_sizes: Sequence[float] = DEFAULT_BET_SIZES,
+              trace: Optional[list] = None) -> LBRResult:
     """
     Lower bound on the exploitability of ``strategy``, in chips per hand.
 
@@ -525,4 +556,4 @@ def lbr_value(game, strategy: Dict[Hashable, np.ndarray], hands: int = 2000,
     exploiter lost money, so the bound is slack and says nothing at all.
     """
     return LocalBestResponse(game, strategy, rollout_samples, candidates,
-                             bet_sizes).play(hands, rng)
+                             bet_sizes, trace).play(hands, rng)

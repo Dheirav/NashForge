@@ -82,6 +82,9 @@ def anatomy(hand, seat):
     mine, theirs = hole.get(str(seat)), hole.get(str(1 - seat))
     if not mine or not theirs:
         return None
+    # Heads-up only: a tournament table seats more than two, and the chip split below assumes seats 0 and 1.
+    if seat not in (0, 1) or any(int(a.get("seat", 0)) not in (0, 1) for a in acts):
+        return None
     board = _board(hand.get("board"))
     put = [0, 0]
     bb = next((a["amount"] for a in acts if a["action"] == "post_big_blind"), 100) or 100

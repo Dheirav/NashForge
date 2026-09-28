@@ -51,6 +51,10 @@ def main():
     parser.add_argument("--seed", type=int, default=0)
     parser.add_argument("--between-sizes", action="store_true",
                         help="give the exploiter sizes that sit between ours, the translation attack")
+    parser.add_argument("--sizes", nargs="+", type=float,
+                        help="the exploiter's bet sizes as pot fractions, e.g. 0.5 1 2 for the taper tree's own; "
+                             "a node that lacks one still translates it")
+    parser.add_argument("--trace", help="write one record per sized bet LBR makes to this .jsonl (see cfr/lbr.py)")
     parser.add_argument("--out", default=os.path.join(ROOT, "results", "cfr", "lbr_ladder.json"))
     args = parser.parse_args()
 
@@ -82,16 +86,25 @@ def main():
         kwargs = {}
         if args.between_sizes:
             kwargs["bet_sizes"] = BETWEEN
+        if args.sizes:
+            kwargs["bet_sizes"] = tuple(args.sizes)
+        trace = [] if args.trace else None
+        if trace is not None:
+            kwargs["trace"] = trace
         result = lbr_value(game, saved["strategy"], hands=args.hands,
                            rng=np.random.default_rng(args.seed),
                            rollout_samples=args.rollout_samples,
                            candidates=args.candidates, **kwargs)
         elapsed = time.perf_counter() - started
+        if trace is not None:
+            with open(args.trace, "a") as handle:
+                for record in trace:
+                    handle.write(json.dumps(dict(record, rung=rung, seed=args.seed)) + "\n")
         big_blind = int(saved_args["big_blind"])
         rows[rung] = {"path": os.path.basename(path), "mean": result.mean, "stderr": result.stderr,
                       "ci95": list(result.ci95), "proves_exploitable": bool(result.proves_exploitable),
                       "hands": args.hands, "bb_per_100": 100.0 * result.mean / big_blind,
-                      "between_sizes": bool(args.between_sizes), "seconds": round(elapsed, 1),
+                      "between_sizes": bool(args.between_sizes), "sizes": kwargs.get("bet_sizes"), "seconds": round(elapsed, 1),
                       "information_sets": len(saved["strategy"])}
         print(f"{rung}: {result.summary()}")
         print(f"   {100.0 * result.mean / big_blind:+.1f} BB/100, {len(saved['strategy']):,} information sets, "
