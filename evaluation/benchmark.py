@@ -136,7 +136,8 @@ def _solver_actions(history: str, to_call: int, raise_cap: int):
     street = history.split("/")[-1]
     raises_so_far = sum(1 for c in street if int(c) in RAISE_ACTIONS)
     last = int(street[-1]) if street else None
-    return list(solver_legal_actions(raises_so_far, to_call > 0, raise_cap, last))
+    return list(solver_legal_actions(raises_so_far, to_call > 0, raise_cap, last,
+                                     street=history.count("/")))
 
 
 #: Where purification applies: nowhere (the average strategy as stored),
@@ -206,8 +207,9 @@ def cfr_agent(strategy: Dict[Hashable, np.ndarray], abstraction,
     # situation from its own key and therefore gives it one fixed bucket, so the
     # agent being scored was bucketing inconsistently with the way the strategy
     # it plays was fitted, and adding noise to every measurement.
-    if purify not in PURIFY_MODES:
-        raise ValueError(f"purify must be one of {PURIFY_MODES}, got {purify!r}")
+    from cfr.purify import valid as _purify_valid, row as _purify_row
+    if purify not in PURIFY_MODES and not _purify_valid(purify):
+        raise ValueError(f"purify must be one of {PURIFY_MODES} or tNN (a threshold), got {purify!r}")
     if on_miss not in ON_MISS_MODES:
         raise ValueError(f"on_miss must be one of {ON_MISS_MODES}, got {on_miss!r}")
     buckets: dict = {}
@@ -276,6 +278,10 @@ def cfr_agent(strategy: Dict[Hashable, np.ndarray], abstraction,
 
         if probe is not None:
             probe[:] = [np.asarray(weights, dtype=np.float64) / total]
+        if purify.startswith("t"):
+            # Thresholding (cfr/purify.py): drop actions under the share, renormalise, keep sampling.
+            weights = list(_purify_row(weights, purify, bool(board)))
+            total = sum(weights)
         if purify == "all" or (purify == "postflop" and board):
             # The most probable action, first index on a tie: purification
             # rather than sampling, see the docstring.
@@ -302,7 +308,7 @@ def cfr_agent(strategy: Dict[Hashable, np.ndarray], abstraction,
 # ---------------------------------------------------------------------------
 
 def _constrain(mask: np.ndarray, to_call: int, raises_this_street: int,
-               raise_cap: int) -> np.ndarray:
+               raise_cap: int, street: int | None = None) -> np.ndarray:
     """
     Narrow the engine's legal set to the tree the solver was trained on.
 
@@ -317,7 +323,7 @@ def _constrain(mask: np.ndarray, to_call: int, raises_this_street: int,
     # sizes and drops the small ones as depth grows. `raise_sizes_at` is the
     # same function `abstraction.betting.legal_actions` uses, so this narrowing
     # cannot drift from the tree the solver was trained on.
-    allowed = raise_sizes_at(raise_cap, raises_this_street)
+    allowed = raise_sizes_at(raise_cap, raises_this_street, street)
     for action in RAISE_ACTIONS:
         if action not in allowed:
             mask[action] = 0.0
@@ -365,7 +371,7 @@ def _play_hand(agents: Sequence[Agent], seed: int, starting_stack: int,
         # playing fold/call frequencies meant for a game with a re-raise in it.
         cap = raise_caps[player] if raise_caps is not None else raise_cap
         mask = _constrain(get_abstract_action_mask(game, player), to_call,
-                          raises_this_street, cap)
+                          raises_this_street, cap, street=history.count("/"))
 
         choice = agents[player](game, player, mask, history)
         if not mask[choice]:

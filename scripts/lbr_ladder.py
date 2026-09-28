@@ -31,6 +31,7 @@ import numpy as np
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
+from abstraction.betting import schedule_from_args  # noqa: E402
 from cfr.flat import load_strategy  # noqa: E402
 from cfr.lbr import lbr_value  # noqa: E402
 from games.nolimit import NoLimitHoldem  # noqa: E402
@@ -54,6 +55,8 @@ def main():
     parser.add_argument("--sizes", nargs="+", type=float,
                         help="the exploiter's bet sizes as pot fractions, e.g. 0.5 1 2 for the taper tree's own; "
                              "a node that lacks one still translates it")
+    parser.add_argument("--purify", default="none",
+                        help="measure the strategy as played under this purification (cfr/purify.py): none, postflop, all, tNN")
     parser.add_argument("--trace", help="write one record per sized bet LBR makes to this .jsonl (see cfr/lbr.py)")
     parser.add_argument("--out", default=os.path.join(ROOT, "results", "cfr", "lbr_ladder.json"))
     args = parser.parse_args()
@@ -75,9 +78,12 @@ def main():
             others = ", ".join(os.path.basename(q) for q in matches[1:])
             print(f"{rung}: using {os.path.basename(path)} (also present: {others})")
         saved = load_strategy(path)
+        if args.purify != "none":
+            from cfr.purify import apply_to_table
+            saved["strategy"] = apply_to_table(saved["strategy"], args.purify)
         saved_args = saved["args"]
-        cap = saved_args["raise_cap"]
-        cap = tuple(cap) if isinstance(cap, (list, tuple)) else cap
+        # Through schedule_from_args: a per-street dict read with tuple() became its street names.
+        cap = schedule_from_args(saved_args["raise_cap"])
         game = NoLimitHoldem(saved["abstraction"], starting_stack=int(saved_args["stack"]),
                              small_blind=int(saved_args["big_blind"]) // 2,
                              big_blind=int(saved_args["big_blind"]), raise_cap=cap,

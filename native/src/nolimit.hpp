@@ -158,7 +158,7 @@ public:
         } else {
             if (facing) available.push_back(FOLD);
             available.push_back(CHECK_CALL);
-            for (int8_t a : schedule_.at(raises)) available.push_back(a);
+            for (int8_t a : schedule_for(s.street).at(raises)) available.push_back(a);
         }
 
         const int player = current_player(s);
@@ -227,11 +227,28 @@ public:
 
     int starting_stack() const { return starting_stack_; }
 
+    /// One schedule per street, preflop to river, used in place of the single
+    /// schedule when set. On 26 Sept LBR's traced bets put 41 to 44% of v5i's
+    /// leak in two preflop sizes the tree lacks (an overbet, and a small
+    /// re-raise where the taper offers only 2x and all-in); adding a size to
+    /// every street multiplies the tree by 4 to 12, adding it preflop only by
+    /// 1.4 to 1.9. The history key is unchanged: the action codes are the same,
+    /// only which are legal differs by street.
+    void set_street_schedules(std::vector<RaiseSchedule> per_street) {
+        if (!per_street.empty() && per_street.size() != static_cast<size_t>(NUM_STREETS))
+            throw std::invalid_argument("street schedules: one per street, preflop to river");
+        street_schedules_ = std::move(per_street);
+    }
+    const RaiseSchedule& schedule_for(int street) const {
+        return street_schedules_.empty() ? schedule_ : street_schedules_[static_cast<size_t>(street)];
+    }
+
 private:
     int starting_stack_;
     int small_blind_;
     int big_blind_;
     RaiseSchedule schedule_;
+    std::vector<RaiseSchedule> street_schedules_;
 };
 
 }  // namespace pokerbot

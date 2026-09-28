@@ -40,7 +40,7 @@ from typing import Dict, List, Optional, Sequence
 
 import numpy as np
 
-from abstraction.betting import ALL_IN, CHECK_CALL, FOLD, RAISE_ACTIONS, RAISE_HALF, RAISE_POT
+from abstraction.betting import ALL_IN, CHECK_CALL, FOLD, RAISE_ACTIONS, RAISE_HALF, RAISE_POT, schedule_from_args
 
 ACTION_NAMES = {FOLD: "fold", CHECK_CALL: "check/call", RAISE_HALF: "raise ½", RAISE_POT: "raise pot",
                 ALL_IN: "all-in"}       # for the log's `adjusted` field; other raises print as their index
@@ -125,7 +125,7 @@ def load_solver(path: str, rng: np.random.Generator, purify: str = "none",
     if not isinstance(args, dict):
         args = vars(args)
     cap = args.get("raise_cap", 1)
-    schedule = tuple(cap) if isinstance(cap, (list, tuple)) else int(cap)
+    schedule = schedule_from_args(cap)
     depth = float(args.get("stack", 200)) / float(args.get("big_blind", 2))
     solver = Solver(path=path, depth_bb=depth, schedule=schedule,
                     strategy=saved["strategy"], abstraction=saved["abstraction"])

@@ -34,7 +34,7 @@ import numpy as np
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
-from abstraction.betting import ALL_IN, legal_actions  # noqa: E402
+from abstraction.betting import ALL_IN, legal_actions, schedule_from_args  # noqa: E402
 from cfr.flat import load_strategy  # noqa: E402
 from scripts.push_fold import combos_of, hand_labels  # noqa: E402
 
@@ -49,7 +49,7 @@ def node_shape(history: str, cap):
     facing = bool(street) and street[-1] >= "2"
     if not street and history.count("/") == 0:
         facing = True                      # the small blind opens against the big blind
-    return legal_actions(raises, facing, cap), raises, history.count("/")
+    return legal_actions(raises, facing, cap, street=history.count("/")), raises, history.count("/")
 
 
 def sweep(path: str, threshold: float, labels, weights):
@@ -57,7 +57,7 @@ def sweep(path: str, threshold: float, labels, weights):
     strategy = saved["strategy"]
     args = saved["args"]
     cap = args["raise_cap"]
-    cap = tuple(cap) if isinstance(cap, (list, tuple)) else cap
+    cap = schedule_from_args(cap)
     depth = args["stack"] / args["big_blind"]
 
     by_history = {}

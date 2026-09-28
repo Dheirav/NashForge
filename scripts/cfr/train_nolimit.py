@@ -33,7 +33,8 @@ sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..",
 
 import numpy as np  # noqa: E402
 
-from abstraction.betting import RAISE_ACTIONS, STREETS, measure, parse_level  # noqa: E402
+from abstraction.betting import (RAISE_ACTIONS, STREETS, StreetSchedule, measure,  # noqa: E402
+                                 normalise_schedule, parse_level, schedule_from_args)
 from abstraction.buckets import CardAbstraction, preflop_key
 from abstraction.equity import FULL_DECK  # noqa: E402
 from cfr import ALL_RULES, MCCFRSolver  # noqa: E402
@@ -65,12 +66,20 @@ def parse_args():
                              "--raise-cap half,pot,jam half,pot,jam jam keeps the "
                              "pot-sized re-raise and drops the 2x-pot one, at the same "
                              "tree size")
+    #: A schedule for one street, which then differs from --raise-cap there:
+    #: `--street-raise-cap preflop half,pot,2x,jam half,2x,jam jam`. Repeat per
+    #: street. On 26 Sept the traced LBR leak was 41 to 44% preflop sizes the
+    #: tree lacks; adding them preflop only costs x1.4 to x1.9, everywhere x4 to x12.
+    parser.add_argument("--street-raise-cap", nargs="+", action="append", default=None,
+                        metavar=("STREET", "LEVEL"),
+                        help="a street (preflop/flop/turn/river) and its levels, as --raise-cap takes them")
     parser.add_argument("--stack", type=int, default=200)
     parser.add_argument("--big-blind", type=int, default=2)
     parser.add_argument("--abstraction-samples", type=int, default=800)
     parser.add_argument("--equity-samples", type=int, default=40)
     parser.add_argument("--update-rule", default="vanilla",
-                        choices=["vanilla", "linear", "cfr+", "dcfr"],
+                        type=lambda v: v if v in ("vanilla", "linear", "cfr+", "dcfr") or v.startswith("dcfr:") else
+                        (_ for _ in ()).throw(argparse.ArgumentTypeError(f"vanilla, linear, cfr+, dcfr or dcfr:A,B,G, not {v}")),
                         help="regret and averaging schedule (cfr/updates.py). vanilla weighs "
                              "every iteration's strategy equally, which leaves a rarely "
                              "reached node's average at its early near-uniform visits")
@@ -116,6 +125,10 @@ def parse_args():
     parser.add_argument("--opponent-share", type=float, default=0.5,
                         help="how often the scripted opponent plays its script rather than its learned strategy: "
                              "1.0 is a pure best response (overfits the script), 0.5 a restricted Nash response")
+    parser.add_argument("--opponent-mix", nargs="+", metavar="NAME:SHARE",
+                        help="native only: train against several scripted shapes at once, e.g. station:0.25 maniac:0.15; "
+                             "at each opponent node a script plays with the shares' total probability, split by share "
+                             "(27 Sept: v5x trained against stations alone folds 79%% of its opens to a re-raise)")
     parser.add_argument("--table-threads", type=int, default=None,
                         help="threads for building the bucket tables (default: --threads); the build is "
                              "embarrassingly parallel and the tables are built once")
@@ -229,7 +242,12 @@ def _train_native(args, abstraction, projected):
     # Counts go in `schedule`, named levels in `raise_sizes`; the native side
     # takes the named form when it is given one. A schedule is one or the
     # other, never a mixture, so the saved args describe one game.
-    if isinstance(args.raise_cap, int):
+    cap = schedule_from_args(args.raise_cap)
+    street_raise_sizes = []
+    if isinstance(cap, StreetSchedule):
+        street_raise_sizes = [[list(level) for level in normalise_schedule(spec)] for spec in cap.streets]
+        schedule, raise_sizes = [], street_raise_sizes[0]
+    elif isinstance(args.raise_cap, int):
         schedule, raise_sizes = [4] * args.raise_cap, []
     elif any(isinstance(level, (tuple, list)) for level in args.raise_cap):
         schedule = []
@@ -255,8 +273,21 @@ def _train_native(args, abstraction, projected):
         preflop, flop, turn, river, args.equity_samples, args.stack,
         args.big_blind // 2, args.big_blind, schedule, args.seed,
         texture=bool(getattr(abstraction, "texture", False)),
-        rule=args.update_rule, raise_sizes=raise_sizes, **hist)
+        rule=args.update_rule, raise_sizes=raise_sizes, street_raise_sizes=street_raise_sizes, **hist)
     solver.set_average_from(int(args.average_from * args.iterations))
+    if args.opponent_mix and args.opponent_archetype:
+        raise SystemExit("--opponent-mix and --opponent-archetype are alternatives; give one")
+    if args.opponent_mix:
+        from chipzen.archetypes import PARAMS
+        mix = []
+        for entry in args.opponent_mix:
+            name, _, share = entry.partition(":")
+            if name not in PARAMS or not share:
+                raise SystemExit(f"--opponent-mix: NAME:SHARE with NAME one of {sorted(PARAMS)}, not {entry}")
+            mix.append(({k: float(v) for k, v in PARAMS[name].items()}, float(share)))
+        solver.set_opponent_mix(mix, args.big_blind)
+        print("restricted best response against a mix: " + ", ".join(f"{e.partition(':')[0]} {100 * float(e.partition(':')[2]):.0f}%"
+                                                                      for e in args.opponent_mix) + " of opponent decisions", flush=True)
     if args.opponent_archetype:
         from chipzen.archetypes import PARAMS
         solver.set_opponent_archetype({k: float(v) for k, v in PARAMS[args.opponent_archetype].items()}, args.big_blind,
@@ -270,6 +301,14 @@ def _train_native(args, abstraction, projected):
         from cfr.flat import load_strategy
         prior = load_strategy(args.warm_start)
         entries = [(key, [float(p) for p in prior["strategy"][key]]) for key in prior["strategy"]]
+        # By action, not by position (cfr/warm.py): a tree that inserts a size into existing nodes would
+        # otherwise inherit each probability one slot to the left. Identity when the trees agree.
+        from cfr.warm import remap_entries
+        prior_args = prior.get("args") or {}
+        prior_cap = prior_args.get("raise_cap", 1) if isinstance(prior_args, dict) else getattr(prior_args, "raise_cap", 1)
+        entries, dropped = remap_entries(entries, schedule_from_args(prior_cap), schedule_from_args(args.raise_cap))
+        print(f"warm start mapped by action onto this tree: {len(entries):,} entries, {dropped:,} dropped "
+              f"(no action list of that width at their node)", flush=True)
         scale = args.big_blind if args.warm_scale is None else args.warm_scale
         solver.warm_start(entries, args.warm_weight, scale, args.warm_mode)
         if args.warm_mode == "frozen":
@@ -308,13 +347,13 @@ def _train_native(args, abstraction, projected):
               f"eta {eta:6.1f} min", flush=True)
     elapsed = time.perf_counter() - start
     print(f"  {elapsed:.1f}s ({elapsed / args.iterations * 1000:.3f} ms/iteration)")
-    if args.opponent_archetype:
+    if args.opponent_archetype or args.opponent_mix:
         # The exploiter's value against the exact opponent it was solved
         # against, in the training game's chips per hand; the number the duel
         # against the Python copy of that opponent cannot separate from the
         # copy's mismatch.
         value = solver.evaluate_against_policy(200000, args.seed + 7)
-        print(f"  against the {args.opponent_archetype} in the training game: {value:+.3f} chips/hand "
+        print(f"  against the {args.opponent_archetype or ' + '.join(args.opponent_mix)} in the training game: {value:+.3f} chips/hand "
               f"({100.0 * value / args.big_blind:+.1f} BB/100) over 200,000 hands", flush=True)
     print(f"  information sets reached: {solver.information_sets():,} "
           f"of {projected.information_sets:,} in the abstraction")
@@ -339,7 +378,7 @@ def _train_native(args, abstraction, projected):
     # Python game, so the file is indistinguishable downstream and the printed
     # baselines are comparable with every previous run's.
     game = NoLimitHoldem(abstraction, starting_stack=args.stack,
-                         big_blind=args.big_blind, raise_cap=args.raise_cap,
+                         big_blind=args.big_blind, raise_cap=schedule_from_args(args.raise_cap),
                          equity_samples=args.equity_samples)
     _report_and_write(args, game, abstraction, strategy,
                       solver.information_sets(), elapsed)
@@ -355,6 +394,16 @@ def main():
     if isinstance(args.raise_cap, (tuple, list)):
         args.raise_cap = tuple(tuple(level) if isinstance(level, (tuple, list)) else int(level)
                                for level in args.raise_cap)
+    if args.street_raise_cap:
+        specs = [args.raise_cap] * len(STREETS)
+        for entry in args.street_raise_cap:
+            street, levels = entry[0].lower(), [parse_level(level) for level in entry[1:]]
+            if street not in STREETS or not levels:
+                raise SystemExit(f"--street-raise-cap: a street ({', '.join(STREETS)}) and its levels, not {entry}")
+            specs[STREETS.index(street)] = tuple(tuple(l) if isinstance(l, (tuple, list)) else int(l) for l in levels)
+        # Saved as {street: named levels}, which `schedule_from_args` reads back.
+        args.raise_cap = StreetSchedule(tuple(specs)).for_saving()
+        args.street_raise_cap = None
     rng = np.random.default_rng(args.seed)
     if args.preflop_buckets is None:
         args.preflop_buckets = args.buckets
@@ -363,7 +412,7 @@ def main():
 
     projected = measure({street: (args.preflop_buckets if street == "preflop" else args.buckets)
                          for street in STREETS},
-                        raise_cap=args.raise_cap)
+                        raise_cap=schedule_from_args(args.raise_cap))
     print(f"Abstract game: {projected.summary()}")
     print(f"  (raise cap is the parameter that decides feasibility — see "
           f"measure_abstraction.py)\n")
@@ -405,14 +454,16 @@ def main():
         print(f"  tables built in {time.perf_counter() - start:.0f}s")
 
     game = NoLimitHoldem(abstraction, starting_stack=args.stack,
-                         big_blind=args.big_blind, raise_cap=args.raise_cap,
+                         big_blind=args.big_blind, raise_cap=schedule_from_args(args.raise_cap),
                          equity_samples=args.equity_samples)
 
     if args.native:
         return _train_native(args, abstraction, projected)
 
     print(f"\nTraining MCCFR for {args.iterations:,} iterations...")
-    rule = next(r for r in ALL_RULES if r.name == args.update_rule)
+    rule = next((r for r in ALL_RULES if r.name == args.update_rule), None)
+    if rule is None:
+        raise SystemExit(f"--update-rule {args.update_rule}: custom settings exist only on the native path")
     solver = MCCFRSolver(game, rule=rule, seed=args.seed,
                          average_from=int(args.average_from * args.iterations))
     start = time.perf_counter()

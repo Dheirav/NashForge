@@ -214,7 +214,7 @@ def build_tree(pot_before: int, to_call: int, stacks: Tuple[int, int],
         # Raises, if either stack allows and the schedule has depth left.
         if rem_call[player] <= 0 or remaining[other] <= 0:
             return node
-        allowed = raise_sizes_at(schedule, raises)
+        allowed = raise_sizes_at(schedule, raises, 3)       # the river, always
         pot_after_call = after_call[0] + after_call[1]
         seen = set()
         for code in allowed:

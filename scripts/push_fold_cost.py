@@ -30,7 +30,7 @@ import numpy as np
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
-from abstraction.betting import ALL_IN, CHECK_CALL, FOLD, legal_actions  # noqa: E402
+from abstraction.betting import ALL_IN, CHECK_CALL, FOLD, legal_actions, schedule_from_args  # noqa: E402
 from cfr.flat import load_strategy  # noqa: E402
 from engine.cards import Card  # noqa: E402
 from scripts.push_fold import combos_of, hand_labels, solve  # noqa: E402
@@ -63,13 +63,13 @@ def play(rung_path, hands, seed, edge, labels, combos):
     strategy = saved["strategy"]
     args = saved["args"]
     cap = args["raise_cap"]
-    cap = tuple(cap) if isinstance(cap, (list, tuple)) else cap
+    cap = schedule_from_args(cap)
     stack, bb = int(args["stack"]), int(args["big_blind"])
     depth = stack / bb
     abstraction = saved["abstraction"]
     shove_ok, call_ok, _, value_shove, value_call = solve(edge, combos, depth)
     labels_index = {label: i for i, label in enumerate(labels)}
-    actions = legal_actions(0, True, cap)                 # the small blind's first decision
+    actions = legal_actions(0, True, cap, street=0)       # the small blind's first decision
     rng = np.random.default_rng(seed)
     deck = np.arange(52)
     total = 0.0

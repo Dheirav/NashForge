@@ -21,6 +21,7 @@
 #include <unordered_map>
 #include <vector>
 #include <cmath>
+#include <cstdio>
 #include "equity.hpp"   // Rng
 
 namespace pokerbot {
@@ -101,7 +102,15 @@ struct UpdateRule {
         if (name == "linear")  return linear();
         if (name == "cfr+")    return cfr_plus();
         if (name == "dcfr")    return dcfr();
-        throw std::invalid_argument("unknown update rule: " + name + " (vanilla, linear, cfr+, dcfr)");
+        // "dcfr:ALPHA,BETA,GAMMA", the discounted family at any setting (28 Sept: the paper's 1.5,0,2 lost 22 to 27
+        // BB/100 head to head to linear at the same tree, and never let pruning fire; the grid tries its neighbours).
+        if (name.rfind("dcfr:", 0) == 0) {
+            UpdateRule r;
+            if (std::sscanf(name.c_str() + 5, "%lf,%lf,%lf", &r.alpha, &r.beta, &r.gamma) != 3)
+                throw std::invalid_argument("update rule dcfr:ALPHA,BETA,GAMMA, not " + name);
+            return r;
+        }
+        throw std::invalid_argument("unknown update rule: " + name + " (vanilla, linear, cfr+, dcfr, dcfr:A,B,G)");
     }
 
     /// The product of the per-iteration factor u^e / (u^e + 1) over the

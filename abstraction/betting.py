@@ -80,20 +80,67 @@ def normalise_schedule(spec: int | Tuple[int, ...]) -> Tuple[Tuple[int, ...], ..
     return tuple(levels)
 
 
-def raise_sizes_at(spec: int | Tuple[int, ...], depth: int) -> Tuple[int, ...]:
+@dataclass(frozen=True)
+class StreetSchedule:
+    """
+    A raise schedule per street, preflop to river: each entry is any schedule
+    :func:`normalise_schedule` takes.
+
+    On 26 Sept LBR's traced bets put 41 to 44% of v5i's 70bb leak in two
+    preflop sizes the tree lacks, an overbet and a small re-raise where the
+    taper offers only 2x and all-in. Added to every street they multiply the
+    tree by 4 to 12; added preflop only, by 1.4 to 1.9. The action codes are
+    the same on every street, so the history key does not change.
+
+    Every lookup must say which street it is on: :func:`resolve` refuses a
+    StreetSchedule without one, so a caller that was never taught the street
+    fails loudly instead of quietly using one street's menu for all four.
+    """
+    streets: Tuple[object, object, object, object]
+
+    def __post_init__(self):
+        if len(self.streets) != len(STREETS):
+            raise ValueError(f"a street schedule has {len(STREETS)} entries, preflop to river")
+
+    def for_saving(self) -> dict:
+        """The form `train_nolimit.py` writes into a solve's args."""
+        return {name: [list(level) for level in normalise_schedule(spec)]
+                for name, spec in zip(STREETS, self.streets)}
+
+
+def resolve(spec, street: int | None):
+    """The schedule that applies on ``street``: ``spec`` itself unless it is a StreetSchedule."""
+    if isinstance(spec, StreetSchedule):
+        if street is None:
+            raise ValueError("a per-street raise schedule was asked for its sizes without a street")
+        return spec.streets[street]
+    return spec
+
+
+def schedule_from_args(value):
+    """A solve's saved ``raise_cap`` back to a schedule: int, tuple, or a per-street dict."""
+    if isinstance(value, dict):
+        return StreetSchedule(tuple(tuple(tuple(level) for level in value[name]) for name in STREETS))
+    if isinstance(value, (list, tuple)):
+        return tuple(tuple(level) if isinstance(level, (list, tuple)) else int(level) for level in value)
+    return value
+
+
+def raise_sizes_at(spec, depth: int, street: int | None = None) -> Tuple[int, ...]:
     """Raise sizes legal at ``depth`` raises in, empty once the schedule ends."""
-    schedule = normalise_schedule(spec)
+    schedule = normalise_schedule(resolve(spec, street))
     return schedule[depth] if depth < len(schedule) else ()
 
 
-def max_raises(spec: int | Tuple[int, ...]) -> int:
+def max_raises(spec, street: int | None = None) -> int:
     """How deep the schedule goes. Equals ``spec`` when ``spec`` is an int."""
-    return len(normalise_schedule(spec))
+    return len(normalise_schedule(resolve(spec, street)))
 
 
 def legal_actions(raises_so_far: int, facing_bet: bool,
                   raise_cap: int | Tuple[int, ...],
-                  last_action: int | None = None) -> Tuple[int, ...]:
+                  last_action: int | None = None,
+                  street: int | None = None) -> Tuple[int, ...]:
     """
     Actions available given the state of the current street's betting.
 
@@ -120,7 +167,7 @@ def legal_actions(raises_so_far: int, facing_bet: bool,
     if facing_bet:
         actions.append(FOLD)
     actions.append(CHECK_CALL)
-    actions.extend(raise_sizes_at(raise_cap, raises_so_far))
+    actions.extend(raise_sizes_at(raise_cap, raises_so_far, street))
     return tuple(actions)
 
 
@@ -206,19 +253,20 @@ def measure(buckets: Dict[str, int], raise_cap: int = 2,
     a fold, so the betting lines multiply across streets. Memory assumes one
     regret and one strategy accumulator per action, which is what CFR stores.
     """
-    per_street = count_decision_points(raise_cap)
-    decisions = per_street[0] + per_street[1]
-
-    surviving = len([seq for seq, folded in enumerate_street_sequences(raise_cap)
-                     if not folded])
-
     reaching: Dict[str, int] = {}
     lines = 1
     total = 0
-    for street in STREETS:
+    decisions = 0
+    for index, street in enumerate(STREETS):
+        # Each street counted with its own schedule: with a StreetSchedule the
+        # decision points and the lines that survive differ street by street.
+        cap = resolve(raise_cap, index)
+        per_street = count_decision_points(cap)
+        here = per_street[0] + per_street[1]
+        decisions = decisions or here            # reported: the preflop street's
         reaching[street] = lines
-        total += lines * decisions * buckets[street]
-        lines *= surviving
+        total += lines * here * buckets[street]
+        lines *= len([seq for seq, folded in enumerate_street_sequences(cap) if not folded])
 
     entries = total * num_actions * 2          # regret and strategy sums
     return AbstractionSize(

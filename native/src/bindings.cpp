@@ -22,6 +22,40 @@
 namespace nb = nanobind;
 using namespace pokerbot;
 
+/// Per-street named schedules from Python: four lists (preflop to river) of
+/// levels, each level the raise actions legal at that depth. Empty means the
+/// single schedule applies to every street, as it did before 26 Sept.
+static std::vector<RaiseSchedule> street_schedules(
+        const std::vector<std::vector<std::vector<int>>>& per_street) {
+    std::vector<RaiseSchedule> out;
+    for (const auto& levels : per_street) {
+        RaiseSchedule sched;
+        for (const auto& level : levels) {
+            std::vector<int8_t> row;
+            for (int action : level) row.push_back(static_cast<int8_t>(action));
+            sched.chosen.push_back(row);
+        }
+        out.push_back(sched);
+    }
+    return out;
+}
+
+/// chipzen/archetypes.py's parameter names onto the C++ struct; an unknown name is an error, not a default.
+static ArchetypeParams archetype_params(const std::map<std::string, double>& params) {
+    ArchetypeParams p;
+    const std::map<std::string, double*> fields = {
+        {"open_eq", &p.open_eq}, {"limp_eq", &p.limp_eq}, {"threebet_eq", &p.threebet_eq},
+        {"fold_margin", &p.fold_margin}, {"raise_eq", &p.raise_eq}, {"raise_p", &p.raise_p},
+        {"bluff_p", &p.bluff_p}, {"call_p", &p.call_p}, {"defend_eq", &p.defend_eq}, {"defend3_eq", &p.defend3_eq},
+        {"open_frac", &p.open_frac}};
+    for (const auto& [name, value] : params) {
+        auto it = fields.find(name);
+        if (it == fields.end()) throw std::invalid_argument("archetype parameters: unknown name " + name);
+        *it->second = value;
+    }
+    return p;
+}
+
 NB_MODULE(pokerbot_native, m) {
     m.doc() = "NashForge solver core in C++. See native/README.md.";
 
@@ -86,7 +120,9 @@ NB_MODULE(pokerbot_native, m) {
     m.def("replay", [](const std::vector<int>& actions, int starting_stack,
                        int small_blind, int big_blind,
                        const std::vector<int>& schedule,
-                       const std::vector<std::vector<int>>& raise_sizes) {
+                       const std::vector<std::vector<int>>& raise_sizes,
+                       const std::vector<std::vector<std::vector<int>>>& street_raise_sizes,
+                       bool deal_streets) {
         RaiseSchedule sched;
         for (int n : schedule) sched.sizes.push_back(n);
         for (const auto& level : raise_sizes) {
@@ -95,12 +131,20 @@ NB_MODULE(pokerbot_native, m) {
             sched.chosen.push_back(row);
         }
         NoLimitHoldem game(starting_stack, small_blind, big_blind, sched);
+        game.set_street_schedules(street_schedules(street_raise_sizes));
 
         State s = game.initial_state();
         s.dealt = true;                     // cards are irrelevant to betting
+        // An empty board for every street: the betting never reads the cards,
+        // and a per-street schedule can only be tested across streets.
+        const int8_t board[5] = {0, 1, 2, 3, 4};
 
         std::vector<std::vector<int8_t>> legal_at_each;
         for (int action : actions) {
+            if (game.is_terminal(s)) return std::make_tuple(-1, std::vector<int>{},
+                                                            std::string{}, legal_at_each);
+            while (deal_streets && game.current_player(s) < 0 && !game.is_terminal(s))
+                s = game.advance_street(s, board, s.street == 0 ? 3 : s.board_n + 1);
             if (game.is_terminal(s)) return std::make_tuple(-1, std::vector<int>{},
                                                             std::string{}, legal_at_each);
             if (game.current_player(s) < 0) return std::make_tuple(-2, std::vector<int>{},
@@ -119,6 +163,8 @@ NB_MODULE(pokerbot_native, m) {
     }, nb::arg("actions"), nb::arg("starting_stack"), nb::arg("small_blind"),
        nb::arg("big_blind"), nb::arg("schedule"),
        nb::arg("raise_sizes") = std::vector<std::vector<int>>{},
+       nb::arg("street_raise_sizes") = std::vector<std::vector<std::vector<int>>>{},
+       nb::arg("deal_streets") = false,
        "Drive the betting game through a sequence. Returns (pot, stacks, history, "
        "legal-at-each-step); pot is -1 if the sequence ran past a terminal node, "
        "-2 at a chance node, -3 if an action was not legal.");
@@ -295,7 +341,8 @@ NB_MODULE(pokerbot_native, m) {
                             const std::vector<std::vector<std::vector<double>>>& hist_centroids,
                             int hist_bins, int hist_runouts, int hist_opponents,
                             const BucketTable* flop_table, const BucketTable* turn_table,
-                            const std::vector<std::vector<int>>& raise_sizes) {
+                            const std::vector<std::vector<int>>& raise_sizes,
+                            const std::vector<std::vector<std::vector<int>>>& street_raise_sizes) {
             Abstraction abstraction;
             if (flop_table) abstraction.hist_tables[0] = *flop_table;
             if (turn_table) abstraction.hist_tables[1] = *turn_table;
@@ -329,6 +376,7 @@ NB_MODULE(pokerbot_native, m) {
                 NoLimitGame(std::move(abstraction), starting_stack, small_blind,
                             big_blind, std::move(sched)),
                 UpdateRule::from_name(rule), seed);
+            self->game().set_street_schedules(street_schedules(street_raise_sizes));
         }, nb::arg("preflop"), nb::arg("flop"), nb::arg("turn"), nb::arg("river"),
            nb::arg("equity_samples"), nb::arg("starting_stack"),
            nb::arg("small_blind"), nb::arg("big_blind"), nb::arg("schedule"),
@@ -336,24 +384,14 @@ NB_MODULE(pokerbot_native, m) {
            nb::arg("hist_centroids") = std::vector<std::vector<std::vector<double>>>{},
            nb::arg("hist_bins") = 20, nb::arg("hist_runouts") = 100, nb::arg("hist_opponents") = 50,
            nb::arg("flop_table").none() = nullptr, nb::arg("turn_table").none() = nullptr,
-           nb::arg("raise_sizes") = std::vector<std::vector<int>>{})
+           nb::arg("raise_sizes") = std::vector<std::vector<int>>{},
+           nb::arg("street_raise_sizes") = std::vector<std::vector<std::vector<int>>>{})
         .def("set_common_random_numbers", [](MCCFR<NoLimitGame>& s, bool on) { s.game().set_common_random_numbers(on); },
              nb::arg("on"), "One deal per iteration shared across every branch (variance reduction); off by default.")
         .def("set_exact_terminals", [](MCCFR<NoLimitGame>& s, bool on) { s.game().set_exact_terminals(on); },
              nb::arg("on"), "Score flop and turn all-ins over every runout instead of one sample; off by default.")
         .def("set_opponent_archetype", [](MCCFR<NoLimitGame>& s, const std::map<std::string, double>& params, int big_blind, double share) {
-            ArchetypeParams p;
-            const std::map<std::string, double*> fields = {
-                {"open_eq", &p.open_eq}, {"limp_eq", &p.limp_eq}, {"threebet_eq", &p.threebet_eq},
-                {"fold_margin", &p.fold_margin}, {"raise_eq", &p.raise_eq}, {"raise_p", &p.raise_p},
-                {"bluff_p", &p.bluff_p}, {"call_p", &p.call_p}, {"defend_eq", &p.defend_eq}, {"defend3_eq", &p.defend3_eq},
-                {"open_frac", &p.open_frac}};
-            for (const auto& [name, value] : params) {
-                auto it = fields.find(name);
-                if (it == fields.end()) throw std::invalid_argument("set_opponent_archetype: unknown parameter " + name);
-                *it->second = value;
-            }
-            auto opponent = std::make_shared<ScriptedOpponent>(p, big_blind);
+            auto opponent = std::make_shared<ScriptedOpponent>(archetype_params(params), big_blind);
             s.set_opponent_policy([opponent](const NoLimitGame::State& state, int player,
                                              const std::vector<int8_t>& legal, Rng& rng) {
                 return opponent->act(state.bet, player, legal, rng);
@@ -361,6 +399,36 @@ NB_MODULE(pokerbot_native, m) {
         }, nb::arg("params"), nb::arg("big_blind"), nb::arg("share") = 1.0,
            "Train a best response: the opponent's nodes play this scripted policy (archetype.hpp, the "
            "parameter names of chipzen/archetypes.py) instead of the table.")
+        .def("set_opponent_mix", [](MCCFR<NoLimitGame>& s,
+                                    const std::vector<std::pair<std::map<std::string, double>, double>>& mix, int big_blind) {
+            // Several scripts at once (27 Sept: v5x, trained against stations only, folds 79% of its opens
+            // to a re-raise, and an LLM re-raising any two cards found it). At each opponent node the
+            // solver plays a script with probability equal to the shares' total, as for one archetype;
+            // which script is then drawn in proportion to its share. With one entry no second draw is
+            // made, so a one-entry mix trains exactly as set_opponent_archetype does.
+            if (mix.empty()) throw std::invalid_argument("set_opponent_mix: empty mix");
+            std::vector<std::shared_ptr<ScriptedOpponent>> scripts;
+            std::vector<double> cumulative;
+            double total = 0.0;
+            for (const auto& [params, share] : mix) {
+                if (!(share > 0.0)) throw std::invalid_argument("set_opponent_mix: shares must be positive");
+                scripts.push_back(std::make_shared<ScriptedOpponent>(archetype_params(params), big_blind));
+                total += share;
+                cumulative.push_back(total);
+            }
+            if (total > 1.0 + 1e-9) throw std::invalid_argument("set_opponent_mix: shares add up to more than 1");
+            s.set_opponent_policy([scripts, cumulative, total](const NoLimitGame::State& state, int player,
+                                                               const std::vector<int8_t>& legal, Rng& rng) {
+                size_t pick = 0;
+                if (scripts.size() > 1) {
+                    const double u = (rng.next() >> 11) * (1.0 / 9007199254740992.0) * total;
+                    while (pick + 1 < scripts.size() && u >= cumulative[pick]) ++pick;
+                }
+                return scripts[pick]->act(state.bet, player, legal, rng);
+            }, total);
+        }, nb::arg("mix"), nb::arg("big_blind"),
+           "Train against several scripted shapes at once: a list of (parameters, share) pairs; the shares' "
+           "total is how often a script plays at an opponent node, split between them by share.")
         .def("evaluate_against_policy", [](MCCFR<NoLimitGame>& s, int64_t hands, uint64_t seed) {
             nb::gil_scoped_release release;
             return s.evaluate_against_policy(hands, seed);

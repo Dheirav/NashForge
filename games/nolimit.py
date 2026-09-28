@@ -212,7 +212,7 @@ class NoLimitHoldem(Game):
         facing = state.committed[0] != state.committed[1]
         last = int(actions[-1]) if actions else None
 
-        available = list(legal_actions(raises, facing, self.raise_cap, last))
+        available = list(legal_actions(raises, facing, self.raise_cap, last, street=state.street))
 
         player = self.current_player(state)
         to_call = abs(state.committed[0] - state.committed[1])

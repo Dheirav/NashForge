@@ -89,7 +89,7 @@ def _as_abstract(fraction: float, level: int, ceiling: int, node: Node,
     fold to. A bet beyond the largest size the abstraction carries is read as a
     shove too and counted, because that is a bet this project cannot describe.
     """
-    sizes = raise_sizes_at(schedule, node.raises_this_street)
+    sizes = raise_sizes_at(schedule, node.raises_this_street, node.history.count("/"))
     if level >= ceiling:
         return ALL_IN
     fractions = [RAISE_FRACTIONS[a - 2] for a in sizes if a != ALL_IN]
@@ -137,7 +137,7 @@ def _close_street(hand: Hand, schedule) -> None:
     depths = [d for (pos, d) in hand.pseudo_allins if pos == position]
     if not depths:
         return
-    sized = [a for a in raise_sizes_at(schedule, depths[0]) if a != ALL_IN]
+    sized = [a for a in raise_sizes_at(schedule, depths[0], node.history[:street_start].count("/")) if a != ALL_IN]
     hand._edits.append((position, (str(sized[-1]) if sized else "") + str(CHECK_CALL)))
     hand.pseudo_allins = [p for p in hand.pseudo_allins if p[0] < street_start]
     hand.collapsed += 1
@@ -309,7 +309,8 @@ def legal_mask(node: Node, valid_actions: Sequence[str], schedule=1,
         mask[FOLD] = 0.0
     if "check" not in valid_actions and "call" not in valid_actions:
         mask[CHECK_CALL] = 0.0
-    allowed = raise_sizes_at(schedule, node.raises_this_street) if tree else (2, 3, 4, ALL_IN)
+    allowed = (raise_sizes_at(schedule, node.raises_this_street, node.history.count("/"))
+               if tree else (2, 3, 4, ALL_IN))
     for action in (2, 3, 4, ALL_IN):
         if action not in allowed or "raise" not in valid_actions:
             mask[action] = 0.0

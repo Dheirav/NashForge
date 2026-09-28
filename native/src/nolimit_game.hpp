@@ -103,6 +103,11 @@ public:
         : abstraction_(std::move(abstraction)),
           betting_(starting_stack, small_blind, big_blind, std::move(schedule)) {}
 
+    /// See `NoLimitHoldem::set_street_schedules`.
+    void set_street_schedules(std::vector<RaiseSchedule> per_street) {
+        betting_.set_street_schedules(std::move(per_street));
+    }
+
     State initial_state() const {
         State s;
         s.bet = betting_.initial_state();

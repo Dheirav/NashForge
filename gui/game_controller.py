@@ -196,7 +196,7 @@ class GameController:
             self.to_call = self.game.current_bet - actor.bet
             self.mask = _constrain(get_abstract_action_mask(self.game, player),
                                    self.to_call, self.raises_this_street,
-                                   RAISE_CAP)
+                                   RAISE_CAP, street=self.history.count("/"))
 
             if player == self.human_seat:
                 self.awaiting_human = True

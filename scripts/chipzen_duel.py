@@ -76,6 +76,8 @@ def build(ladder_dir: str, flags: str, label: str, rng: np.random.Generator,
         return player
     deep = "--deep-primary" in flags
     tokens = flags.split()
+    # "--purify MODE" (cfr/purify.py): none, postflop, all or tNN; as chipzen_run.py's flag of the same name.
+    purify = tokens[tokens.index("--purify") + 1] if "--purify" in tokens else "none"
     explicit = None
     if "--companions" in tokens:
         # The pickles after --companions, as chipzen_run.py takes them; an
@@ -85,7 +87,7 @@ def build(ladder_dir: str, flags: str, label: str, rng: np.random.Generator,
         while start < len(tokens) and not tokens[start].startswith("--"):
             explicit.append(tokens[start]); start += 1
     _, ladder, companions = ladder_paths(ladder_dir, deep, companions=explicit)
-    player = ArenaPlayer(ladder, rng, companions=companions,
+    player = ArenaPlayer(ladder, rng, companions=companions, purify=purify,
                          river_shove_companion="--river-shove-companion" in flags,
                          stack_cap="--stack-cap" in flags,
                          short_solution="--no-short-solution" not in flags,

@@ -29,7 +29,7 @@ sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..",
 
 import numpy as np  # noqa: E402
 
-from abstraction.betting import ALL_IN, CHECK_CALL, FOLD  # noqa: E402
+from abstraction.betting import ALL_IN, CHECK_CALL, FOLD, schedule_from_args  # noqa: E402
 from abstraction.buckets import canonical_preflop_hands  # noqa: E402
 from abstraction.equity import FULL_DECK  # noqa: E402
 from engine.cards import RANKS, Card  # noqa: E402
@@ -179,7 +179,7 @@ def solver_ranges(path, hands):
     strategy, abstraction = saved["strategy"], saved["abstraction"]
     args = saved.get("args") or {}
     cap = args.get("raise_cap", 1)
-    schedule = tuple(cap) if isinstance(cap, (list, tuple)) else int(cap)
+    schedule = schedule_from_args(cap)
     push = np.zeros(len(hands))
     shove_only = np.zeros(len(hands))
     call = np.zeros(len(hands))

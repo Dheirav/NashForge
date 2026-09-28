@@ -34,6 +34,7 @@ sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")
 
 import numpy as np  # noqa: E402
 
+from chipzen.bridge import replay as bridge_replay  # noqa: E402
 from chipzen.player import load_solver  # noqa: E402
 from evaluation.benchmark import CHECK_CALL, FOLD, NUM_ACTIONS, _solver_actions  # noqa: E402
 from scripts.chipzen_review import DIRS, ACTION, hands_of, load, net  # noqa: E402
@@ -58,18 +59,61 @@ def rung_for(depths, effective_bb):
     return min(depths, key=lambda d: abs(log(d) - log(effective_bb)))
 
 
-def lookup(solver, decision):
+def situation(hand, seat, k):
+    """
+    The state our seat saw at its k-th decision in a logged hand, rebuilt from the hand's start and
+    its result: the actions before that decision and the stacks they leave. What `bridge.replay`
+    reads, so the history key can be derived for a tree the live bot was not playing.
+    """
+    history = (hand.get("result") or {}).get("action_history") or []
+    ours, prefix = 0, None
+    for i, entry in enumerate(history):
+        if entry.get("seat") == seat and not str(entry.get("action", "")).startswith("post"):
+            if ours == k:
+                prefix = history[:i]
+                break
+            ours += 1
+    if prefix is None:
+        return None
+    start = hand["start"].get("stacks")
+    if not start:
+        return None
+    put = [0, 0]
+    for entry in prefix:
+        put[int(entry["seat"])] += int(entry.get("amount") or 0)
+    return {"action_history": prefix, "your_stack": int(start[seat]) - put[seat],
+            "opponent_stacks": [int(start[1 - seat]) - put[1 - seat]],
+            # The live state names the street; without it a decision that opens a street is read as
+            # the previous one's (the bridge closes streets on the phase change).
+            "phase": hand["decisions"][k]["phase"]}
+
+
+def retranslated(solver, decision):
+    """The history key on this solver's own schedule, as the live bot would have built it."""
+    state = decision.get("_state")
+    if state is None:
+        return None
+    keys = {bridge_replay(state, decision["_seat"], np.random.default_rng(seed), schedule=solver.schedule).node.history
+            for seed in (0, 1, 2)}
+    # An opponent size between two of ours is translated at random (pseudo-harmonic), and the live
+    # bot's draw is not in the log; where three seeds agree no draw was involved, and the key is exact.
+    decision["_deterministic"] = len(keys) == 1
+    return bridge_replay(state, decision["_seat"], np.random.default_rng(0), schedule=solver.schedule).node.history
+
+
+def lookup(solver, decision, history_key=None):
     """The solver's distribution over the arena's legal actions, or None on a miss."""
     hole = parse_cards(decision["hole"])
     board = parse_cards(decision["board"] or [])
     key = (tuple(c.index for c in hole), tuple(c.index for c in board))
     bucket = solver.abstraction.bucket(hole, board, np.random.default_rng(hash(key) % (2 ** 32)))
-    probabilities = solver.strategy.get(f"{bucket}|{decision['history']}")
+    history = decision["history"] if history_key is None else history_key
+    probabilities = solver.strategy.get(f"{bucket}|{history}")
     if probabilities is None:
         return None
     # Spread onto the six abstract actions exactly as `cfr_agent` does: an
     # entry is stored over the node's own legal-action list, not six wide.
-    actions = _solver_actions(decision["history"], decision["to_call"], solver.schedule)
+    actions = _solver_actions(history, decision["to_call"], solver.schedule)
     if decision["to_call"] > 0 and probabilities.size == 2:
         actions = [FOLD, CHECK_CALL]     # stack-capped in the tree: fold/call (see cfr_agent)
     if len(actions) != probabilities.size:
@@ -81,7 +125,10 @@ def lookup(solver, decision):
     return weights / weights.sum() if weights.sum() > 0 else None
 
 
-def answer(ladder_dir, deep_primary, decisions, paths=None):
+KEY_CHECK = Counter()
+
+
+def answer(ladder_dir, deep_primary, decisions, paths=None, retranslate=False):
     """Distribution per decision id, loading one rung at a time."""
     if paths is None:
         _, paths, _ = ladder_paths(ladder_dir, deep_primary)
@@ -93,7 +140,13 @@ def answer(ladder_dir, deep_primary, decisions, paths=None):
     for depth, rows in sorted(grouped.items()):
         solver = load_solver(by_depth[depth], np.random.default_rng(0))
         for d in rows:
-            out[id(d)] = lookup(solver, d)
+            key = retranslated(solver, d) if retranslate else None
+            if retranslate:
+                KEY_CHECK["rebuilt" if key is not None else "not rebuilt"] += 1
+                KEY_CHECK["same as logged" if key == d["history"] else "differs from logged"] += int(key is not None)
+                if key is not None and d.get("_deterministic"):
+                    KEY_CHECK["no draw: same" if key == d["history"] else "no draw: DIFFERS"] += 1
+            out[id(d)] = lookup(solver, d, key)  # key: the rebuilt history, or None for the logged one
         del solver
     return out
 
@@ -145,11 +198,16 @@ def main():
     parser.add_argument("--label-prefix", help="only matches whose version label starts with this, "
                         "e.g. v3: the baseline check is only clean on matches the baseline set played")
     parser.add_argument("--out", default=OUT)
+    parser.add_argument("--retranslate", action="store_true",
+                        help="derive each history key on the set's own schedule from the logged hand, as the live "
+                             "bot would; needed when the new set's tree differs (per-street schedules). Checked by "
+                             "rebuilding the baseline's keys, which must match the logged ones")
+    parser.add_argument("--matches-dir", nargs="+", help="where the match logs are (default: the review's DIRS)")
     args = parser.parse_args()
     deep = not args.no_deep_primary
 
     all_hands = []
-    for directory in DIRS:
+    for directory in (args.matches_dir or DIRS):
         for path in sorted(glob.glob(os.path.join(directory, "*.jsonl"))):
             rows = load(path)
             if args.label_prefix:
@@ -159,11 +217,15 @@ def main():
                     continue
             seat, opponent, hands, _ = hands_of(rows)
             for h in hands:
+                for k, d in enumerate(h["decisions"]):
+                    d["_seat"], d["_state"] = seat, situation(h, seat, k)
                 all_hands.append((h, seat, opponent, os.path.basename(path)[:8]))
     decisions = [d for h, *_ in all_hands for d in h["decisions"]]
 
-    new = answer(args.ladder_dir, deep, decisions)
-    old = answer(args.baseline_dir, deep or args.baseline_deep_primary, decisions)
+    old = answer(args.baseline_dir, deep or args.baseline_deep_primary, decisions, retranslate=args.retranslate)
+    baseline_check = dict(KEY_CHECK)
+    KEY_CHECK.clear()
+    new = answer(args.ladder_dir, deep, decisions, retranslate=args.retranslate)
     primary_misses = [d for d in decisions if new[id(d)] is None]
     comp = companion_answers(args.ladder_dir, deep, primary_misses) if args.companions else {}
     answered = {k for k, (dist, _) in comp.items() if dist is not None}
@@ -184,6 +246,10 @@ def main():
              f"{len(decisions)} decisions from {len(all_hands)} hands"
              + (f" (matches labelled {args.label_prefix}*)" if args.label_prefix else "")
              + f"; baseline {os.path.relpath(args.baseline_dir, ROOT)}.", ""]
+    if args.retranslate:
+        lines += ["History keys rebuilt from each logged hand on each set's own schedule. The check: the "
+                  f"baseline's rebuilt keys against the logged ones, {baseline_check}; the new set's, {dict(KEY_CHECK)} "
+                  "(these differ by design where its tree differs).", ""]
 
     # ---- coverage and agreement --------------------------------------------
     cov = Counter()

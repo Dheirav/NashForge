@@ -27,6 +27,7 @@ import numpy as np  # noqa: E402
 
 from cfr.flat import load_strategy  # noqa: E402
 from evaluation.benchmark import benchmark, cfr_agent  # noqa: E402
+from abstraction.betting import StreetSchedule, schedule_from_args  # noqa: E402
 
 
 def load(path, seed, raise_cap, on_miss="random"):
@@ -41,7 +42,7 @@ def load(path, seed, raise_cap, on_miss="random"):
     if "stack" not in args or "big_blind" not in args:
         raise SystemExit(f"{path}: no stack/big_blind in its args; refusing to guess the game")
     cap = args.get("raise_cap", raise_cap)
-    cap = tuple(cap) if isinstance(cap, (list, tuple)) else int(cap)
+    cap = schedule_from_args(cap)
     misses = [0, 0]
     stack = int(args["stack"])
     bb = int(args["big_blind"])
@@ -96,7 +97,9 @@ def main():
         with open(args.output, "w") as handle:
             json.dump({"first": args.first, "second": args.second, "hands": args.hands,
                        "seeds": args.seeds, "bb_per_100": scores, "mean": mean, "stderr": stderr,
-                       "on_miss": args.on_miss, "stack": stack, "big_blind": bb, "stack_cap": True, "raise_caps": [cap_a, cap_b],
+                       "on_miss": args.on_miss, "stack": stack, "big_blind": bb, "stack_cap": True,
+                       # A per-street schedule is written the way the trainer saves it, so it reads back.
+                       "raise_caps": [c.for_saving() if isinstance(c, StreetSchedule) else c for c in (cap_a, cap_b)],
                        "miss_rate": [float(np.mean([m[0] for m in miss_rates])),
                                      float(np.mean([m[1] for m in miss_rates]))],
                        "measured": time.strftime("%Y-%m-%d %H:%M")}, handle, indent=1)

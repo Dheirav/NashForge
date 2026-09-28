@@ -178,7 +178,7 @@ def _as_abstract(fraction: float, level: int, node: Node, schedule,
     """
     if level >= STARTING_STACK:
         return ALL_IN
-    sizes = raise_sizes_at(schedule, node.raises_this_street)
+    sizes = raise_sizes_at(schedule, node.raises_this_street, node.street)
     fractions = [RAISE_FRACTIONS[a - 2] for a in sizes if a != ALL_IN]
     if not fractions:
         # No sized raise at this depth: only all-in, or nothing at all. Either
@@ -244,7 +244,7 @@ def legal_mask(node: Node, raise_cap: int = 1) -> np.ndarray:
     mask = np.ones(6, dtype=np.float64)
     if node.to_call <= 0:
         mask[FOLD] = 0.0
-    allowed = raise_sizes_at(raise_cap, node.raises_this_street)
+    allowed = raise_sizes_at(raise_cap, node.raises_this_street, node.street)
     for action in (2, 3, 4, ALL_IN):
         if action not in allowed:
             mask[action] = 0.0

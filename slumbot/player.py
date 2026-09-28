@@ -37,6 +37,7 @@ from chipzen.player import fallback_choice, strength_class
 from evaluation.benchmark import cfr_agent
 from slumbot.api import HandState
 from slumbot.bridge import legal_mask, parse_cards, replay, to_slumbot
+from abstraction.betting import schedule_from_args  # noqa: E402
 
 
 @dataclass
@@ -85,7 +86,7 @@ def strategy_schedule(saved: dict):
     if not isinstance(args, dict):
         args = vars(args)
     cap = args.get("raise_cap", 1)
-    return tuple(cap) if isinstance(cap, (list, tuple)) else int(cap)
+    return schedule_from_args(cap)
 
 
 class SolverPlayer:

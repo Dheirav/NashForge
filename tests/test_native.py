@@ -510,3 +510,157 @@ def test_a_scripted_opponent_sees_its_cards_and_the_copy_matches_the_python_shap
     open_ = native.archetype_act(params, 2, 2000, 0, [12, 25], [], [1, 2], [1, 2], [199, 198], "", [0, 1, 2, 3, 4, 5], 3)
     limp = native.archetype_act(params, 2, 2000, 0, [0, 18], [], [1, 2], [1, 2], [199, 198], "", [0, 1, 2, 3, 4, 5], 3)
     assert open_ >= 2 and limp == 1
+
+
+def test_the_cpp_betting_game_agrees_on_a_schedule_per_street():
+    """
+    A raise schedule per street (26 Sept), driven across streets.
+
+    The test above never leaves the first street, and a per-street schedule is
+    only different after the flop is dealt, so this one deals an empty board
+    at every chance node on both sides (the betting never reads the cards) and
+    goes to the river: every sequence to depth five, then random longer ones.
+    Compared at every step as above: pot, stacks, history and the legal list.
+    """
+    import itertools
+    import random
+
+    from abstraction.betting import (ALL_IN, RAISE_HALF as H, RAISE_POT as P, RAISE_TWO as T,
+                                     StreetSchedule, normalise_schedule)
+    from abstraction.buckets import CardAbstraction
+    from games.nolimit import NoLimitHoldem
+
+    stack, small_blind, big_blind = 200, 1, 2
+    abstraction = CardAbstraction(preflop_buckets=2, postflop_buckets=2, samples=20, equity_samples=4)
+    abstraction.fit(np.random.default_rng(0))
+    today = ((H, P, T, ALL_IN), (T, ALL_IN), (ALL_IN,))
+    proposed = StreetSchedule((((H, P, T, ALL_IN), (H, T, ALL_IN), (ALL_IN,)), today, today, today))
+    odd = StreetSchedule((((P, ALL_IN),), ((H,), (ALL_IN,)), ((H, P, T, ALL_IN), (T, ALL_IN), (ALL_IN,)), ((ALL_IN,),)))
+
+    def python_replay(actions, schedule):
+        game = NoLimitHoldem(abstraction, starting_stack=stack, small_blind=small_blind,
+                             big_blind=big_blind, raise_cap=schedule, equity_samples=4)
+        state = game.initial_state()._replace(hole=((0, 1), (2, 3)))
+        rng = np.random.default_rng(1)
+        legal_each = []
+        for action in actions:
+            while not game.is_terminal(state) and game.current_player(state) < 0:
+                state = game.next_state(state, game.sample_chance(state, rng))
+            if game.is_terminal(state):
+                return -1, None, None, legal_each
+            legal = list(game.legal_actions(state))
+            legal_each.append(legal)
+            if action not in legal:
+                return -3, None, None, legal_each
+            state = game.next_state(state, action)
+        return sum(state.contributions), list(state.stacks), state.history, legal_each
+
+    compared = crossed = 0
+    for schedule in (proposed, odd):
+        per_street = [[list(level) for level in normalise_schedule(spec)] for spec in schedule.streets]
+        random.seed(7)
+        sequences = [list(a) for depth in range(1, 6) for a in itertools.product(range(6), repeat=depth)]
+        # Whole hands, walked: at each step a legal action from the Python game, mostly
+        # checks and calls so the streets close, ending where the hand ends. A random
+        # string of actions mostly runs past the end of the hand and tests nothing.
+        for _ in range(3000):
+            game = NoLimitHoldem(abstraction, starting_stack=stack, small_blind=small_blind,
+                                 big_blind=big_blind, raise_cap=schedule, equity_samples=4)
+            state, walk, rng = game.initial_state()._replace(hole=((0, 1), (2, 3))), [], np.random.default_rng(1)
+            while True:
+                while not game.is_terminal(state) and game.current_player(state) < 0:
+                    state = game.next_state(state, game.sample_chance(state, rng))
+                if game.is_terminal(state):
+                    break
+                legal = list(game.legal_actions(state))
+                action = 1 if (1 in legal and random.random() < 0.7) else random.choice(legal)
+                walk.append(action)
+                state = game.next_state(state, action)
+            sequences.append(walk)
+        for actions in sequences:
+            expected = python_replay(actions, schedule)
+            got = native.replay(actions, stack, small_blind, big_blind, [], [], per_street, True)
+            compared += 1
+            assert expected[0] == got[0], f"{schedule} {actions}: pot {expected[0]} vs {got[0]}"
+            assert [list(l) for l in expected[3]] == [list(l) for l in got[3]], f"{schedule} {actions}: legal lists differ"
+            if expected[0] >= 0:
+                assert expected[1] == list(got[1]) and expected[2] == got[2], f"{schedule} {actions}: state differs"
+                crossed += expected[2].count("/") >= 2
+    assert crossed > 1000, f"only {crossed} sequences reached the turn; the test is not testing streets"
+
+
+def _archetype(name):
+    from chipzen.archetypes import PARAMS
+    return {k: float(v) for k, v in PARAMS[name].items()}
+
+
+def _small_solver():
+    return native.NoLimitSolver([0] * (52 * 52), [0.3, 0.6], [0.3, 0.6], [0.3, 0.6], 8, 200, 1, 2, [4, 4], 3)
+
+
+def test_a_one_script_mix_trains_exactly_as_one_archetype():
+    """set_opponent_mix with one entry makes no second draw, so today's v5x recipe is unchanged by it."""
+    single, mixed = _small_solver(), _small_solver()
+    single.set_opponent_archetype(_archetype("station"), 2, 0.25)
+    mixed.set_opponent_mix([(_archetype("station"), 0.25)], 2)
+    single.train(300)
+    mixed.train(300)
+    a, b = single.average_strategy(), mixed.average_strategy()
+    assert a.keys() == b.keys()
+    assert all(list(a[k]) == list(b[k]) for k in a)
+
+
+def test_the_mix_refuses_what_it_cannot_mean():
+    solver = _small_solver()
+    with pytest.raises(Exception):
+        solver.set_opponent_mix([], 2)
+    with pytest.raises(Exception):
+        solver.set_opponent_mix([(_archetype("station"), 0.7), (_archetype("maniac"), 0.5)], 2)
+    with pytest.raises(Exception):
+        solver.set_opponent_mix([({"no_such_parameter": 1.0}, 0.2)], 2)
+    with pytest.raises(Exception):
+        solver.set_opponent_mix([(_archetype("station"), 0.0)], 2)
+
+
+def test_a_second_script_changes_what_is_learned():
+    station, both = _small_solver(), _small_solver()
+    station.set_opponent_mix([(_archetype("station"), 0.25)], 2)
+    both.set_opponent_mix([(_archetype("station"), 0.25), (_archetype("maniac"), 0.15)], 2)
+    station.train(300)
+    both.train(300)
+    a, b = station.average_strategy(), both.average_strategy()
+    shared = [k for k in a if k in b]
+    assert shared and any(list(a[k]) != list(b[k]) for k in shared)
+    assert both.has_opponent_policy() if hasattr(both, "has_opponent_policy") else True
+
+
+def test_a_mix_can_be_evaluated_against():
+    solver = _small_solver()
+    solver.set_opponent_mix([(_archetype("station"), 0.25), (_archetype("maniac"), 0.15)], 2)
+    solver.train(100)
+    value = solver.evaluate_against_policy(2000, 5)
+    assert value == value      # a number, not NaN; the trainer prints it at the end of a run
+
+
+def test_a_named_dcfr_setting_trains_exactly_as_the_rule():
+    """'dcfr:1.5,0,2' is the paper's setting, so it must reproduce 'dcfr' bit for bit on the single-threaded path."""
+    named, spelled = _small_solver_rule("dcfr"), _small_solver_rule("dcfr:1.5,0,2")
+    named.train(300)
+    spelled.train(300)
+    a, b = named.average_strategy(), spelled.average_strategy()
+    assert a.keys() == b.keys() and all(list(a[k]) == list(b[k]) for k in a)
+
+
+def test_a_dcfr_setting_changes_the_result_and_bad_ones_are_refused():
+    base, other = _small_solver_rule("dcfr"), _small_solver_rule("dcfr:1.5,0.5,1")
+    base.train(300)
+    other.train(300)
+    a, b = base.average_strategy(), other.average_strategy()
+    assert any(list(a[k]) != list(b[k]) for k in a if k in b)
+    for bad in ("dcfr:1.5,0", "dcfr:x,y,z", "dcfr:"):
+        with pytest.raises(Exception):
+            _small_solver_rule(bad)
+
+
+def _small_solver_rule(rule):
+    return native.NoLimitSolver([0] * (52 * 52), [0.3, 0.6], [0.3, 0.6], [0.3, 0.6], 8, 200, 1, 2, [4, 4], 3, rule=rule)
