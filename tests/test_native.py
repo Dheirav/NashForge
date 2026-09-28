@@ -664,3 +664,56 @@ def test_a_dcfr_setting_changes_the_result_and_bad_ones_are_refused():
 
 def _small_solver_rule(rule):
     return native.NoLimitSolver([0] * (52 * 52), [0.3, 0.6], [0.3, 0.6], [0.3, 0.6], 8, 200, 1, 2, [4, 4], 3, rule=rule)
+
+
+def _edge_by_python(mine, theirs, board, samples=20000, seed=3):
+    """P(win) - P(lose) by the Python evaluator: exact on a full board, sampled otherwise."""
+    used = set(mine) | set(theirs) | set(board)
+    deck = [c for c in range(52) if c not in used]
+    rng = random.Random(seed)
+    runs = [[]] if len(board) == 5 else [rng.sample(deck, 5 - len(board)) for _ in range(samples)]
+    edge = 0
+    for extra in runs:
+        full = list(board) + extra
+        a = score_hand_7_fast(np.array([c % 13 for c in mine + full]), np.array([c // 13 for c in mine + full]))
+        b = score_hand_7_fast(np.array([c % 13 for c in theirs + full]), np.array([c // 13 for c in theirs + full]))
+        edge += (a > b) - (a < b)
+    return edge / len(runs)
+
+
+def test_allin_edge_on_every_board_a_hand_can_have():
+    """
+    Preflop and river as well as flop and turn. On 25 September an empty board
+    was scored as a river with nothing on it (T7s read 70% against AK) and a
+    full one wrote past the end of the hand arrays; the old test above only
+    ever asked about the flop and the turn.
+    """
+    from abstraction.equity import card_index
+    from engine.cards import Card
+
+    def idx(*names):
+        return [card_index(Card(n[0].upper(), n[1].lower())) for n in names]
+    cases = ((idx("Th", "7h"), idx("Kd", "As"), []),                       # preflop
+             (idx("Ts", "Td"), idx("9h", "Kd"), []),
+             (idx("As", "Ah"), idx("Kd", "Kc"), idx("2c", "7d", "9s")),     # flop
+             (idx("Qs", "Qd"), idx("8c", "7c"), idx("6c", "5d", "Kc", "2h")),  # turn
+             (idx("Jh", "Th"), idx("Ad", "9c"), idx("9h", "4h", "2s", "Qh", "3c")))  # river
+    for mine, theirs, board in cases:
+        exact = native.allin_edge(mine, theirs, board, True)
+        assert exact == pytest.approx(-native.allin_edge(theirs, mine, board, True), abs=1e-12), board
+        reference = _edge_by_python(mine, theirs, board)
+        tolerance = 1e-12 if len(board) == 5 else 0.02
+        assert abs(exact - reference) <= tolerance, (board, exact, reference)
+        sampled = native.allin_edge(mine, theirs, board, False, 40000, 9)
+        assert abs(exact - sampled) < 0.02, (board, exact, sampled)
+
+
+@pytest.mark.parametrize("board", [[30], [30, 31], [30, 31, 32, 33, 34, 35]])
+def test_allin_edge_refuses_a_board_no_hand_can_have(board):
+    with pytest.raises(ValueError):
+        native.allin_edge([0, 1], [2, 3], board, True)
+
+
+def test_allin_edge_refuses_a_card_dealt_twice():
+    with pytest.raises(ValueError):
+        native.allin_edge([0, 1], [1, 3], [], True)

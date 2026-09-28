@@ -201,6 +201,30 @@ NB_MODULE(pokerbot_native, m) {
                            const std::vector<int>& board, bool exact, int samples, uint64_t seed) {
         // For tests: P(win) - P(lose) of `mine` against `theirs` over the
         // runouts of `board`, exactly or by sampling.
+        //
+        // The street is named for every board a hand can have and anything
+        // else is refused. It used to be "three cards is the flop, four the
+        // turn, anything else the river", so an empty board was scored as a
+        // river with no cards on it (25 Sept: T7s read as 70% against AK).
+        if (mine.size() != 2 || theirs.size() != 2)
+            throw std::invalid_argument("allin_edge: two hole cards each");
+        int street;
+        switch (board.size()) {
+            case 0: street = 0; break;          // preflop
+            case 3: street = 1; break;          // flop
+            case 4: street = 2; break;          // turn
+            case 5: street = 3; break;          // river
+            default: throw std::invalid_argument("allin_edge: a board has 0, 3, 4 or 5 cards, not " +
+                                                 std::to_string(board.size()));
+        }
+        bool seen[52] = {false};
+        for (const auto* cards : {&mine, &theirs, &board})
+            for (int c : *cards) {
+                if (c < 0 || c > 51 || seen[c])
+                    throw std::invalid_argument("allin_edge: card " + std::to_string(c) +
+                                                " is out of range or dealt twice");
+                seen[c] = true;
+            }
         NoLimitGame game(Abstraction{}, 200, 1, 2, RaiseSchedule{});
         game.set_exact_terminals(exact);
         NoLimitGame::State s = game.initial_state();
@@ -209,7 +233,7 @@ NB_MODULE(pokerbot_native, m) {
         s.bet.dealt = true;
         for (size_t i = 0; i < board.size(); ++i) s.bet.board[i] = static_cast<int8_t>(board[i]);
         s.bet.board_n = static_cast<int8_t>(board.size());
-        s.bet.street = static_cast<int8_t>(board.size() == 3 ? 1 : (board.size() == 4 ? 2 : 3));
+        s.bet.street = static_cast<int8_t>(street);
         s.bet.contributions = {100, 100};
         s.bet.committed = {0, 0};
         s.bet.stacks = {0, 0};

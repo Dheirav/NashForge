@@ -256,8 +256,19 @@ public:
     }
 
     /// P(win) - P(lose) for `player` over every runout of the board, exactly.
+    ///
+    /// Any board from none to five cards. It used to handle only one card to
+    /// come or two: a preflop board fell into the two-card loop and left three
+    /// of the seven slots unset, and a full board wrote one past the end of a
+    /// seven-card array. The game never reached either (exact terminals start
+    /// at the flop, and the river is scored directly in `utility`), but the
+    /// test binding did, and on 25 September it read T7s against AK as 70% and
+    /// crashed. Preflop is 1,712,304 runouts.
     double allin_edge(const State& s, int player) const {
         const int opponent = 1 - player;
+        if (s.bet.board_n < 0 || s.bet.board_n > 5 || s.bet.board_n == 1 || s.bet.board_n == 2)
+            throw std::invalid_argument("allin_edge: a board has 0, 3, 4 or 5 cards, not " +
+                                        std::to_string(s.bet.board_n));
         bool used[52] = {false};
         for (int p = 0; p < 2; ++p)
             for (int i = 0; i < 2; ++i) used[s.hole[static_cast<size_t>(p)][static_cast<size_t>(i)]] = true;
@@ -266,28 +277,27 @@ public:
         int pool_n = 0;
         for (int c = 0; c < 52; ++c) if (!used[c]) pool[pool_n++] = static_cast<int8_t>(c);
         const int needed = 5 - s.bet.board_n;
+        const int base = 2 + s.bet.board_n;
         int8_t mine_r[7], mine_s[7], theirs_r[7], theirs_s[7];
         fill_cards(s, player, mine_r, mine_s);
         fill_cards(s, opponent, theirs_r, theirs_s);
         long wins = 0, losses = 0, total = 0;
-        auto score = [&](int8_t a, int8_t b) {
-            const int base = 2 + s.bet.board_n;
-            mine_r[base] = theirs_r[base] = static_cast<int8_t>(deck_rank(a));
-            mine_s[base] = theirs_s[base] = static_cast<int8_t>(deck_suit(a));
-            if (needed == 2) {
-                mine_r[base + 1] = theirs_r[base + 1] = static_cast<int8_t>(deck_rank(b));
-                mine_s[base + 1] = theirs_s[base + 1] = static_cast<int8_t>(deck_suit(b));
+        // Deal the remaining cards as every combination of `needed` from the
+        // pool, in increasing index order so each runout is counted once.
+        auto deal = [&](auto&& self, int depth, int start) -> void {
+            if (depth == needed) {
+                const int32_t m = score_hand_7(mine_r, mine_s, 7);
+                const int32_t t = score_hand_7(theirs_r, theirs_s, 7);
+                wins += m > t; losses += m < t; ++total;
+                return;
             }
-            const int32_t m = score_hand_7(mine_r, mine_s, 7);
-            const int32_t t = score_hand_7(theirs_r, theirs_s, 7);
-            wins += m > t; losses += m < t; ++total;
+            for (int i = start; i <= pool_n - (needed - depth); ++i) {
+                mine_r[base + depth] = theirs_r[base + depth] = static_cast<int8_t>(deck_rank(pool[i]));
+                mine_s[base + depth] = theirs_s[base + depth] = static_cast<int8_t>(deck_suit(pool[i]));
+                self(self, depth + 1, i + 1);
+            }
         };
-        if (needed == 1) {
-            for (int i = 0; i < pool_n; ++i) score(pool[i], 0);
-        } else {
-            for (int i = 0; i < pool_n; ++i)
-                for (int j = i + 1; j < pool_n; ++j) score(pool[i], pool[j]);
-        }
+        deal(deal, 0, 0);
         return static_cast<double>(wins - losses) / static_cast<double>(total);
     }
 
