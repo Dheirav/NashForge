@@ -157,3 +157,4 @@ container/upload/
 container/nashforge_upload.zip
 container/ladder/
 container/nashforge_v5x.tar.gz
+container/*.tar.gz

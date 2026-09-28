@@ -11,7 +11,8 @@ with the opponent reads the season's fixtures played: `profiles.json` (trimmed t
 and `reads.toml` (the tuned thresholds).
 
 A decision that raises is answered with check or fold rather than a timeout, so a bug costs one
-action and never the match.
+action and never the match. At a table of more than two seats (the upload track's 6-max sit-and-go)
+the solver is not used at all: see `multiway_action`.
 """
 import asyncio
 import os
@@ -43,10 +44,16 @@ class NashForge(Bot):
         # Never saved: the filesystem is read-only, and each match starts from the shipped counts.
         self.player.profiles = Profiles(str(HERE / "profiles.json"), sequential=True, scout_reads=True)
         self.seat, self.stacks_before = None, None
+        #: True at a table of more than two seats. The solver, the bridge and the reads are heads-up
+        #: only (seats 0 and 1, one opponent's stack, one opponent's profile), and the upload track
+        #: also runs a 6-max sit-and-go, which "poker" in supported_games does not exclude.
+        self.multiway = False
 
     def on_match_start(self, match_info: dict) -> None:
         # As chipzen/client.py reads it: our seat is the entry marked is_self, the other is the opponent.
-        for entry in match_info.get("seats") or []:
+        seats = match_info.get("seats") or []
+        self.multiway = len(seats) > 2
+        for entry in seats:
             if entry.get("is_self"):
                 self.seat = int(entry["seat"])
             else:
@@ -60,7 +67,7 @@ class NashForge(Bot):
         # form against a bot we have never met.
         try:
             result = message.get("result") or {}
-            if self.seat is not None and self.player.opponent:
+            if self.seat is not None and self.player.opponent and not self.multiway:
                 after = result.get("stacks")
                 net = after[self.seat] - self.stacks_before[self.seat] if self.stacks_before and after else 0
                 self.player.profiles.observe(result, self.seat, self.player.opponent, net)
@@ -69,6 +76,8 @@ class NashForge(Bot):
 
     def decide(self, state: GameState) -> Action:
         valid = list(state.valid_actions)
+        if self.multiway or len(state.opponent_stacks) > 1:
+            return self.multiway_action(state, valid)
         try:
             # The player reads the server's own state dict, as the remote client hands it over.
             raw = {"hand_number": state.hand_number, "phase": state.phase,
@@ -85,6 +94,20 @@ class NashForge(Bot):
                 return getattr(Action, action)()
         except Exception:
             pass
+        return Action.check() if "check" in valid else Action.fold()
+
+    #: Hands shoved before the flop at a multiway table: strong enough against several opponents that
+    #: all-in is not a mistake, so the bot is not simply blinded out.
+    PREMIUM = {("A", "A"), ("K", "K"), ("Q", "Q"), ("A", "K")}
+
+    def multiway_action(self, state: GameState, valid) -> Action:
+        """No solver here: shove a premium hand before the flop, otherwise check or fold."""
+        ranks = tuple(sorted((c.rank for c in state.hole_cards), key="23456789TJQKA".index, reverse=True))
+        if state.phase == "preflop" and ranks in self.PREMIUM:
+            if "raise" in valid and state.max_raise > 0:
+                return Action.raise_to(int(state.max_raise))
+            if "call" in valid:
+                return Action.call()
         return Action.check() if "check" in valid else Action.fold()
 
 
