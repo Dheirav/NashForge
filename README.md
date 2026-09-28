@@ -6,13 +6,22 @@ instrument it was measured on against evolutionary search and PPO.**
 [![Python 3.12](https://img.shields.io/badge/python-3.12-blue.svg)](https://www.python.org/downloads/)
 [![License: PolyForm Noncommercial](https://img.shields.io/badge/License-PolyForm%20Noncommercial-blue.svg)](https://polyformproject.org/licenses/noncommercial/1.0.0)
 
-NashForge won season 6 of the [Chipzen](https://chipzen.ai) arena (15 to 20 September
-2026): a weekly heads-up no-limit Hold'em tournament for bots on a 30-second clock, with
-blinds rising every twenty hands. It went 4-1 in the round-robin as the top seed and 3-0
-through the playoffs, played remotely from a laptop, and won every match it played. The one
-loss was a walkover from a timer bug of my own, which turned out to be the most useful
-lesson of the week. The record, with the platform's own pages and the match identifiers
-anyone with a free Chipzen login can resolve, is in [`docs/season6/`](docs/season6/README.md).
+NashForge is a two-time champion of the [Chipzen](https://chipzen.ai) arena, a weekly
+heads-up no-limit Hold'em tournament for bots with blinds rising every twenty hands. It won
+season 6 (15 to 20 September 2026) and then season 7 (knockouts 26 to 28 September), both
+times played remotely from a laptop.
+
+In season 6 it went 4-1 in the round-robin as the top seed and 3-0 through the playoffs, and
+won every match it played. The one loss was a walkover from a timer bug of my own, which
+turned out to be the most useful lesson of the week. The record, with the platform's own
+pages and the match identifiers anyone with a free Chipzen login can resolve, is in
+[`docs/season6/`](docs/season6/README.md).
+
+In season 7 it went 5-2 in the round-robin, came into the knockouts as the fourth seed, and
+won all three: v003 in the
+quarter-final (84 hands), wsp in the semi-final (60 hands) and melly in the final (4 hands).
+The same solver set played every knockout match, chosen beforehand from its results against
+fitted copies of each opponent rather than changed on match day.
 
 The project started as a comparison. Three families of agent, CFR, evolutionary search and
 PPO, were trained on the same abstracted game and measured on the same panel, and the
