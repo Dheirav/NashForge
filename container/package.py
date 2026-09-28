@@ -14,6 +14,7 @@ urllib, multiprocessing and the rest); imports inside functions are listed, sinc
 problem if that code runs.
 """
 import ast
+import json
 import os
 import re
 import shutil
@@ -104,6 +105,16 @@ def main():
         elif inner:
             print(f"  lazy only, {rename(rel)}: {sorted(inner)}")
     shutil.copy(os.path.join(ROOT, "container", "main.py"), os.path.join(OUT, "main.py"))
+    shutil.copy(os.path.join(ROOT, "container", "Dockerfile"), os.path.join(OUT, "Dockerfile"))
+    # The reads: the profiles trimmed to what they use, and the private thresholds they fire at.
+    sys.path.insert(0, os.path.join(ROOT, "container"))
+    from trim_profiles import trim
+    with open(os.path.join(MAIN_RESULTS_ROOT, "results", "chipzen", "opponents.json")) as handle:
+        profiles = trim(json.load(handle))
+    with open(os.path.join(OUT, "profiles.json"), "w") as handle:
+        json.dump(profiles, handle, separators=(",", ":"), sort_keys=True)
+    shutil.copy(os.path.expanduser("~/.chipzen/reads.toml"), os.path.join(OUT, "reads.toml"))
+    shutil.copy(os.path.join(ROOT, "container", "dockerignore"), os.path.join(OUT, ".dockerignore"))
     with open(os.path.join(OUT, "requirements.txt"), "w") as handle:
         handle.write("numpy\nchipzen-bot\n")
     shutil.copytree(os.path.join(ROOT, "container", "ladder"), os.path.join(OUT, "ladder"))

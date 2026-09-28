@@ -4,7 +4,8 @@ A strategy stored compactly for the uploaded bot: hashed keys and 32-bit probabi
 The upload track gives a bot 256 MB and a 200 MB image. v5x's playing rungs are 1.78 million
 information sets, and the flat format spends about 60 bytes on each (a 32-byte key, an 8-byte offset
 and 8-byte probabilities), which with Python and numba put the bot at 900 MB. Here a node costs an
-8-byte hash of its key, a 4-byte offset and 4 bytes a probability, and the ladder is about 50 MB.
+8-byte hash of its key, a 1-byte width and 4 bytes a probability, compressed on disk to 24 MB for the
+ladder.
 
 Storing only the purified action was tried first, and 22 of 4,799 decisions in a shadow test then
 differed from the full bot: purification picks the most probable action among those the arena
@@ -100,9 +101,18 @@ def compact(strategy) -> CompactTable:
     return CompactTable(hashes, offsets, values)
 
 
+def _offsets(widths: np.ndarray) -> np.ndarray:
+    offsets = np.zeros(len(widths) + 1, dtype=np.uint32)
+    np.cumsum(widths, out=offsets[1:], dtype=np.uint32)
+    return offsets
+
+
 def write_compact(pickle_path: str, table: CompactTable) -> str:
     path = compact_path(pickle_path)
-    np.savez(path, hashes=table._hashes, offsets=table._offsets, values=table._values)
+    # Widths rather than offsets (a byte a node against four) and compressed: the built image is capped
+    # at 200 MB and this takes v5x's tables from 41 to 24 MB. The offsets are rebuilt when it loads.
+    widths = np.diff(table._offsets).astype(np.uint8)
+    np.savez_compressed(path, hashes=table._hashes, widths=widths, values=table._values)
     return path
 
 
@@ -176,4 +186,4 @@ def load_compact(pickle_path: str):
     abstraction.__dict__.update(_decode(doc["abstraction"]))
     data = np.load(path, allow_pickle=False)
     return {"abstraction": abstraction, "args": _decode(doc["args"]),
-            "strategy": CompactTable(data["hashes"], data["offsets"], data["values"])}
+            "strategy": CompactTable(data["hashes"], _offsets(data["widths"]), data["values"])}
