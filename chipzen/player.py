@@ -82,6 +82,7 @@ class Stats:
     big_bets_believed: int = 0
     small_bets_called: int = 0
     river_failures: int = 0
+    river_oracle_ranges: int = 0   # river solves given the opponent's true range
     fallbacks: int = 0
     short_stack_answers: int = 0   # a preflop all-in answered by the exact solution
     reraises_believed: int = 0     # a re-raise from a bot that never re-raises
@@ -212,6 +213,12 @@ class ArenaPlayer:
         #: blueprint's own answer is kept only if the solve fails or overruns.
         self.river = river
         self.river_budget_s = river_budget_s
+        #: The river test's oracle arm (cfr/river_oracle.py): the scripted
+        #: opponent's parameter row and sample count, set by the duel only.
+        #: The solve then takes the script's true range instead of the
+        #: blueprint's. No real opponent's policy is known, so nothing that
+        #: plays the arena may set this.
+        self.river_oracle = None
         self.ladder = sorted((load_solver(p, self.rng, purify, stack_cap) for p in paths),
                              key=lambda s: s.depth_bb)
         if not self.ladder:
@@ -396,15 +403,23 @@ class ArenaPlayer:
             try:
                 posted = next((a.get("seat") for a in state.get("action_history") or []
                                if a.get("action") == "post_small_blind"), None)
+                opponent_range = None
+                if self.river_oracle is not None:
+                    from cfr.river_oracle import script_reach
+                    params, samples = self.river_oracle
+                    opponent_range = lambda pairs: script_reach(pairs, board, params, state, 1 - seat, samples)  # noqa: E731
                 decision = decide_river(
                     state, hole, board, node.history, solver.strategy, solver.abstraction,
                     solver.schedule, we_are_small_blind=(posted == seat), rng=self.rng,
-                    legal=arena, budget_s=self.river_budget_s, purify=(self.purify != "none"))
+                    legal=arena, budget_s=self.river_budget_s, purify=(self.purify != "none"),
+                    opponent_range=opponent_range)
                 choice, missed, fell_back, companion_used = decision.choice, False, False, None
                 river = {"iterations": decision.iterations, "ms": round(decision.ms, 1),
-                         "hands": decision.hands,
+                         "hands": decision.hands, "range": decision.range_source,
                          "strategy": {str(a): round(p, 3) for a, p in decision.distribution.items()}}
                 self.stats.river_solves += 1
+                if decision.range_source == "oracle":
+                    self.stats.river_oracle_ranges += 1
             except Exception as error:          # the blueprint's answer stands
                 river = {"error": f"{type(error).__name__}: {error}"[:200]}
                 self.stats.river_failures += 1

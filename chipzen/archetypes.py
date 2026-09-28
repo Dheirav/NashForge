@@ -258,5 +258,46 @@ class Archetype:
         return self._passive(valid)
 
 
+#: Columns of `action_probabilities`: the three things `decide` can do, by kind.
+FOLD, PASSIVE, RAISE = 0, 1, 2
+
+
+def action_probabilities(p: dict, equity: np.ndarray, facing: bool, price: float, preflop: bool,
+                         can_raise: bool, raises: int) -> np.ndarray:
+    """
+    The chance `Archetype.decide` folds, checks or calls, or raises, for each
+    of an array of equities, over its uniform draw `u`. It mirrors `decide`
+    branch for branch; `tests/test_river_oracle.py` holds the two together by
+    sampling `decide`, so a change to one that is not made to the other fails.
+
+    The river oracle (`cfr/river_oracle.py`) needs the policy as a function
+    of the hand rather than one sampled action, which `decide` cannot give.
+    """
+    e = np.asarray(equity, dtype=float)
+    raise_ = np.zeros_like(e)
+    if preflop:
+        if raises == 0:
+            if can_raise:
+                raise_ = (e >= p["open_eq"]).astype(float)
+            passive = (1.0 - raise_) * ((e >= p["limp_eq"]) | (not facing))
+        else:
+            if can_raise:
+                raise_ = (e >= p["threebet_eq"]) * (1.0 - p["call_p"] * 0.5)
+            defend = p["defend3_eq"] if raises >= 2 else p["defend_eq"]
+            passive = (1.0 - raise_) * ((e >= defend) & (e >= price + p["fold_margin"]))
+    elif facing:
+        stays = (e >= price + p["fold_margin"]).astype(float)
+        if can_raise:
+            raise_ = stays * (e >= p["raise_eq"]) * (1.0 - p["call_p"])
+        passive = stays - raise_
+    else:
+        if can_raise:
+            # (e >= raise_eq and u < raise_p) or u < bluff_p
+            raise_ = np.where(e >= p["raise_eq"], max(p["raise_p"], p["bluff_p"]), p["bluff_p"])
+        passive = 1.0 - raise_
+    fold = 1.0 - raise_ - passive
+    return np.stack([fold, passive, raise_], axis=-1)
+
+
 def build_archetype(kind: str, rng: np.random.Generator, params: dict = None) -> Archetype:
     return Archetype(kind, rng, params=params)

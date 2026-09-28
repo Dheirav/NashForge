@@ -304,6 +304,12 @@ def play_match(players, rng: np.random.Generator, opponents) -> dict:
 #: inherits them, which is what lets the tables be shared and is also the only
 #: way to hand over players whose agents are closures (they do not pickle).
 _PLAYERS = None
+#: Where each worker writes "<done> <count> <started>" after every match, set
+#: by the parent with --progress-dir. With several workers the parent hears
+#: nothing until all of them return, so on 24 September a 77-minute river arm
+#: showed its header and nothing else for the whole run; this is what
+#: `tools/duel-progress.sh` reads.
+_PROGRESS = None
 
 
 def _run_matches(args_tuple):
@@ -313,6 +319,8 @@ def _run_matches(args_tuple):
     rng = np.random.default_rng(seed)
     a.rng, b.rng = np.random.default_rng(seed + 1), np.random.default_rng(seed + 2)
     wins = np.empty(count); hands = np.empty(count); nets = np.empty(count)
+    started = time.time()
+    progress = os.path.join(_PROGRESS, f"worker_{first:06d}") if _PROGRESS else None
     for j in range(count):
         i = first + j
         if i % 2 == 0:
@@ -320,6 +328,10 @@ def _run_matches(args_tuple):
         else:
             r = play_match([b, a], rng, (a_label, b_label)); won = 0.5 if r["winner"] < 0 else float(r["winner"] == 1); net = -r["net0"]
         wins[j], hands[j], nets[j] = won, r["hands"], net
+        if progress:
+            with open(progress + ".tmp", "w") as handle:
+                handle.write(f"{j + 1} {count} {started:.0f} {wins[:j + 1].mean():.4f}\n")
+            os.replace(progress + ".tmp", progress)
     return wins, hands, nets, vars(a.stats), vars(b.stats)
 
 
@@ -373,12 +385,25 @@ def main():
     parser.add_argument("--workers", type=int, default=1,
                         help="processes to split the matches or deals across; the players are built once "
                              "and the workers forked, so the tables are shared")
+    parser.add_argument("--progress-dir", help="with --workers: each worker writes its count here after every "
+                                               "match, for tools/duel-progress.sh")
     args = parser.parse_args()
+    if args.progress_dir:
+        os.makedirs(args.progress_dir, exist_ok=True)
+        for stale in os.listdir(args.progress_dir):
+            os.remove(os.path.join(args.progress_dir, stale))
+        globals()["_PROGRESS"] = args.progress_dir
 
     rng = np.random.default_rng(args.seed)
     a = build(args.a, args.a_flags, args.a_label, np.random.default_rng(args.seed + 1), args.profiles)
     b = build(args.b, args.b_flags, args.b_label, np.random.default_rng(args.seed + 2), args.profiles)
     a.opponent, b.opponent = args.b_label, args.a_label
+    if "--river-oracle" in args.a_flags.split():
+        # The river test's oracle arm: A's river solves take B's true range,
+        # which only a scripted B has (cfr/river_oracle.py).
+        if not args.b.startswith("archetype:") or not getattr(a, "river", False):
+            raise SystemExit("--river-oracle needs --river-solve on A and an archetype:<kind> B")
+        a.river_oracle = (dict(b.p), b.samples)
     stack = int(args.stack_bb * args.big_blind)
     sb = args.big_blind // 2
     what = (f"{args.arena_matches:,} arena matches (10,000 chips, the arena's blind schedule)" if args.arena_matches

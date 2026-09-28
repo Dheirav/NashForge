@@ -28,7 +28,7 @@ from __future__ import annotations
 
 import time
 from dataclasses import dataclass, field
-from typing import Dict, List, Optional, Sequence, Tuple
+from typing import Callable, Dict, List, Optional, Sequence, Tuple
 
 import numpy as np
 
@@ -492,16 +492,26 @@ class RiverDecision:
     iterations: int
     ms: float
     hands: int
+    #: Where the opponent's range came from: "blueprint", "oracle", or
+    #: "blueprint (oracle empty)" when the oracle gave every hand zero.
+    range_source: str = "blueprint"
 
 
 def decide_river(state: dict, hole: Sequence[Card], board: Sequence[Card], history: str,
                  strategy: dict, abstraction, schedule, we_are_small_blind: bool,
                  rng: np.random.Generator, legal: Optional[np.ndarray] = None,
                  iterations: int = ITERATIONS, budget_s: float = TIME_BUDGET_S,
-                 purify: bool = False) -> RiverDecision:
+                 purify: bool = False,
+                 opponent_range: Optional[Callable[[np.ndarray], np.ndarray]] = None) -> RiverDecision:
     """
     Solve this river and choose. `state` is the arena's turn state: pot (with
     the outstanding bet in it), to_call, your_stack, opponent_stacks.
+
+    `opponent_range`, given the hand set's hole pairs, replaces the
+    blueprint's reach for the opponent (`cfr/river_oracle.py`). A range that
+    is zero everywhere means the model could not have played this hand the
+    way it was played, and the blueprint's is kept rather than solving
+    against nothing.
     """
     started = time.perf_counter()
     hands = HandSet.build(board)
@@ -514,6 +524,13 @@ def decide_river(state: dict, hole: Sequence[Card], board: Sequence[Card], histo
     root, decisions = build_tree(pot - to_call, to_call, (ours, theirs), raises_so_far,
                                  schedule if isinstance(schedule, int) else schedule, 0)
     ranges = blueprint_ranges(hands, strategy, abstraction, schedule, history, board, we_are_small_blind)
+    range_source = "blueprint"
+    if opponent_range is not None:
+        theirs_reach = np.asarray(opponent_range(hands.pairs), dtype=float)
+        if theirs_reach.sum() > 0:
+            ranges, range_source = (ranges[0], theirs_reach), "oracle"
+        else:
+            range_source = "blueprint (oracle empty)"
     solver = make_solver(hands, root, decisions, ranges)
     if isinstance(solver, NativeRiverSolver) and iterations == ITERATIONS:
         iterations = NATIVE_ITERATIONS
@@ -533,4 +550,4 @@ def decide_river(state: dict, hole: Sequence[Card], board: Sequence[Card], histo
     else:
         choice = codes[int(rng.choice(len(codes), p=probabilities / probabilities.sum()))]
     return RiverDecision(int(choice), distribution, done,
-                         (time.perf_counter() - started) * 1000.0, hands.size)
+                         (time.perf_counter() - started) * 1000.0, hands.size, range_source)
