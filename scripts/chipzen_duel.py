@@ -95,6 +95,8 @@ def build(ladder_dir: str, flags: str, label: str, rng: np.random.Generator,
     if profiles_path:
         player.profiles = Profiles(profiles_path, sequential="--sequential-triggers" in flags,
                                    scout_reads="--scout-reads" in flags)
+    player.aggro_reads = "--aggro-reads" in flags
+    player.reraise_defence = "--reraise-defence" in flags
     player.label = label  # noqa: attribute for the report only
     return player
 

@@ -69,6 +69,22 @@ BIG_BET_MIN = 100
 BIG_BET_AIR_RATE = 0.05
 SMALL_BET_AIR_RATE = 0.20
 EQUILIBRIUM_FOLD = 0.40
+#: The two aggressive-side reads (26 September: the coverage gaps). An over-
+#: bluffer: river bets that were bluffs by the scout's definition (under half
+#: equity against a random hand), over at least OVER_BLUFF_MIN of them; the
+#: read is the lower end of the rate's 95 percent interval, and the player
+#: turns it into a price. A pot-sized river bet is balanced at a third bluffs.
+OVER_BLUFF_MIN = 40
+#: An over-folder after the flop: our flop and turn bets it answered, over at
+#: least OVER_FOLD_MIN, with raises at most OVER_FOLD_MAX_RAISE of them, since
+#: a bot that folds often but raises the rest is not safe to bet into.
+OVER_FOLD_MIN = 100
+OVER_FOLD_MAX_RAISE = 0.15
+#: A frequent re-raiser: its answers to our preflop opens ("preflop:Ur"), over
+#: at least RERAISE_MIN of them. 27 Sept: an LLM re-raised v5x's opens with any
+#: two cards and v5x folded 10 of 10; v5x folds 76 to 80% of opens to a 3x
+#: re-raise at every depth, where any two break even at about 62%.
+RERAISE_MIN = 60
 EQUILIBRIUM_CALL_SHARE = 0.5
 
 
@@ -107,6 +123,14 @@ def _upper_bound(successes: int, trials: int) -> float:
         return 1.0
     rate = successes / trials
     return rate + 1.96 * (rate * (1.0 - rate) / trials) ** 0.5
+
+
+def _lower_bound(successes: int, trials: int) -> float:
+    """Lower end of the 95 percent Wald interval of a rate."""
+    if trials <= 0:
+        return 0.0
+    rate = successes / trials
+    return rate - 1.96 * (rate * (1.0 - rate) / trials) ** 0.5
 
 
 class Profiles:
@@ -253,6 +277,52 @@ class Profiles:
         big, small = row.get("big_bets", 0), row.get("small_bets", 0)
         return big >= BIG_BET_MIN and row.get("big_bets_air", 0) / big < BIG_BET_AIR_RATE \
             and small >= BIG_BET_MIN and row.get("small_bets_air", 0) / small >= SMALL_BET_AIR_RATE
+
+    def river_bluff_floor(self, name: Optional[str]) -> Optional[float]:
+        """
+        The lower bound of the share of its river bets that were bluffs, or
+        None below OVER_BLUFF_MIN river bets. The mirror of `never_bluffs`:
+        that read folds to an honest bettor, this one lets the player call a
+        bluffer when the bound pays for the call. Shadow, scouted 26 Sept, bluffed
+        23 of its 48 river bets and no read fired on it.
+        """
+        if not self.scout_reads or not self.exploits_allowed(name):
+            return None
+        row = self.rows.get(name or "") or {}
+        bets = row.get("river_bets", 0)
+        if bets < OVER_BLUFF_MIN:
+            return None
+        return max(0.0, _lower_bound(row.get("river_bluffs", 0), bets))
+
+    def postflop_fold_floor(self, name: Optional[str]) -> Optional[float]:
+        """
+        The lower bound of the share of our first flop and turn bets it folded
+        to ("flop:Ur", "flop:TcUr" and the turn's two), or None below
+        OVER_FOLD_MIN answers or when it raised more than OVER_FOLD_MAX_RAISE of
+        them. A half-pot bet with no equity breaks even at a third folds.
+        """
+        if not self.scout_reads or not self.exploits_allowed(name):
+            return None
+        nodes = (self.rows.get(name or "") or {}).get("by_history", {})
+        folds = raises = n = 0
+        for key in ("flop:Ur", "flop:TcUr", "turn:Ur", "turn:TcUr"):
+            node = nodes.get(key, {})
+            folds += node.get("fold", 0)
+            raises += node.get("raise", 0)
+            n += sum(node.values())
+        if n < OVER_FOLD_MIN or raises / n > OVER_FOLD_MAX_RAISE:
+            return None
+        return _lower_bound(folds, n)
+
+    def reraise_floor(self, name: Optional[str]) -> Optional[float]:
+        """The lower bound of the share of our opens it re-raised, or None below RERAISE_MIN."""
+        if not self.scout_reads or not self.exploits_allowed(name):
+            return None
+        node = (self.rows.get(name or "") or {}).get("by_history", {}).get("preflop:Ur", {})
+        n = sum(node.values())
+        if n < RERAISE_MIN:
+            return None
+        return max(0.0, _lower_bound(node.get("raise", 0), n))
 
     def exploits_allowed(self, name: Optional[str]) -> bool:
         """With the bankroll rule on, only while we are not behind against them."""

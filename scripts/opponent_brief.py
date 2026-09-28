@@ -189,6 +189,20 @@ READS: List[dict] = [
          premises=[big_bets_rarely_air]),
     dict(name="called for pot odds", predicate=None,
          acts="an opponent all in for a sliver: call at any strength", premises=[]),
+    # Behind --aggro-reads and --reraise-defence, both off by default. Each fires
+    # on a floor (a lower bound on a rate) rather than a yes/no predicate, so the
+    # brief lists them without judging them; a set that turns one on needs the
+    # floor read by hand.
+    dict(name="river bluff caught", predicate=None,
+         acts="river, facing a bet, the solver folding: call when the bluff floor pays for it (--aggro-reads)",
+         premises=[assumed("its river bluff share from the profile is the share at this bet size")]),
+    dict(name="bet into an over-folder", predicate=None,
+         acts="flop or turn, checked to, below the top class: half-pot bet when the fold floor is high (--aggro-reads)",
+         premises=[assumed("the fold rate holds at our half-pot bet")]),
+    dict(name="re-raise defended", predicate=None,
+         acts="preflop, our open re-raised, the solver folding: call when equity against its top share beats the price (--reraise-defence)",
+         premises=[measured_at_node("preflop:Ur", "raise"),
+                   assumed("it re-raises the top of its range, the tightest the rate allows")]),
 ]
 
 

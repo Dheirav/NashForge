@@ -87,6 +87,9 @@ class Stats:
     short_stack_answers: int = 0   # a preflop all-in answered by the exact solution
     reraises_believed: int = 0     # a re-raise from a bot that never re-raises
     collapsed_hits: int = 0            # answered on a re-read history after a pseudo all-in
+    river_bluffs_caught: int = 0   # a river fold turned into a call against an over-bluffer
+    overfolders_bet: int = 0       # a flop or turn check turned into a half-pot bet
+    reraises_defended: int = 0     # a fold of our open to a re-raise turned into a call
     miss_depths: Dict[int, int] = field(default_factory=dict)
     depths_used: Dict[str, int] = field(default_factory=dict)
     actions_sent: Dict[str, int] = field(default_factory=dict)
@@ -236,6 +239,11 @@ class ArenaPlayer:
         #: Set by the client at match start; read by the one adjustment below.
         self.opponent: Optional[str] = None
         self.profiles: Optional[Profiles] = None
+        #: The two aggressive-side reads (branch aggro-reads, 26 Sept). Off
+        #: unless asked for, like every read before it was measured.
+        self.aggro_reads = False
+        #: Defend our opens against a frequent re-raiser (27 Sept). Off unless asked for.
+        self.reraise_defence = False
 
     #: A raise with a hand this weak or weaker is a bluff for the purpose of
     #: withholding it: the bottom two of six strength classes.
@@ -275,6 +283,21 @@ class ArenaPlayer:
     #: The three-bet-into-a-folder read fires only this deep, so a four-bet
     #: can be folded to without having committed the stack.
     THREE_BET_MIN_BB = 30.0
+    #: Bet into an over-folder only when the lower bound of its fold share to
+    #: our flop and turn bets is at least this. A half-pot bet with no equity
+    #: breaks even at a third; the margin covers the hands that call and win.
+    OVER_FOLD_RATE = 0.45
+    #: A river call against an over-bluffer only with a hand that beats its
+    #: bluffs: at least this equity against a random hand, the scout's own line
+    #: between a bluff and a value bet.
+    BLUFF_CATCH_EQUITY = 0.5
+    #: The re-raise defence reads an opponent as a frequent re-raiser from
+    #: this lower bound of its re-raise share. Blueprint (18%, value) and wsp
+    #: (2%) stay out; v003 (44%), RockyPoker and Sleight-of-Hand (26%) come in.
+    RERAISE_OFTEN = 0.20
+    #: Equity against the re-raising range needed beyond the price, for the
+    #: equity a call does not realise after the flop.
+    RERAISE_MARGIN = 0.03
 
     def solver_for(self, effective_bb: float) -> Solver:
         """Nearest rung in ratio, so 70bb goes to 100 rather than to 50 by a hair."""
@@ -509,6 +532,53 @@ class ArenaPlayer:
             choice = FOLD
             adjusted = "shove call declined"
             self.stats.shove_calls_declined += 1
+        if self.aggro_reads and self.profiles is not None and choice == FOLD and to_call > 0 \
+                and len(board) == 5 and arena[CHECK_CALL] and hand.effective_bb >= self.SHOVE_RULE_MIN_BB:
+            # A river bet from a bot that bluffs its rivers often: call when the
+            # lower bound of its bluff share pays for the call (b * pot against
+            # (1 - b) * price, the pot already holding its bet) and our hand
+            # beats a bluff. The mirror of "river bet believed".
+            import pokerbot_native as native    # loaded lazily, as cfr/river.py does
+            floor = self.profiles.river_bluff_floor(self.opponent)
+            pot = int(state.get("pot") or 0)
+            if floor is not None and floor * pot >= (1.0 - floor) * to_call \
+                    and float(native.equity_vs_random([c.index for c in hole], [c.index for c in board],
+                                                      200, 17)) >= self.BLUFF_CATCH_EQUITY:
+                choice = CHECK_CALL
+                adjusted = "river bluff caught"
+                self.stats.river_bluffs_caught += 1
+        if self.aggro_reads and self.profiles is not None and choice == CHECK_CALL and to_call == 0 \
+                and len(board) in (3, 4) and arena[RAISE_HALF] and hand.effective_bb >= self.SHOVE_RULE_MIN_BB \
+                and strength(solver) < self._top(solver):
+            # Checked to, or first to act, on the flop or turn against a bot that
+            # folds to most of our bets there and rarely raises them: half the
+            # pot wins it outright often enough to show a profit with any hand.
+            # The top class keeps its check, which may be a trap.
+            floor = self.profiles.postflop_fold_floor(self.opponent)
+            if floor is not None and floor >= self.OVER_FOLD_RATE:
+                choice = RAISE_HALF
+                adjusted = "bet into an over-folder"
+                self.stats.overfolders_bet += 1
+        if self.reraise_defence and self.profiles is not None and choice == FOLD and not board \
+                and to_call > 0 and arena[CHECK_CALL]:
+            # We opened and they re-raised. A bot that re-raises a large share
+            # of opens is modelled as re-raising the top of all hands at that
+            # rate (the tightest range the rate allows), and we call whenever
+            # our equity against it beats the price. v5x folded 79% of its opens
+            # to a 3x re-raise; any two cards re-raise at a profit above 62%.
+            pre = [a for a in state.get("action_history") or []
+                   if a.get("phase") == "preflop" and not str(a.get("action", "")).startswith("post")]
+            if len(pre) == 2 and pre[0].get("seat") == seat and pre[0].get("action") == "raise" \
+                    and pre[1].get("seat") != seat and pre[1].get("action") == "raise":
+                floor = self.profiles.reraise_floor(self.opponent)
+                if floor is not None and floor >= self.RERAISE_OFTEN:
+                    from chipzen.ranges import equity_vs_top
+                    pot = int(state.get("pot") or 0)
+                    price = to_call / float(pot + to_call)
+                    if equity_vs_top([c.index for c in hole], floor) >= price + self.RERAISE_MARGIN:
+                        choice = CHECK_CALL
+                        adjusted = "re-raise defended"
+                        self.stats.reraises_defended += 1
         opponent_stack = int((state.get("opponent_stacks") or [0])[0])
         if to_call > 0 and opponent_stack <= 0 and arena[CHECK_CALL] and choice == FOLD \
                 and to_call * self.POT_ODDS_FLOOR <= int(state.get("pot") or 0) - to_call:
