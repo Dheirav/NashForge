@@ -21,7 +21,6 @@ beside it as `<name>.flat.npz`, with the abstraction and the run's arguments in
 from __future__ import annotations
 
 import os
-import pickle
 from collections.abc import Mapping
 from typing import Dict, Iterator, Optional
 
@@ -102,6 +101,7 @@ def flat_paths(pickle_path: str):
 
 def write_flat(pickle_path: str, saved: dict, dtype=np.float64) -> str:
     """Write the flat pair beside the pickle; returns the .npz path."""
+    import pickle   # here rather than at the top: the uploaded bot's sandbox refuses the import
     npz, side = flat_paths(pickle_path)
     flat = flatten(saved["strategy"], dtype)
     np.savez(npz, keys=flat._keys, offsets=flat._offsets, values=flat._values)
@@ -117,6 +117,12 @@ def load_strategy(pickle_path: str, prefer_flat: bool = True) -> dict:
     The flat pair is used only when it is newer than the pickle, so a retrained
     rung is never read through a stale cache of its predecessor.
     """
+    # A compact table (cfr/pure.py) is what the uploaded bot ships in place of the flat pair.
+    from cfr.pure import load_compact
+    compact = load_compact(pickle_path)
+    if compact is not None:
+        return compact
+    import pickle
     npz, side = flat_paths(pickle_path)
     if prefer_flat and os.path.exists(npz) and os.path.exists(side) \
             and os.path.getmtime(npz) >= os.path.getmtime(pickle_path):
