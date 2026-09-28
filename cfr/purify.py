@@ -44,7 +44,7 @@ def row(probabilities: Sequence[float], mode: str, postflop: bool) -> np.ndarray
 
 def apply_to_table(strategy, mode: str):
     """The whole strategy under `mode`: a FlatStrategy with new values, or a dict of new rows."""
-    if mode == "none":
+    if mode == "none" or getattr(strategy, "is_compact", False):
         return strategy
     from cfr.flat import FlatStrategy
     if isinstance(strategy, FlatStrategy):

@@ -152,3 +152,7 @@ docs/NashForge_*.pdf
 results/cfr/ladder169/cap2_100bb.pkl
 results/chipzen/scout/scout.md
 docs/arena-plan.md
+.cvenv/
+container/upload/
+container/nashforge_upload.zip
+container/ladder/
