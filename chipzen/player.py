@@ -31,7 +31,6 @@ exploitation pays. The one-raise solver leads, the taper covers what it lacks.
 """
 from __future__ import annotations
 
-import pickle
 import time
 from dataclasses import dataclass, field
 from math import log
