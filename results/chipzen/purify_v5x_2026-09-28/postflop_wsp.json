@@ -1,0 +1,68 @@
+{
+ "a": {
+  "dir": "/home/dheirav/Code/PokerBot/results/cfr/ladder169l_v5x",
+  "flags": "--deep-primary --stack-cap --sequential-triggers --scout-reads --purify postflop",
+  "label": "v5x postflop"
+ },
+ "b": {
+  "dir": "archetype:fit",
+  "flags": "",
+  "label": "wsp"
+ },
+ "arena_matches": 20000,
+ "win_rate": 0.68525,
+ "stderr": 0.0032839186766727337,
+ "hands_per_match": 46.4715,
+ "seed": 41,
+ "workers": 2,
+ "a_stats": {
+  "decisions": 2123159,
+  "misses": 952,
+  "consulted": 2123159,
+  "off_abstraction": 0,
+  "companion_hits": 0,
+  "river_shoves_to_companion": 0,
+  "shoves_softened": 0,
+  "bluffs_withheld": 0,
+  "shove_calls_declined": 0,
+  "river_solves": 0,
+  "blinds_opened": 0,
+  "three_bets_into_folders": 0,
+  "river_bets_believed": 1925,
+  "big_bets_believed": 0,
+  "small_bets_called": 0,
+  "river_failures": 0,
+  "fallbacks": 952,
+  "short_stack_answers": 1,
+  "collapsed_hits": 0,
+  "miss_depths": {
+   "1": 82,
+   "2": 1
+  },
+  "depths_used": {
+   "100bb": 728411,
+   "70bb": 285790,
+   "50bb": 361055,
+   "18bb": 135944,
+   "12bb": 87869,
+   "8bb": 41001,
+   "35bb": 256499,
+   "25bb": 198782,
+   "5bb": 27808
+  },
+  "actions_sent": {
+   "call": 366903,
+   "raise": 838473,
+   "check": 747224,
+   "fold": 170559
+  },
+  "slowest_ms": 581.3851389975753
+ },
+ "b_stats": {
+  "decisions": 2438969,
+  "misses": 0,
+  "companion_hits": 0,
+  "fallbacks": 0
+ },
+ "measured": "2026-09-28 16:11"
+}

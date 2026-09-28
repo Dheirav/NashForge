@@ -1,0 +1,6 @@
+70bb: using cap2_70bb.pkl (also present: nolimit_70bb.pkl)
+70bb: +0.442 +/- 0.317 chips/hand [-0.180, +1.063] — no exploitability proven
+   +22.1 BB/100, 1,170,732 information sets, 2.6 min
+   the bound is slack: this says LBR failed, not that the rung is sound
+
+wrote results/cfr/lbr_trace_2026-09-26/70bb_default_02.json

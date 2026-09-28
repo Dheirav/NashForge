@@ -1,0 +1,51 @@
+2026-09-28 10:04:39 waiting for lane v5iT2
+2026-09-28 12:12:00 start
+2026-09-28 12:12:00 train d15052 (dcfr:1.5,0.5,2, 10000000, seed 0, pruning on)
+2026-09-28 12:12:00 train d1501 (dcfr:1.5,0,1, 10000000, seed 0, pruning on)
+2026-09-28 12:12:00 train d15051 (dcfr:1.5,0.5,1, 10000000, seed 0, pruning on)
+2026-09-28 12:31:14 train d15052 exit 0:   1165.3s (0.117 ms/iteration)   information sets reached: 1,101,304 of 11,450,572 in the abstraction   pruning: 0 action visits skipped 
+2026-09-28 12:39:33 train d1501 exit 0:   1689.0s (0.169 ms/iteration)   information sets reached: 1,152,305 of 11,450,572 in the abstraction   pruning: 0 action visits skipped 
+2026-09-28 12:41:08 train d15051 exit 0:   1791.3s (0.179 ms/iteration)   information sets reached: 1,106,538 of 11,450,572 in the abstraction   pruning: 0 action visits skipped 
+2026-09-28 12:41:08 train lin (on, linear, seed 10000000, pruning 0)
+2026-09-28 12:41:08 train linoff (linear, 10000000, seed 0, pruning off)
+2026-09-28 12:41:09 train lin exit 2: 
+2026-09-28 12:42:16 resumed: grid.sh line 30 passed an extra word, so lin exited 2 at 12:41; lin trained here, linoff (pid 964299) left running
+2026-09-28 12:42:16 train lin (linear, 10000000, seed 0, pruning on)
+2026-09-28 13:07:32 train lin exit 0:   1557.3s (0.156 ms/iteration)   information sets reached: 1,155,168 of 11,450,572 in the abstraction   pruning: 76,927,405 action visits skipped 
+2026-09-28 13:07:47 train linoff finished:   1614.1s (0.161 ms/iteration)   information sets reached: 1,155,533 of 11,450,572 in the abstraction 
+2026-09-28 13:07:47 A done
+2026-09-28 13:09:10 d1502 against ref60m: -27.8 ± 3.2 BB/100 (SE 
+2026-09-28 13:10:08 d15052 against ref60m: -123.8 ± 5.7 BB/100 (SE
+2026-09-28 13:11:29 d1501 against ref60m: -27.3 ± 0.8 BB/100 (SE 
+2026-09-28 13:12:30 d15051 against ref60m: -141.0 ± 1.7 BB/100 (SE
+2026-09-28 13:14:01 lin against ref60m: -5.0 ± 2.1 BB/100 (SE a
+2026-09-28 13:15:31 linoff against ref60m: -6.0 ± 0.7 BB/100 (SE a
+2026-09-28 13:16:49 d1502 against lin10m: -22.3 ± 1.5 BB/100 (SE 
+2026-09-28 13:17:48 d15052 against lin10m: -140.9 ± 3.2 BB/100 (SE
+2026-09-28 13:19:04 d1501 against lin10m: -23.9 ± 2.1 BB/100 (SE 
+2026-09-28 13:20:04 d15051 against lin10m: -157.0 ± 3.2 BB/100 (SE
+2026-09-28 13:21:31 linoff against lin10m: -1.1 ± 1.6 BB/100 (SE a
+2026-09-28 13:21:31 best dcfr arm against the reference: d1501
+2026-09-28 13:21:32 train lin_s1 (linear, 10000000, seed 1, pruning on)
+2026-09-28 13:21:32 train d1501_s1 (dcfr:1.5,0,1, 10000000, seed 1, pruning on)
+2026-09-28 13:49:06 lbr d1501 on done
+2026-09-28 13:52:24 train d1501_s1 exit 0:   1888.6s (0.189 ms/iteration)   information sets reached: 1,152,880 of 11,450,572 in the abstraction   pruning: 0 action visits skipped 
+2026-09-28 13:52:24 train d1501_5m (dcfr:1.5,0,1, 5000000, seed 0, pruning on)
+2026-09-28 13:53:00 train lin_s1 exit 0:   1932.6s (0.193 ms/iteration)   information sets reached: 1,155,267 of 11,450,572 in the abstraction   pruning: 75,557,705 action visits skipped 
+2026-09-28 13:53:00 train lin_5m (linear, 5000000, seed 0, pruning on)
+2026-09-28 13:53:23 lbr lin on done
+2026-09-28 14:22:49 train d1501_5m exit 0:   1690.6s (0.338 ms/iteration)   information sets reached: 1,132,185 of 11,450,572 in the abstraction   pruning: 0 action visits skipped 
+2026-09-28 14:22:49 train d1501_2m (dcfr:1.5,0,1, 2500000, seed 0, pruning on)
+2026-09-28 14:24:57 train lin_5m exit 0:   1967.4s (0.393 ms/iteration)   information sets reached: 1,142,208 of 11,450,572 in the abstraction   pruning: 19,895,037 action visits skipped 
+2026-09-28 14:24:57 train lin_2m (linear, 2500000, seed 0, pruning on)
+2026-09-28 14:29:29 train d1501_2m exit 0:   399.9s (0.160 ms/iteration)   information sets reached: 1,094,819 of 11,450,572 in the abstraction   pruning: 0 action visits skipped 
+2026-09-28 14:30:54 lbr d1501 between done
+2026-09-28 14:32:49 train lin_2m exit 0:   476.3s (0.191 ms/iteration)   information sets reached: 1,114,610 of 11,450,572 in the abstraction   pruning: 4,494,799 action visits skipped 
+2026-09-28 14:37:38 lbr lin between done
+2026-09-28 14:39:06 d1501_s1 against ref60m: -27.3 ± 1.3 BB/100 (SE 
+2026-09-28 14:40:25 d1501_5m against ref60m: -33.7 ± 3.0 BB/100 (SE 
+2026-09-28 14:41:38 d1501_2m against ref60m: -44.5 ± 0.1 BB/100 (SE 
+2026-09-28 14:43:11 lin_s1 against ref60m: -5.0 ± 1.2 BB/100 (SE a
+2026-09-28 14:44:43 lin_5m against ref60m: -11.5 ± 1.6 BB/100 (SE 
+2026-09-28 14:46:12 lin_2m against ref60m: -15.9 ± 1.6 BB/100 (SE 
+2026-09-28 14:46:12 grid complete

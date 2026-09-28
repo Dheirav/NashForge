@@ -1,0 +1,24 @@
+{
+ "70bb": {
+  "path": "cap2_70bb.pkl",
+  "mean": 0.370125,
+  "stderr": 0.36546499869167426,
+  "ci95": [
+   -0.3461863974356815,
+   1.0864363974356814
+  ],
+  "proves_exploitable": false,
+  "hands": 8000,
+  "bb_per_100": 18.506249999999998,
+  "between_sizes": true,
+  "sizes": [
+   0.33,
+   0.66,
+   1.33,
+   2.66,
+   5.33
+  ],
+  "seconds": 119.0,
+  "information_sets": 2751287
+ }
+}

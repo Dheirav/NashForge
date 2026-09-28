@@ -1,0 +1,47 @@
+2026-09-28 12:22:33 waiting for the DCFR grid
+2026-09-28 12:36:27 re-queued behind the DCFR grid (burst cancelled)
+2026-09-28 12:36:27 waiting for the DCFR grid
+2026-09-28 13:08:32 held again: now waits for v5iT2's burst (chipzen/burst.v5iT2.done), then the grid
+2026-09-28 16:07:08 waiting for the DCFR grid
+2026-09-28 16:07:08 start
+2026-09-28 16:10:09 postflop against maniac: wins 74.3% ± 0.3 | as solved 71.8%%
+2026-09-28 16:11:54 postflop against wsp copy: wins 68.5% ± 0.3 | as solved 65.1%%
+2026-09-28 16:13:02 postflop against nit: wins 69.5% ± 0.3 | as solved 66.4%%
+2026-09-28 16:14:58 postflop against wildpassive: wins 83.8% ± 0.3 | as solved 83.1%%
+2026-09-28 16:15:04 postflop against melly copy: wins 65.6% ± 0.3 | as solved 64.5%%
+2026-09-28 16:17:50 postflop against v003 copy: wins 73.6% ± 0.3 | as solved 71.8%%
+2026-09-28 16:21:10 lbr t10 between done
+2026-09-28 16:21:32 postflop against station: wins 75.5% ± 0.3 | as solved 73.2%%
+2026-09-28 16:22:38 lbr postflop between done
+2026-09-28 16:23:42 lbr t10 on done
+2026-09-28 16:24:31 all against maniac: wins 73.8% ± 0.3 | as solved 71.8%%
+2026-09-28 16:25:46 lbr postflop on done
+2026-09-28 16:25:58 all against wsp copy: wins 68.0% ± 0.3 | as solved 65.1%%
+2026-09-28 16:27:13 all against nit: wins 69.7% ± 0.3 | as solved 66.4%%
+2026-09-28 16:29:11 all against melly copy: wins 65.3% ± 0.3 | as solved 64.5%%
+2026-09-28 16:29:15 all against wildpassive: wins 85.5% ± 0.2 | as solved 83.1%%
+2026-09-28 16:32:05 all against v003 copy: wins 74.3% ± 0.3 | as solved 71.8%%
+2026-09-28 16:34:35 lbr t20 between done
+2026-09-28 16:34:40 lbr all between done
+2026-09-28 16:35:44 all against station: wins 76.2% ± 0.3 | as solved 73.2%%
+2026-09-28 16:38:13 t10 against maniac: wins 72.1% ± 0.3 | as solved 71.8%%
+2026-09-28 16:39:42 t20 against maniac: wins 72.5% ± 0.3 | as solved 71.8%%
+2026-09-28 16:40:03 t10 against wsp copy: wins 65.5% ± 0.3 | as solved 65.1%%
+2026-09-28 16:40:27 lbr t20 on done
+2026-09-28 16:41:21 lbr all on done
+2026-09-28 16:41:33 t20 against wsp copy: wins 66.4% ± 0.3 | as solved 65.1%%
+2026-09-28 16:41:38 t10 against nit: wins 67.7% ± 0.3 | as solved 66.4%%
+2026-09-28 16:42:51 t20 against nit: wins 67.8% ± 0.3 | as solved 66.4%%
+2026-09-28 16:43:36 t10 against melly copy: wins 64.9% ± 0.3 | as solved 64.5%%
+2026-09-28 16:43:47 t10 against wildpassive: wins 83.9% ± 0.3 | as solved 83.1%%
+2026-09-28 16:44:50 t20 against melly copy: wins 65.8% ± 0.3 | as solved 64.5%%
+2026-09-28 16:44:55 t20 against wildpassive: wins 84.5% ± 0.3 | as solved 83.1%%
+2026-09-28 16:46:26 t10 against v003 copy: wins 72.2% ± 0.3 | as solved 71.8%%
+2026-09-28 16:47:35 t20 against v003 copy: wins 73.4% ± 0.3 | as solved 71.8%%
+2026-09-28 16:50:11 t10 against station: wins 73.3% ± 0.3 | as solved 73.2%%
+2026-09-28 16:51:19 t20 against station: wins 74.4% ± 0.3 | as solved 73.2%%
+2026-09-28 16:53:05 postflop against v5x as solved: wins 49.2% ± 0.7
+2026-09-28 16:54:52 all against v5x as solved: wins 50.0% ± 0.7
+2026-09-28 16:56:40 t10 against v5x as solved: wins 49.2% ± 0.7
+2026-09-28 16:58:33 t20 against v5x as solved: wins 48.0% ± 0.7
+2026-09-28 16:58:33 purification lane complete

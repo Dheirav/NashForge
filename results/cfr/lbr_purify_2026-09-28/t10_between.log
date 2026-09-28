@@ -1,0 +1,5 @@
+70bb: using cap2_70bb.pkl (also present: nolimit_70bb.pkl)
+70bb: +3.086 +/- 0.348 chips/hand [+2.404, +3.768] — exploitable by at least this much
+   +154.3 BB/100, 390,376 information sets, 1.7 min
+
+wrote /home/dheirav/Code/PokerBot/results/cfr/lbr_purify_2026-09-28/t10_between_08.json

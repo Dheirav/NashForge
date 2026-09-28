@@ -1,0 +1,6 @@
+100bb: using cap2_100bb.pkl (also present: nolimit_100bb.pkl)
+100bb: +0.596 +/- 0.405 chips/hand [-0.198, +1.390] — no exploitability proven
+   +29.8 BB/100, 1,487,530 information sets, 1.8 min
+   the bound is slack: this says LBR failed, not that the rung is sound
+
+wrote results/cfr/lbr_ladder_2026-09-25/100bb_on_16.json

@@ -1,0 +1,6 @@
+70bb: using cap2_70bb.pkl (also present: nolimit_70bb.pkl)
+70bb: +0.014 +/- 0.357 chips/hand [-0.685, +0.714] — no exploitability proven
+   +0.7 BB/100, 2,751,287 information sets, 1.3 min
+   the bound is slack: this says LBR failed, not that the rung is sound
+
+wrote /home/dheirav/Code/PokerBot/results/cfr/lbr_purifyT2_2026-09-28/all_between_08.json

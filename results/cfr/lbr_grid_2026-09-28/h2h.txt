@@ -1,0 +1,17 @@
+d1502 ref60m -27.8 ± 3.2 BB/100 (SE 
+d15052 ref60m -123.8 ± 5.7 BB/100 (SE
+d1501 ref60m -27.3 ± 0.8 BB/100 (SE 
+d15051 ref60m -141.0 ± 1.7 BB/100 (SE
+lin ref60m -5.0 ± 2.1 BB/100 (SE a
+linoff ref60m -6.0 ± 0.7 BB/100 (SE a
+d1502 lin10m -22.3 ± 1.5 BB/100 (SE 
+d15052 lin10m -140.9 ± 3.2 BB/100 (SE
+d1501 lin10m -23.9 ± 2.1 BB/100 (SE 
+d15051 lin10m -157.0 ± 3.2 BB/100 (SE
+linoff lin10m -1.1 ± 1.6 BB/100 (SE a
+d1501_s1 ref60m -27.3 ± 1.3 BB/100 (SE 
+d1501_5m ref60m -33.7 ± 3.0 BB/100 (SE 
+d1501_2m ref60m -44.5 ± 0.1 BB/100 (SE 
+lin_s1 ref60m -5.0 ± 1.2 BB/100 (SE a
+lin_5m ref60m -11.5 ± 1.6 BB/100 (SE 
+lin_2m ref60m -15.9 ± 1.6 BB/100 (SE 

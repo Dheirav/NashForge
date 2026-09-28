@@ -6,6 +6,14 @@ Start from the [project README](../README.md).
   search and PPO, heads-up first, measured against the CFR agent. Includes the 15 August
   audit of the 17-feature observation and what it says to do about it.
 
+- **[solver-work-2026-09.md](solver-work-2026-09.md)**: the solver and tree work of 25 to
+  28 September. Where LBR found the leak, the per-street raise schedule that closed most of
+  it, why discounted CFR is closed, purification, and the two times one instrument alone
+  picked the wrong answer.
+
+- **[chipzen.md](chipzen.md)** and **[season6/](season6/README.md)**: the arena, and the
+  record of the seasons played in it.
+
 - **[abstraction-crossover.html](abstraction-crossover.html)** — the project report.
   What was withdrawn and why, how the CFR solver was validated, the training-budget
   crossover between the two card abstractions, and the exploitability investigation

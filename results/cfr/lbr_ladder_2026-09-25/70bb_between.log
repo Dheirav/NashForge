@@ -1,0 +1,5 @@
+70bb: using cap2_70bb.pkl (also present: nolimit_70bb.pkl)
+70bb: +0.802 +/- 0.338 chips/hand [+0.140, +1.464] — exploitable by at least this much
+   +40.1 BB/100, 1,170,732 information sets, 1.5 min
+
+wrote results/cfr/lbr_ladder_2026-09-25/70bb_between_16.json

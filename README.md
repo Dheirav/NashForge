@@ -32,8 +32,9 @@ solver beat the other two by a wide margin. The solver family is what became the
 ## What the bot is
 
 **The solver.** External-sampling Monte Carlo CFR with linear discounting, warm start from a
-smaller tree and regret-based pruning, written in C++ (`native/`) and bound to Python with
-nanobind. It runs at about half a millisecond per iteration on one core; a 20-million-
+smaller tree (mapped by action, so a tree that inserts a size keeps what was learnt) and
+regret-based pruning, written in C++ (`native/`) and bound to Python with nanobind.
+Discounted CFR was tried in four settings and loses to linear by 22 BB/100 or more. It runs at about half a millisecond per iteration on one core; a 20-million-
 iteration solve of one stack depth takes about three hours on two.
 
 **The abstraction.** 169 preflop hand classes (every distinct starting hand). Postflop, hands
@@ -42,7 +43,9 @@ and straight texture folded in; an equity-histogram feature clustered by earth m
 distance (Johanson et al., 2013) is wired in and pinned against the native mirror, and is
 the next thing to train on. Betting is a tree of a few raise sizes per raise, with schedules
 that can taper so that later raises get fewer sizes, which is what makes a third raise
-affordable.
+affordable. A schedule can also differ by street: adding a half-pot re-raise on every street
+but the river cut the balanced set's measured leak at 70bb from +56.5 to +16.1 BB/100, at no
+cost head to head, for a tree three times the size.
 
 **The ladder.** One solver per stack depth, from 5 to 100 big blinds, because the right
 strategy at 100 big blinds is nothing like the right strategy at 12. The bot reads the
@@ -104,10 +107,13 @@ wrong thing looks exactly like one that has converged. The checks, in order of s
 - **The arena.** A public record of every rated hand, with replays, against bots built by
   other people.
 
-What is *not* claimed: exploitability of the no-limit strategies. Local Best Response was
-tried and could not beat a converged strategy after four defects and three valuation
-models; a lower bound that reads zero proves nothing, and the reasoning for stopping is in
-`BACKLOG.md`.
+Exploitability is measured as a lower bound only. Since 25 September, Local Best Response
+run on the current ladder beats every set when it may bet sizes the tree lacks (the balanced
+set gave up +56.5 BB/100 at 70bb to sizes between ours) and finds nothing when it is held to
+our own sizes, which is how the per-street schedule below was chosen. LBR is a greedy
+exploiter with a blind spot: it rated a discounted-CFR solve as harder to exploit while that
+solve lost 24 BB/100 head to head. So no change is adopted on LBR alone. The week's
+measurements are in [`docs/solver-work-2026-09.md`](docs/solver-work-2026-09.md).
 
 ---
 
