@@ -141,7 +141,7 @@ def _solver_actions(history: str, to_call: int, raise_cap: int):
 
 #: Where purification applies: nowhere (the average strategy as stored),
 #: postflop only (Baby Tartanian8's choice, preflop left mixed), or everywhere.
-PURIFY_MODES = ("none", "postflop", "all")
+PURIFY_MODES = ("none", "postflop", "all", "allx")
 
 
 ON_MISS_MODES = ("random", "call")
@@ -281,7 +281,11 @@ def cfr_agent(strategy: Dict[Hashable, np.ndarray], abstraction,
             # Thresholding (cfr/purify.py): drop actions under the share, renormalise, keep sampling.
             weights = list(_purify_row(weights, purify, bool(board)))
             total = sum(weights)
-        if purify == "all" or (purify == "postflop" and board):
+        # "allx": purified everywhere except facing an all-in, where the mix is sampled. On 28 Sept a rigged
+        # probe found purified v5x folding a set to a 16x-pot river shove in a limped pot 100% of the time:
+        # the row there is fold 0.71, call 0.29, and purification turned a sometimes-mistake into an always-one.
+        facing_all_in = to_call > 0 and history.endswith(str(ALL_IN))
+        if purify == "all" or (purify == "postflop" and board) or (purify == "allx" and not facing_all_in):
             # The most probable action, first index on a tie: purification
             # rather than sampling, see the docstring.
             best, best_weight = 0, -1.0
