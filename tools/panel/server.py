@@ -776,6 +776,335 @@ def results_summary() -> dict:
     return {"since_days": 14, "versions": out}
 
 
+# --- runs: every long job on this machine, not only the panel's own ----------------------------------------------
+
+RUNS_SEEN = f"{PANEL}/runs_seen.json"
+RUNS_LOCK = threading.Lock()
+# Which progress reader answers for which job. Each reader already derives its ETA from the job's measured rate
+# (the house rule), so the panel runs it rather than guessing its own; a job with no reader gets a counter parsed
+# from its log and an ETA only once the panel has seen the counter move.
+PROGRESS_RULES = [
+    (r"hist/lane[^ /]*\.sh", "lane-progress.sh", "log"),
+    (r"ladder169/lane[^ /]*\.sh", "exp-progress.sh", "log"),
+    (r"laneLBR", "lbr-progress.sh", None),
+    (r"burst[^ /]*\.sh", "burst-progress.sh", "log"),
+    (r"--progress-dir[ =](\S+)", "duel-progress.sh", "group"),
+    (r"-m pytest", "pytest-progress.sh", "log"),
+    (r"train_nolimit\.py|slumbot_measure\.py", "run-progress.sh", "log"),
+    (r"slumbot_pilot\.py", "slumbot-progress.sh", "log"),
+]
+_PROGRESS_CACHE: dict = {}
+_SAMPLES: dict = {}
+ANSI = re.compile(r"\x1b\[[0-9;]*[A-Za-z]")
+# Not runs: the panel itself, fixture timers (shown as fixtures), and Claude's own shell wrappers.
+NOT_RUNS = re.compile(r"tools/panel/server\.py|fixture2\.sh|arm_fixture\.sh|shell-snapshots|botcheck\.sh|claude")
+
+
+def _ours(pid: int, args: str) -> bool:
+    if NOT_RUNS.search(args):
+        return False
+    first = os.path.basename(args.split()[0]) if args.split() else ""
+    if not (first.startswith("python") or first in ("bash", "sh")):
+        return False
+    try:
+        cwd = os.readlink(f"/proc/{pid}/cwd")
+    except OSError:
+        cwd = ""
+    return any(k in args or cwd.startswith(f"{HOME}/{k}") for k in ("Code/PokerBot", "pokerbot-scratch")) or \
+        cwd.startswith(f"{HOME}/Code/PokerBot") or cwd.startswith(SCRATCH)
+
+
+def _log_of(pid: int):
+    for fd in (1, 2):
+        try:
+            target = os.readlink(f"/proc/{pid}/fd/{fd}")
+        except OSError:
+            continue
+        if target.startswith("/") and not target.startswith(("/dev/", "/proc/")) and os.path.isfile(target):
+            return target
+    return None
+
+
+def _tail(path, lines: int = 4) -> list:
+    if not path:
+        return []
+    try:
+        with open(path, "rb") as handle:
+            handle.seek(0, 2)
+            size = handle.tell()
+            handle.seek(max(0, size - 8192))
+            text = handle.read().decode(errors="replace")
+    except OSError:
+        return []
+    # progress bars rewrite one line with \r; the last state of each is what counts
+    rows = [ANSI.sub("", r.split("\r")[-1]).rstrip() for r in text.splitlines()]
+    return [r for r in rows if r.strip()][-lines:]
+
+
+def _progress_reader(args: str, log):
+    for pattern, script, kind in PROGRESS_RULES:
+        found = re.search(pattern, args)
+        if not found:
+            continue
+        arg = log if kind == "log" else found.group(1) if kind == "group" else None
+        if kind == "log" and not log:
+            continue
+        key = (script, arg)
+        hit = _PROGRESS_CACHE.get(key)
+        if hit and time.time() - hit[0] < 60:
+            return script, hit[1]
+        try:
+            out = subprocess.run(["bash", f"{MAIN}/tools/{script}"] + ([arg] if arg else []), cwd=MAIN,
+                                 capture_output=True, text=True, timeout=15).stdout
+        except subprocess.TimeoutExpired:
+            out = "(the progress reader took over 15 s)"
+        lines = [ANSI.sub("", l).rstrip() for l in out.splitlines() if l.strip() and not l.startswith("===")]
+        _PROGRESS_CACHE[key] = (time.time(), lines[-8:])
+        return script, lines[-8:]
+    return None, None
+
+
+def _counter(key: str, tail: list):
+    """done/total from the log's last counter, with an ETA only from movement the panel itself has seen."""
+    for line in reversed(tail):
+        found = re.search(r"STEP (\d+)/(\d+)", line) or re.search(r"(?<![\d.])(\d[\d,]*)\s*/\s*(\d[\d,]*)(?![\d.])", line)
+        if not found:
+            continue
+        done, total = (int(x.replace(",", "")) for x in found.groups())
+        if not 0 <= done <= total or total < 2:
+            continue
+        now = time.time()
+        first = _SAMPLES.setdefault(key, (now, done))
+        if done < first[1]:
+            first = _SAMPLES[key] = (now, done)
+        eta = None
+        if done > first[1] and now > first[0]:
+            rate = (done - first[1]) / (now - first[0])
+            eta = now + (total - done) / rate
+        return {"done": done, "total": total, "eta": clocks(dt.datetime.fromtimestamp(eta).astimezone()) if eta else None,
+                "measured_over_s": round(now - first[0])}
+    return None
+
+
+def runs() -> dict:
+    """Long jobs alive now (top-level only, memory summed over each tree), and the ones seen to finish."""
+    table = []
+    for line in subprocess.run(["ps", "-eo", "pid,ppid,etimes,rss,args"], capture_output=True, text=True).stdout.splitlines()[1:]:
+        parts = line.split(None, 4)
+        if len(parts) == 5:
+            table.append((int(parts[0]), int(parts[1]), int(parts[2]), int(parts[3]), parts[4]))
+    parent = {pid: ppid for pid, ppid, *_ in table}
+    ours = {pid for pid, _, _, _, args in table if _ours(pid, args)}
+
+    def top_of(pid: int):
+        """The outermost of our processes above `pid` (itself included), so a lane's trainers count as the lane."""
+        top, p, hops = None, pid, 0
+        while p in parent and hops < 64:
+            if p in ours:
+                top = p
+            p, hops = parent[p], hops + 1
+        return top
+
+    rss = {}
+    for pid, _, _, kb, _ in table:
+        top = top_of(pid)
+        if top is not None:
+            rss[top] = rss.get(top, 0) + kb
+    live = []
+    for pid, ppid, secs, kb, args in table:
+        if pid not in ours or top_of(pid) != pid:
+            continue
+        log = _log_of(pid)
+        tail = _tail(log)
+        key = f"{pid}:{proc_ticks(pid)}"
+        script, reader = _progress_reader(args, log)
+        title = re.sub(rf"{re.escape(HOME)}/", "~/", args)
+        title = re.sub(r"\S*/venv/bin/python\d*(\.\d+)?", "python", title)[:160]
+        live.append({"key": key, "pid": pid, "title": title, "elapsed_s": secs,
+                     "started": time.time() - secs, "rss_mb": round(rss.get(pid, kb) / 1024),
+                     "log": log.replace(HOME, "~") if log else None, "tail": tail, "reader": script,
+                     "progress": reader, "counter": None if reader else _counter(key, tail)})
+    with RUNS_LOCK:
+        seen = read_json(RUNS_SEEN, {}) or {}
+        now, alive = time.time(), {r["key"] for r in live}
+        for r in live:
+            seen[r["key"]] = {"title": r["title"], "started": r["started"], "last_seen": now, "log": r["log"],
+                              "tail": r["tail"][-3:], "ended": None}
+        for key, r in seen.items():
+            if key not in alive and not r.get("ended"):
+                r["ended"] = r["last_seen"]            # the last time it was seen alive: within a refresh of the end
+                r["tail"] = _tail(os.path.expanduser(r["log"]) if r.get("log") else None, 3) or r.get("tail")
+        finished = sorted((dict(v, key=k) for k, v in seen.items() if v.get("ended")), key=lambda v: -v["ended"])
+        keep = {r["key"] for r in live} | {r["key"] for r in finished[:60]}
+        atomic_json(RUNS_SEEN, {k: v for k, v in seen.items() if k in keep})
+    return {"live": sorted(live, key=lambda r: r["started"]), "finished": finished[:15]}
+
+
+# --- since you were last here ------------------------------------------------------------------------------------
+
+TIMERS_SEEN = f"{PANEL}/timers_seen.json"
+TIMER_DEATHS = f"{PANEL}/timer_deaths.json"
+
+
+def note_timer_deaths(live: list) -> list:
+    """Timers seen alive before and gone now without having played. This catches a restart that took down timers
+    armed by hand, which the panel's own arm registry cannot see (29 Sept: both timers died in a WSL restart)."""
+    with SEEN_LOCK:
+        before = read_json(TIMERS_SEEN, []) or []
+        deaths = read_json(TIMER_DEATHS, []) or []
+        now, alive = time.time(), {t["opponent"] + "@" + t["slot"]["arm"] for t in live}
+        changed = False
+        for t in before:
+            key = t["opponent"] + "@" + t["slot"]
+            if key in alive or t["slot_epoch"] + 45 * 60 < now or timer_log(t["opponent"])["phase"] == "stopped":
+                continue
+            if not any(d["key"] == key for d in deaths):
+                deaths.append({"key": key, "opponent": t["opponent"], "slot": t["slot"], "slot_epoch": t["slot_epoch"],
+                               "noticed": now, "last_alive": t.get("seen_at")})
+                changed = True
+        deaths = [d for d in deaths if d["slot_epoch"] + 45 * 60 > now - 7 * 86400]
+        if changed:
+            atomic_json(TIMER_DEATHS, deaths)
+        atomic_json(TIMERS_SEEN, [{"opponent": t["opponent"], "slot": t["slot"]["arm"], "slot_epoch": t["slot"]["epoch"],
+                                   "seen_at": now} for t in live])
+    return deaths
+
+
+def boot_time() -> float:
+    try:
+        return float(next(l.split()[1] for l in open("/proc/stat") if l.startswith("btime")))
+    except (OSError, StopIteration, ValueError):
+        return 0.0
+
+
+def feed(since: float) -> list:
+    events = []
+    ist = lambda t: clocks(dt.datetime.fromtimestamp(t).astimezone())["ist"]
+    booted = boot_time()
+    if booted > since:
+        events.append({"at": booted, "level": "bad", "text": f"The machine restarted at {ist(booted)} IST: every "
+                       f"background job and fixture timer running before then was stopped."})
+    for d in read_json(TIMER_DEATHS, []) or []:
+        if d["noticed"] > since:
+            events.append({"at": d["noticed"], "level": "bad", "text": f"The {d['opponent']} timer "
+                           f"({ist(d['slot_epoch'])} IST) is gone without having played. Re-arm it."})
+    seen = read_json(f"{PANEL}/fixtures_seen.json", {}) or {}
+    groups = {}
+    for r in real_matches():
+        if (r.get("at") or 0) <= since:
+            continue
+        fixture = r["bot"] == "NashForge" and any(
+            v.get("opponent") == r["opponent"] and abs(dt.datetime.fromisoformat(v["when"]).timestamp() - r["at"]) < 3600
+            for v in seen.values() if isinstance(v, dict) and v.get("when"))
+        if fixture:
+            events.append({"at": r["at"], "level": "good" if r["won"] else "warn",
+                           "text": f"Fixture against {r['opponent']}: {'won' if r['won'] else 'lost'} ({r['name']})"
+                                   + (" by the opponent's forfeit" if r.get("forfeit") else "")})
+        else:
+            g = groups.setdefault((r["bot"], r["name"]), {"at": 0, "won": 0, "n": 0})
+            g["at"], g["n"], g["won"] = max(g["at"], r["at"]), g["n"] + 1, g["won"] + (1 if r["won"] else 0)
+    for (bot, name), g in groups.items():
+        events.append({"at": g["at"], "level": "info", "text": f"{bot} played {g['n']} challenge match"
+                       f"{'es' if g['n'] > 1 else ''}{'' if name == bot else ' as ' + name}: won {g['won']} of {g['n']}"})
+    for r in read_json(RUNS_SEEN, {}).values():
+        if r.get("ended") and r["ended"] > since:
+            events.append({"at": r["ended"], "level": "info", "text": f"Finished: {r['title'][:110]}",
+                           "tail": r.get("tail") or []})
+    for j in jobs(30):
+        if j["state"] != "running" and j["started"] > since - 86400:
+            try:
+                ended = os.path.getmtime(j["log"])
+            except OSError:
+                continue
+            if ended > since:
+                events.append({"at": ended, "level": {"ok": "good", "failed": "bad"}.get(j["state"], "warn"),
+                               "text": f"Panel job {j['state']}: {j['title']}", "tail": j["tail"]})
+    history = rating_history()
+    before = [h for h in history if h["at"] <= since]
+    after = [h for h in history if h["at"] > since]
+    if after:
+        start = before[-1]["rating"] if before else after[0]["rating"]
+        events.append({"at": after[-1]["at"], "level": "info", "text": f"NashForge's rating went from {start:.0f} "
+                       f"to {after[-1]['rating']:.0f} over {len(after)} rated match{'es' if len(after) > 1 else ''}"})
+    return sorted(events, key=lambda e: -e["at"])[:40]
+
+
+# --- the season ---------------------------------------------------------------------------------------------------
+
+RATINGS = f"{PANEL}/ratings.json"
+_RATINGS_THREAD = {"running": False}
+
+
+def rating_history() -> list:
+    out = []
+    try:
+        with open(f"{MAIN}/results/chipzen/rating_history.jsonl") as handle:
+            for line in handle:
+                try:
+                    row = json.loads(line)
+                except ValueError:
+                    continue
+                if isinstance(row.get("rating"), (int, float)) and row.get("at"):
+                    out.append(row)
+    except OSError:
+        pass
+    return sorted(out, key=lambda r: r["at"])
+
+
+def refresh_ratings() -> None:
+    """Every bot the scout index knows, one documented /api/bots/<id> call each, two seconds apart. The platform
+    has no leaderboard route open to this token (403 on 29 Sept), so this is the ranking's only source."""
+    try:
+        ids = dict((read_json(f"{MAIN}/results/chipzen/scout/index.json", {}) or {}).get("ids") or {})
+        ids.setdefault("NashForge", _config()[2])
+        ids.update(OTHER_BOTS)
+        bots = {}
+        for name, bot_id in ids.items():
+            if in_quiet(quiet_windows(timers()), time.time(), time.time() + 60):
+                return                                   # nothing extra on the network during a fixture
+            reply = api_get(f"/api/bots/{bot_id}", ttl=3600)
+            if isinstance(reply.get("rating"), (int, float)):
+                bots[name] = {k: reply.get(k) for k in ("rating", "rating_deviation", "matches_played", "wins", "losses")}
+            time.sleep(2)
+        atomic_json(RATINGS, {"at": time.time(), "bots": bots})
+    finally:
+        _RATINGS_THREAD["running"] = False
+
+
+def season() -> dict:
+    history = rating_history()
+    now = time.time()
+    latest = history[-1] if history else None
+    change = lambda hours: (round(latest["rating"] - next((h["rating"] for h in reversed(history)
+                                                             if h["at"] <= now - hours * 3600), history[0]["rating"]))
+                            if latest else None)
+    ratings = read_json(RATINGS, {}) or {}
+    if (not ratings or now - ratings.get("at", 0) > 6 * 3600) and not _RATINGS_THREAD["running"]:
+        _RATINGS_THREAD["running"] = True
+        threading.Thread(target=refresh_ratings, daemon=True).start()
+    # Ranked among bots with 20 or more matches: a provisional rating on five matches is not a place in the table.
+    table = sorted(((n, b) for n, b in (ratings.get("bots") or {}).items() if (b.get("matches_played") or 0) >= 20),
+                   key=lambda nb: -nb[1]["rating"])
+    rank = {n: i + 1 for i, (n, _) in enumerate(table)}
+    seen = read_json(f"{PANEL}/fixtures_seen.json", {}) or {}
+    played = []
+    for r in real_matches():
+        if r["bot"] == "NashForge" and any(v.get("opponent") == r["opponent"] and r.get("at") and
+                                           abs(dt.datetime.fromisoformat(v["when"]).timestamp() - r["at"]) < 3600
+                                           for v in seen.values() if isinstance(v, dict) and v.get("when")):
+            played.append({"opponent": r["opponent"], "won": r["won"], "name": r["name"],
+                           "ist": clocks(dt.datetime.fromtimestamp(r["at"]).astimezone())["ist"]})
+    return {"rating": latest and {k: latest.get(k) for k in ("rating", "rating_deviation", "matches_played", "wins",
+                                                             "losses", "bb_per_100", "label")},
+            "change_24h": change(24), "change_7d": change(168),
+            "series": [round(h["rating"]) for h in history[-80:]],
+            "ranked": {"at": ratings.get("at"), "of": len(table), "refreshing": _RATINGS_THREAD["running"],
+                       "top": [dict(name=n, rank=i + 1, **b) for i, (n, b) in enumerate(table[:12])],
+                       "ours": [dict(name=n, rank=rank.get(n), **(ratings.get("bots") or {}).get(n, {}))
+                                for n in ("NashForge", "OptimumPoker")]},
+            "fixtures_played": sorted(played, key=lambda p: p["ist"])}
+
+
 # --- the overview: fixtures, timers and their states -------------------------------------------------------------
 
 def connect_alarms(live: list, bot: dict, now: float) -> list:
@@ -804,6 +1133,7 @@ def overview() -> dict:
     fx = fixtures()
     now = time.time()
     registry = [r for r in (read_json(p) for p in glob.glob(f"{ARMED}/*.json")) if r]
+    deaths = note_timer_deaths(live)
     rows, matched = [], set()
     all_sets = sets()
     recent = [enrich_choice(c, all_sets) for c in choices()]
@@ -817,8 +1147,10 @@ def overview() -> dict:
         left_h = (c["epoch"] - now) / 3600
         if timer:
             state = "armed"
-        elif record and record.get("armed_pid") and left_h > -1 and timer_log(f["opponent"])["phase"] != "stopped":
-            state = "died"                       # the panel armed it and the timer is gone before playing
+        elif left_h > -1 and timer_log(f["opponent"])["phase"] != "stopped" and (
+                (record and record.get("armed_pid")) or any(d["opponent"] == f["opponent"] and
+                                                            abs(d["slot_epoch"] - c["epoch"]) < 60 for d in deaths)):
+            state = "died"                       # armed, by the panel or by hand, and gone before playing
         elif left_h < 2:
             state = "unarmed-urgent"
         elif left_h < 36:
@@ -1055,6 +1387,16 @@ class Handler(http.server.BaseHTTPRequestHandler):
                 return self._send(200, opponent_page(name))
             if path == "/api/results":
                 return self._send(200, results_summary())
+            if path == "/api/runs":
+                return self._send(200, runs())
+            if path == "/api/feed":
+                try:
+                    since = float(params.get("since", "0"))
+                except ValueError:
+                    since = 0.0
+                return self._send(200, feed(max(since, time.time() - 14 * 86400)))
+            if path == "/api/season":
+                return self._send(200, season())
             return self._send(404, {"error": "not found"})
         except Exception as error:
             return self._send(500, {"error": repr(error)})

@@ -56,6 +56,10 @@
   #toasts { position:fixed; right:12px; bottom:12px; display:flex; flex-direction:column; gap:8px; z-index:9; max-width:min(420px,92vw); }
   #toasts div { background:var(--panel); border:1px solid var(--line); border-left:5px solid var(--accent); border-radius:8px; padding:10px 12px; box-shadow:0 4px 18px rgba(0,0,0,.18); }
   #toasts div.err { border-left-color:var(--bad); }
+  .feed { border:1px solid var(--line); border-radius:12px; padding:10px 14px; margin-bottom:14px; }
+  .feed li { margin:4px 0; } .feed ul { margin:6px 0; padding-left:18px; }
+  .spark { width:100%; max-width:520px; height:70px; display:block; }
+  .spark polyline { fill:none; stroke:var(--accent); stroke-width:2; }
   .warnbox { background:var(--warnbg); color:var(--warn); border-radius:8px; padding:8px 10px; margin:8px 0; font-weight:600; }
   a.opp { color:inherit; text-decoration:underline dotted; cursor:pointer; }
   @media (max-width:640px) { .hide-sm { display:none; } th, td { padding:6px 5px; }
@@ -82,20 +86,29 @@
   <button role="tab" aria-selected="false" aria-controls="opp" id="tab-opp" data-tab="opp">Opponents</button>
   <button role="tab" aria-selected="false" aria-controls="sets" id="tab-sets" data-tab="sets">Sets</button>
   <button role="tab" aria-selected="false" aria-controls="results" id="tab-results" data-tab="results">Results</button>
+  <button role="tab" aria-selected="false" aria-controls="season" id="tab-season" data-tab="season">Season</button>
 </nav>
 <main>
 <section tabindex="0" id="dash" class="on" role="tabpanel" aria-labelledby="tab-dash">
   <div class="next" id="nextcard">…</div>
+  <div class="feed" id="feed" hidden></div>
   <div class="grid">
     <div class="card"><h3>Bot</h3><div class="big" id="bot">…</div><div class="small" id="botsub"></div></div>
     <div class="card"><h3>Memory available</h3><div class="big" id="mem">…</div><div class="small">duels need 2,500 MB</div></div>
     <div class="card"><h3>Challenge quota today</h3><div class="big" id="quota">…</div><div class="small" id="quotasub"></div></div>
+    <div class="card"><h3>Rating</h3><div class="big" id="rating">…</div><div class="small" id="ratingsub"></div></div>
     <div class="card"><h3>Lobby hours today</h3><div class="big" id="lobby">…</div><div class="small" id="lobbysub"></div></div>
   </div>
   <h2>Fixtures in the next 48 hours</h2>
   <div class="scroll"><table class="stack"><thead><tr><th>Opponent</th><th>IST</th><th>Starts in</th><th>State</th><th>Set it will play</th></tr></thead>
   <tbody id="soon"></tbody></table></div>
-  <h2>Jobs</h2>
+  <h2>Runs on this machine</h2>
+  <p class="note">Every long job, including ones started by hand. Where a job has a progress reader in tools/, its
+  output is shown, with the ETA it derives from the measured rate; otherwise the counter from the job's log, with an ETA
+  only once the panel has seen the counter move. A partial result is not a result.</p>
+  <div id="runs"><p class="dim">…</p></div>
+  <details><summary class="small">finished recently</summary><div id="runsdone"></div></details>
+  <h2>Panel jobs</h2>
   <div class="scroll"><table class="stack"><thead><tr><th>Job</th><th>State</th><th class="hide-sm">Last lines</th><th></th></tr></thead><tbody id="jobs"></tbody></table></div>
   <div id="logbox" hidden><div class="row"><b id="logtitle"></b><button class="ghost" data-action="closelog">close</button></div><pre id="joblog"></pre></div>
 </section>
@@ -149,6 +162,13 @@
   <code>~/pokerbot-scratch/chipzen/sets.json</code>; rated matches are counted from the match logs by version.</p>
   <div class="scroll"><table class="stack"><thead><tr><th>Set</th><th>File</th><th>Gate</th><th>Replay</th><th>Bursts</th><th>Rated matches</th><th>Fixture</th></tr></thead>
   <tbody id="setrows"></tbody></table></div>
+</section>
+
+<section tabindex="0" id="season" role="tabpanel" aria-labelledby="tab-season">
+  <p class="note">NashForge's rating after every rated match, from rating_history.jsonl. The ranking comes from each
+  known bot's own record (the platform's leaderboard is not open to this token), among bots with 20 or more matches,
+  refreshed every six hours and never during a fixture's window.</p>
+  <div id="seasonbody"><p class="dim">…</p></div>
 </section>
 
 <section tabindex="0" id="results" role="tabpanel" aria-labelledby="tab-results">
@@ -367,7 +387,66 @@ async function refreshChoices() {
   } catch (e) {}
 }
 
-let QUOTA = null, RESULTS = null;
+let QUOTA = null, RESULTS = null, SEASON = null;
+const dur = s => { s = Math.max(0, Math.round(s)); const h = Math.floor(s / 3600), m = Math.floor(s % 3600 / 60); return h ? `${h}h ${m}m` : `${m}m`; };
+const SINCE = (() => { const v = +store("lastSeen"); return v > 0 ? v : Date.now() / 1000 - 86400; })();
+async function refreshFeed() {
+  let f; try { f = await get(`/api/feed?since=${SINCE}`); } catch (e) { return; }
+  const box = $("feed"); box.hidden = !f.length;
+  box.innerHTML = `<div class="row"><b>Since you were last here</b> <span class="small">(${until(SINCE)})</span>
+      <button class="ghost" data-action="feedread">mark as read</button></div><ul>${f.map(e =>
+      `<li class="${e.level === "bad" ? "bad" : e.level === "warn" ? "warn" : ""}"><span class="small">${esc(new Date(e.at * 1000).toLocaleString("en-IN",
+        {weekday: "short", hour: "2-digit", minute: "2-digit", hour12: false, timeZone: "Asia/Kolkata"}))} IST</span> ${esc(e.text)}
+        ${e.tail && e.tail.length ? `<div class="small">${e.tail.map(esc).join("<br>")}</div>` : ""}</li>`).join("")}</ul>`;
+}
+async function refreshRuns() {
+  let r; try { r = await get("/api/runs", 20000); } catch (e) { return; }
+  $("runs").innerHTML = r.live.map(x => {
+    const c = x.counter;
+    const prog = x.progress ? `<pre>${esc(x.progress.join("\n"))}</pre><div class="small">from tools/${esc(x.reader)}</div>` :
+      c ? `<div><progress max="${c.total}" value="${c.done}" aria-label="progress"></progress> ${c.done.toLocaleString()} of ${c.total.toLocaleString()}
+           · ${c.eta ? `ETA ${esc(c.eta.ist)} IST (rate measured over ${dur(c.measured_over_s)})` : "no rate yet: the counter has not moved while the panel watched"}</div>` :
+      `<div class="small">no progress counter in its log</div>`;
+    return `<div class="card" style="margin:8px 0"><b>${esc(x.title)}</b>
+      <div class="small">running ${dur(x.elapsed_s)} · ${x.rss_mb.toLocaleString()} MB · pid ${x.pid}${x.log ? ` · ${esc(x.log)}` : ""}</div>${prog}
+      ${!x.progress && x.tail.length ? `<div class="small">${x.tail.map(esc).join("<br>")}</div>` : ""}</div>`;
+  }).join("") || `<p class="dim">No long jobs running.</p>`;
+  $("runsdone").innerHTML = r.finished.map(x => `<div class="card" style="margin:8px 0"><b>${esc(x.title)}</b>
+      <div class="small">ended about ${until(x.ended)}, after ${dur(x.ended - x.started)}${x.log ? ` · ${esc(x.log)}` : ""}</div>
+      <div class="small">${(x.tail || []).map(esc).join("<br>")}</div></div>`).join("") || `<p class="dim">none seen yet</p>`;
+}
+function spark(series) {
+  if (series.length < 2) return "";
+  const lo = Math.min(...series), hi = Math.max(...series), w = 520, hgt = 70, span = hi - lo || 1;
+  const pts = series.map((v, i) => `${(i * w / (series.length - 1)).toFixed(1)},${(hgt - 4 - (v - lo) * (hgt - 8) / span).toFixed(1)}`).join(" ");
+  return `<svg class="spark" viewBox="0 0 ${w} ${hgt}" preserveAspectRatio="none" role="img" aria-label="rating over the last ${series.length} rated matches, ${lo} to ${hi}"><polyline points="${pts}"/></svg>
+    <div class="small">last ${series.length} rated matches: low ${lo}, high ${hi}</div>`;
+}
+async function refreshSeason() {
+  try { SEASON = await get("/api/season"); } catch (e) { return; }
+  const s = SEASON, r = s.rating, sign = v => v == null ? "–" : (v > 0 ? "+" : "") + v;
+  if (r) {
+    $("rating").textContent = Math.round(r.rating);
+    const ours = s.ranked.ours.find(o => o.name === "NashForge");
+    $("ratingsub").textContent = `${sign(s.change_24h)} in 24 h, ${sign(s.change_7d)} in 7 days` + (ours && ours.rank ? `; #${ours.rank} of ${s.ranked.of} known bots` : "");
+  }
+  const k = s.ranked;
+  $("seasonbody").innerHTML = `<div class="grid">
+    <div class="card"><h3>NashForge</h3><div class="big">${r ? Math.round(r.rating) : "–"}</div>
+      <div class="small">${r ? `± ${Math.round(r.rating_deviation)}; ${r.wins} won, ${r.losses} lost of ${r.matches_played}; ${r.bb_per_100.toFixed(1)} bb/100` : ""}</div>
+      <div class="small">${sign(s.change_24h)} in 24 h, ${sign(s.change_7d)} in 7 days</div></div>
+    ${k.ours.filter(o => o.name !== "NashForge").map(o => `<div class="card"><h3>${esc(o.name)}</h3><div class="big">${o.rating ? Math.round(o.rating) : "–"}</div>
+      <div class="small">${o.matches_played != null ? `${o.wins} won, ${o.losses} lost of ${o.matches_played}` : "not fetched yet"}${o.rank ? `; #${o.rank} of ${k.of}` : o.matches_played != null ? "; unranked: under 20 matches" : ""}</div></div>`).join("")}
+    </div>${spark(s.series)}
+    <h2>Fixtures played this season</h2>${s.fixtures_played.length ? `<table class="stack"><tbody>${s.fixtures_played.map(f =>
+      `<tr><td data-label="When">${esc(f.ist)} IST</td><td data-label="Opponent">${oppLink(f.opponent)}</td><td data-label="Result" class="${f.won ? "good" : "bad"}">${f.won ? "won" : "lost"}</td><td data-label="As">${esc(f.name)}</td></tr>`).join("")}</tbody></table>`
+      : `<p class="dim">None recorded yet: the panel knows a fixture once it has seen it in the upcoming list.</p>`}
+    <h2>Ranking</h2><p class="small">${k.at ? `fetched ${until(k.at)}` : "not fetched yet"}${k.refreshing ? "; refreshing now (about three minutes)" : ""}</p>
+    ${k.top.length ? `<table class="stack"><thead><tr><th>#</th><th>Bot</th><th>Rating</th><th>Record</th></tr></thead><tbody>${[...k.top,
+      ...k.ours.filter(o => o.rank && o.rank > k.top.length)].map(b => `<tr${["NashForge","OptimumPoker"].includes(b.name) ? ` class="good"` : ""}>
+      <td data-label="#">${b.rank}</td><td data-label="Bot">${oppLink(b.name)}</td><td data-label="Rating">${Math.round(b.rating)} <span class="small">± ${Math.round(b.rating_deviation || 0)}</span></td>
+      <td data-label="Record">${b.wins} of ${b.matches_played}</td></tr>`).join("")}</tbody></table>` : ""}`;
+}
 function renderQuotaPlan() {
   const q = QUOTA, l = OV && OV.lobby;
   if (!q || q.error || !l) { $("quotaplan").innerHTML = `<h3>Burst planning</h3><span class="dim">quota unknown</span>`; return; }
@@ -440,6 +519,7 @@ document.addEventListener("click", async ev => {
     const l = await get(`/api/log?id=${encodeURIComponent(el.dataset.id)}`); $("logtitle").textContent = el.dataset.title;
     $("joblog").textContent = l.log; $("logbox").hidden = false; $("logbox").scrollIntoView({block: "nearest"});
   } else if (a === "closelog") { $("logbox").hidden = true;
+  } else if (a === "feedread") { store("lastSeen", String(Date.now() / 1000)); $("feed").hidden = true;
   } else if (a === "gotoopp") { selectTab("opp"); showOpponent(el.dataset.who);
   } else if (a === "opp") { const n = $("oppname").value.trim(); if (n) showOpponent(n);
   } else if (a === "scoutone") { selectTab("scout"); $("scoutnames").value = el.dataset.who;
@@ -473,6 +553,7 @@ function selectTab(id) {
   document.querySelectorAll("section").forEach(s => s.classList.toggle("on", s.id === id));
   store("tab", id);
   if (id === "results") refreshResults();
+  if (id === "season") refreshSeason();
 }
 document.querySelector("[role=tablist]").addEventListener("keydown", ev => {
   if (!["ArrowLeft","ArrowRight"].includes(ev.key)) return;
@@ -489,9 +570,10 @@ setInterval(() => {                                   // the countdowns tick eve
   await refresh();
   const saved = store("tab"), soonest = OV && OV.fixtures.find(f => f.hours_left > -1);
   selectTab(soonest && soonest.hours_left < 3 ? "dash" : (saved || "dash"));   // match day opens on the dashboard
-  refreshQuota(); refreshChoices(); refreshResults();
+  refreshQuota(); refreshChoices(); refreshResults(); refreshFeed(); refreshRuns(); refreshSeason();
 })();
 setInterval(refresh, 5000); setInterval(refreshQuota, 120000); setInterval(refreshChoices, 15000); setInterval(refreshResults, 300000);
+setInterval(refreshRuns, 30000); setInterval(refreshFeed, 120000); setInterval(refreshSeason, 300000);
 </script>
 </body>
 </html>
