@@ -62,6 +62,7 @@ QUIET_BEFORE_CONNECT, QUIET_AFTER_SLOT = 30, 120
 DRY_RUN_SPAN = 10                                    # minutes a dry run can hold the bot
 NAME = re.compile(r"^[A-Za-z0-9][\w.\-]{0,63}$")
 ARM_LOCK = threading.Lock()
+SEEN_LOCK = threading.Lock()
 
 os.makedirs(JOBS, exist_ok=True)
 os.makedirs(ARMED, exist_ok=True)
@@ -69,7 +70,8 @@ os.makedirs(f"{CHIPZEN}/frozen", exist_ok=True)
 
 
 def atomic_json(path: str, obj) -> None:
-    tmp = f"{path}.tmp{os.getpid()}"
+    # per thread: two tabs polling at once used to share one temp file and could tear fixtures_seen.json
+    tmp = f"{path}.tmp{os.getpid()}.{threading.get_ident()}"
     with open(tmp, "w") as handle:
         json.dump(obj, handle, default=str)
     os.replace(tmp, path)
@@ -92,10 +94,14 @@ def parse_local(text: str) -> dt.datetime:
     return dt.datetime.strptime(text, "%Y-%m-%d %H:%M").astimezone()
 
 
+# The machine runs on Oman time, and that is how the operator reads the second clock since 22 Sept; "+04" was not.
+MACHINE_ZONE = "Oman" if os.path.realpath("/etc/localtime").endswith("Muscat") else None
+
+
 def clocks(t: dt.datetime) -> dict:
     t = t.astimezone()
     return {"arm": t.strftime("%Y-%m-%d %H:%M"), "machine": t.strftime("%a %d %b %H:%M"),
-            "machine_tz": t.strftime("%Z"), "ist": t.astimezone(IST).strftime("%a %d %b %H:%M"),
+            "machine_tz": MACHINE_ZONE or t.strftime("%Z"), "ist": t.astimezone(IST).strftime("%a %d %b %H:%M"),
             "utc": t.astimezone(dt.timezone.utc).strftime("%a %H:%M"), "epoch": t.timestamp()}
 
 
@@ -108,16 +114,40 @@ def _config():
     return base, api["token"], api.get("bot_id")
 
 
-_CACHE: dict = {}
+_CACHE: dict = {}                                    # path -> (fetched at, latest reply, good or error)
+_GOOD: dict = {}                                     # path -> (fetched at, last good reply)
+_INFLIGHT: set = set()
 _CACHE_LOCK = threading.Lock()
 
 
-def api_get(path: str, ttl: float = 120.0) -> dict:
-    """A GET on the documented external API. Answers are cached for `ttl`, errors for ten seconds only."""
+def api_get(path: str, ttl: float = 120.0, background: bool = False) -> dict:
+    """A GET on the documented external API. Answers are cached for `ttl`, errors for ten seconds only.
+
+    With `background`, a stale answer is returned at once and refreshed on a thread: the dashboard and arm must never
+    wait out a 20-second timeout on a hung platform, since the fixture banners are what matter on match night.
+    Only the first call ever blocks."""
     with _CACHE_LOCK:
         hit = _CACHE.get(path)
         if hit and time.time() - hit[0] < (ttl if "error" not in hit[1] else 10):
-            return hit[1]
+            # a caller that blocks (the quota) must see the error, never a stale count passed off as current
+            return _GOOD[path][1] if "error" in hit[1] and background and path in _GOOD else hit[1]
+        if background and path in _GOOD:
+            if path not in _INFLIGHT:
+                _INFLIGHT.add(path)
+                threading.Thread(target=_fetch, args=(path,), daemon=True).start()
+            return _GOOD[path][1]
+    return _fetch(path)
+
+
+def api_health(path: str) -> dict:
+    """Whether the latest fetch of `path` failed, and how old the answer being shown is."""
+    with _CACHE_LOCK:
+        hit, good = _CACHE.get(path), _GOOD.get(path)
+    return {"error": hit[1].get("error") if hit and "error" in hit[1] else None,
+            "age_s": round(time.time() - good[0]) if good else None}
+
+
+def _fetch(path: str) -> dict:
     base, token, _ = _config()
     # Named, not urllib's default "Python-urllib": the platform's front door refused that with a 403 on 29 Sept.
     request = urllib.request.Request(base + path, headers={"Authorization": f"Bearer {token}",
@@ -132,25 +162,37 @@ def api_get(path: str, ttl: float = 120.0) -> dict:
         payload = {"body": payload}
     with _CACHE_LOCK:
         _CACHE[path] = (time.time(), payload)
+        if "error" not in payload:
+            _GOOD[path] = (time.time(), payload)
+        _INFLIGHT.discard(path)
     return payload
 
 
 def fixtures() -> dict:
     """Upcoming fixtures, remembered in fixtures_seen.json so the quota can recognise them once they are played."""
-    reply = api_get("/api/external-api/fixtures/upcoming", ttl=300)
+    path = "/api/external-api/fixtures/upcoming"
+    reply = api_get(path, ttl=300, background=True)
     if "error" in reply:
         return {"error": reply["error"], "rows": []}
+    health = api_health(path)
+    stale = (f"showing fixtures fetched {health['age_s'] // 60} min ago; the latest fetch failed: {health['error']}"
+             if health["error"] else None)
     rows = []
     for row in reply.get("fixtures") or []:
         when = row.get("starts_at") or row.get("scheduled_at") or row.get("start_time")
         who = row.get("opponent_bot_name") or row.get("opponent") or row.get("opponent_name")
         if when and who:
-            rows.append({"opponent": who, "when": dt.datetime.fromisoformat(when.replace("Z", "+00:00"))})
-    seen = read_json(f"{PANEL}/fixtures_seen.json", {})
-    for r in rows:
-        seen[f"{r['opponent']}@{r['when'].isoformat()}"] = {"opponent": r["opponent"], "when": r["when"].isoformat()}
-    atomic_json(f"{PANEL}/fixtures_seen.json", seen)
-    return {"rows": sorted(rows, key=lambda r: r["when"])}
+            try:
+                rows.append({"opponent": who, "when": dt.datetime.fromisoformat(when.replace("Z", "+00:00"))})
+            except (TypeError, ValueError, AttributeError):
+                continue
+    with SEEN_LOCK:
+        seen = read_json(f"{PANEL}/fixtures_seen.json", {})
+        fresh = {f"{r['opponent']}@{r['when'].isoformat()}": {"opponent": r["opponent"], "when": r["when"].isoformat()}
+                 for r in rows}
+        if any(k not in seen for k in fresh):
+            atomic_json(f"{PANEL}/fixtures_seen.json", {**seen, **fresh})
+    return {"rows": sorted(rows, key=lambda r: r["when"]), "stale": stale}
 
 
 def is_fixture(match: dict, seen: dict) -> bool:
@@ -181,8 +223,11 @@ def quota_today() -> dict:
             if "matches" not in reply:          # a failed call must not read as a quota of zero
                 return {"error": f"{name}: {reply.get('error') or reply}", "limit": QUOTA}
             rows = reply["matches"]
-            fresh = [m for m in rows if (m.get("started_at") or "") >= midnight.isoformat()[:19]]
-            today += fresh
+            # Only challenges count: OptimumPoker's upload-track tournament at 09:30 IST on 29 Sept read as a
+            # challenge and showed the quota full at 19.
+            fresh = [m for m in rows if str(m.get("started_at") or "") >= midnight.isoformat()[:19]]
+            fresh_challenges = [m for m in fresh if m.get("match_type", "challenge") == "challenge"]
+            today += fresh_challenges
             if len(rows) < 100 or len(fresh) < len(rows):
                 break
         season = [m for m in today if is_fixture(m, seen)]
@@ -254,7 +299,9 @@ def timer_log(who: str) -> dict:
     except OSError:
         return {"phase": "no log", "tail": []}
     phase = "stopped" if "; stopping" in text else ("connected" if "connecting as" in text else "waiting")
-    return {"phase": phase, "tail": text.splitlines()[-3:]}
+    deadline = re.search(r"walkover deadline (\d{4}-\d\d-\d\d \d\d:\d\d)", text)
+    return {"phase": phase, "tail": text.splitlines()[-3:],
+            "deadline": clocks(parse_local(deadline.group(1))) if deadline else None}
 
 
 def timers() -> list:
@@ -438,6 +485,11 @@ def running_jobs(kind: str) -> list:
 
 SETS_REGISTRY = f"{CHIPZEN}/sets.json"
 OPTIMUM = OTHER_BOTS["OptimumPoker"]
+# The last 100 are enough for the records the panel shows; older ones are in the scout's archive.
+OPTIMUM_MATCHES = f"/api/matches?bot_id={OPTIMUM}&page=1&page_size=100"
+# What the uploaded image plays, in version_key's form so its record lines up with the set of the same version.
+# Change it with each upload (image v2, 29 Sept: v5x purified with the reads).
+UPLOAD_VERSION = "v5x purified"
 _REAL: dict = {}
 
 
@@ -450,19 +502,35 @@ def version_key(v: dict) -> str:
         name += " purified" if purify == "all" else f" {purify}"
     if v.get("river_solve"):
         name += " + river"
+    # Same ladder, different bot: v5d and v7b share v5c's rungs and differ in these two (29 Sept review).
+    if v.get("deep_primary") is False:
+        name += " one-raise primary"
+    if v.get("companions"):
+        name += " + companions"
     return name
+
+
+def label_name(label) -> str:
+    """The name a version goes by (v5d, v7b): its label up to the colon."""
+    text = str(label or "")
+    return text.split(":", 1)[0].strip()[:40] if ":" in text else text.split(" ", 1)[0][:40]
 
 
 def set_version_key(s: dict) -> str:
     flags = s.get("flags", "").split()
     purify = flags[flags.index("--purify") + 1] if "--purify" in flags and flags.index("--purify") + 1 < len(flags) else "none"
-    return version_key({"ladder_dir": s["ladder"], "purify": purify, "river_solve": "--river-solve" in flags})
+    return version_key({"ladder_dir": s["ladder"], "purify": purify, "river_solve": "--river-solve" in flags,
+                        "deep_primary": "--deep-primary" in flags,
+                        "companions": [f for f in flags if f.startswith("--companion")]})
 
 
 def real_matches() -> list:
     """Every finished match: NashForge's from its logs (cached by file mtime), OptimumPoker's from the API."""
     out = []
-    for path in glob.glob(f"{MAIN}/results/chipzen/matches/*.jsonl"):
+    paths = glob.glob(f"{MAIN}/results/chipzen/matches/*.jsonl")
+    for gone in set(_REAL) - set(paths):
+        _REAL.pop(gone, None)
+    for path in paths:
         try:
             mtime = os.path.getmtime(path)
         except OSError:
@@ -475,11 +543,14 @@ def real_matches() -> list:
             try:
                 with open(path, errors="replace") as handle:
                     for line in handle:
-                        if '"frame": "match_start"' in line:
-                            start = json.loads(line)
-                        elif '"frame": "match_end"' in line:
-                            end = json.loads(line)
-            except (OSError, ValueError):
+                        try:                  # per line: one torn line must not drop the whole match
+                            if '"frame": "match_start"' in line:
+                                start = json.loads(line)
+                            elif '"frame": "match_end"' in line and json.loads(line).get("results"):
+                                end = json.loads(line)
+                        except ValueError:
+                            continue
+            except OSError:
                 pass
             if start and end:
                 results = end.get("results") or []
@@ -487,53 +558,122 @@ def real_matches() -> list:
                 opp = next((r for r in results if r.get("seat") != start.get("seat")), None)
                 if me and opp:
                     version = start.get("version") or {}
+                    label = version.get("label")
                     record = {"at": start.get("at"), "opponent": opp.get("name"), "version": version_key(version),
-                              "label": version.get("label"), "won": (me.get("net_chips") or 0) > 0, "bot": "NashForge"}
+                              "label": str(label) if label is not None else None, "name": label_name(label),
+                              "won": (me.get("net_chips") or 0) > 0, "bot": "NashForge",
+                              "rated": start.get("rated") is not False,
+                              # a win by the opponent's crash says nothing about the set (Blueprint, 29 Sept)
+                              "forfeit": any("forfeit" in str(e) for e in opp.get("bot_errors") or [])}
             _REAL[path] = (mtime, record)
         if record:
             out.append(record)
-    reply = api_get(f"/api/matches?bot_id={OPTIMUM}&page=1&page_size=100", ttl=600)
+    reply = api_get(OPTIMUM_MATCHES, ttl=600, background=True)
     for m in reply.get("matches") or []:
+        if not isinstance(m, dict):
+            continue
         people = m.get("participants") or []
         me = next((p for p in people if p.get("bot_id") == OPTIMUM), None)
         opp = next((p for p in people if p.get("bot_id") != OPTIMUM), None)
         if m.get("status") == "completed" and me and opp and len(people) == 2:
-            when = m.get("started_at") or ""
-            at = dt.datetime.fromisoformat(when.replace("Z", "+00:00")).timestamp() if when else None
-            out.append({"at": at, "opponent": opp.get("name"), "version": "v5x purified (OptimumPoker, upload)",
-                        "label": "OptimumPoker", "won": (me.get("net_chips") or 0) > 0, "bot": "OptimumPoker"})
+            try:
+                at = dt.datetime.fromisoformat(str(m.get("started_at")).replace("Z", "+00:00")).timestamp()
+            except ValueError:
+                at = None
+            # Only challenges: the upload track's tournaments are a different game from a fixture's heads-up.
+            if m.get("match_type") != "challenge":
+                continue
+            out.append({"at": at, "opponent": opp.get("name"), "version": UPLOAD_VERSION, "label": "OptimumPoker",
+                        "name": "OptimumPoker", "won": (me.get("net_chips") or 0) > 0, "bot": "OptimumPoker",
+                        "rated": m.get("rated") is not False, "forfeit": False})
     return out
 
 
 def tally(rows: list) -> dict:
-    n, w = len(rows), sum(1 for r in rows if r["won"])
-    return {"matches": n, "won": w, "rate": round(w / n, 3) if n else None,
-            "stderr": round((w / n * (1 - w / n) / n) ** 0.5, 3) if n else None}
+    """Won of played, forfeits left out. Under ten matches no rate is given: 1 of 1 shown as 100% ± 0 reads as
+    certainty, when twenty matches is still ±11 points."""
+    played = [r for r in rows if r.get("rated", True) and not r.get("forfeit")]
+    n, w = len(played), sum(1 for r in played if r["won"])
+    enough = n >= 10
+    return {"matches": n, "won": w, "rate": round(w / n, 3) if enough else None,
+            "stderr": round((w / n * (1 - w / n) / n) ** 0.5, 3) if enough else None,
+            "forfeits": sum(1 for r in rows if r.get("forfeit")), "bots": sorted({r["bot"] for r in rows})}
 
 
 def record_vs(opponent: str) -> list:
     rows = [r for r in real_matches() if r["opponent"] == opponent]
     versions = sorted({r["version"] for r in rows})
-    return [dict(version=v, **tally([r for r in rows if r["version"] == v])) for v in versions]
+    return [dict(version=v, names=sorted({r["name"] for r in rows if r["version"] == v}),
+                 **tally([r for r in rows if r["version"] == v])) for v in versions]
+
+
+def registry() -> tuple:
+    """sets.json, checked entry by entry. It is edited by hand, so a bad entry fails closed alone and is reported,
+    rather than silently making every set ineligible or breaking the page."""
+    path = SETS_REGISTRY
+    try:
+        raw = json.load(open(path))
+    except OSError:
+        return {}, "sets.json is missing: no set is eligible for a fixture"
+    except ValueError as error:
+        return {}, f"sets.json does not parse ({error}): no set is eligible for a fixture"
+    if not isinstance(raw, dict):
+        return {}, "sets.json is not an object: no set is eligible for a fixture"
+    good, bad = {}, []
+    for key, entry in raw.items():
+        if key.startswith("_"):
+            continue
+        ok = isinstance(entry, dict) and all(entry.get(k) is None or isinstance(entry[k], str)
+                                             for k in ("name", "version", "gate", "replay", "note", "same_as"))
+        ok = ok and isinstance(entry.get("bursts", []), list) and all(isinstance(b, str) for b in entry.get("bursts", []))
+        if ok:
+            good[key] = entry
+        else:
+            bad.append(key)
+    return good, (f"sets.json entries with the wrong shape, treated as having no evidence: {', '.join(bad)}" if bad else None)
+
+
+def set_evidence() -> tuple:
+    """Each set file with the evidence for it. Evidence counts only for the version it was measured on: a set file is
+    edited to choose a burst, and a copy of v5x's evidence must not follow the file name onto another ladder."""
+    reg, error = registry()
+    files = {s["file"]: s for s in set_files()}
+    out = []
+    for s in files.values():
+        key = set_version_key(s)
+        entry = reg.get(s["file"], {})
+        canonical = entry.get("same_as")
+        base = reg.get(canonical, {}) if canonical else entry
+        problems = []
+        if canonical and canonical in files and set_version_key(files[canonical]) != key:
+            problems.append(f"it plays {key} but is marked the same as {canonical}, which plays "
+                            f"{set_version_key(files[canonical])}")
+            base = {}
+        if base.get("version") and base["version"] != key:
+            problems.append(f"the evidence was recorded on {base['version']} and the file now plays {key}")
+            base = {}
+        if not base.get("version") and base:
+            problems.append("the evidence does not say which version it was measured on")
+            base = {}
+        bursts = base.get("bursts") or []
+        missing = [k for k in ("gate", "replay") if not base.get(k)] + ([] if bursts else ["a burst"])
+        try:
+            edited_h = round((time.time() - os.path.getmtime(f"{CHIPZEN}/{s['file']}")) / 3600, 1)
+        except OSError:
+            edited_h = None
+        out.append(dict(s, name=base.get("name") or entry.get("name") or s["file"], same_as=canonical,
+                        gate=base.get("gate"), replay=base.get("replay"), bursts=bursts,
+                        note=base.get("note") or entry.get("note"), version=key, problems=problems,
+                        eligible=not missing and not problems, missing=missing, believed=len(bursts) >= 2,
+                        edited_h=edited_h))
+    out.sort(key=lambda x: (not x["eligible"], x["same_as"] is not None, not x["believed"], x["file"]))
+    return out, error
 
 
 def sets() -> list:
-    """The set files with their human names, the evidence recorded for them and the rated matches they played."""
-    registry = read_json(SETS_REGISTRY, {}) or {}
+    """The set files with their evidence and the rated matches each version played."""
     real = [r for r in real_matches() if r["bot"] == "NashForge"]
-    out = []
-    for s in set_files():
-        entry = registry.get(s["file"], {})
-        canonical = entry.get("same_as")
-        base = registry.get(canonical, {}) if canonical else entry
-        key = set_version_key(s)
-        bursts = base.get("bursts") or []
-        missing = [k for k in ("gate", "replay") if not base.get(k)] + ([] if bursts else ["a burst"])
-        out.append(dict(s, name=base.get("name") or s["file"], same_as=canonical, gate=base.get("gate"),
-                        replay=base.get("replay"), bursts=bursts, note=base.get("note"), version=key,
-                        eligible=not missing, missing=missing, believed=len(bursts) >= 2,
-                        rated=tally([r for r in real if r["version"] == key])))
-    return sorted(out, key=lambda x: (not x["eligible"], x["same_as"] is not None, not x["believed"], x["file"]))
+    return [dict(s, rated=tally([r for r in real if r["version"] == s["version"]])) for s in set_evidence()[0]]
 
 
 def fit_verdict(result: dict) -> dict:
@@ -556,27 +696,50 @@ def fit_verdict(result: dict) -> dict:
             "strong": bool(rating and rating >= 1900)}
 
 
-def enrich_choice(result: dict) -> dict:
+def enrich_choice(result: dict, all_sets: list | None = None) -> dict:
     if result.get("error"):
         return result
-    set_keys = {s["file"]: s["version"] for s in sets()}
+    set_info = {s["file"]: s for s in (all_sets if all_sets is not None else sets())}
     real = record_vs(result["opponent"])
     ranked = sorted([r for r in result["results"] if r.get("win") is not None], key=lambda r: -r["win"])
     for r in result["results"]:
-        key = set_keys.get(r["set"])
-        r["version"] = key
+        info = set_info.get(r["set"], {})
+        key = info.get("version")
+        r["version"], r["name"] = key, info.get("name")
+        r["eligible"], r["believed"] = info.get("eligible"), info.get("believed")
         r["real"] = next((x for x in real if x["version"] == key), None)
     tie = len(ranked) >= 2 and (ranked[0]["win"] - ranked[1]["win"]) < 2 * ((ranked[0]["stderr"] ** 2 + ranked[1]["stderr"] ** 2) ** 0.5)
     leader = ranked[0] if ranked else None
+    quality = fit_verdict(result)
+    # When the copy cannot decide: a rough copy, a strong opponent (copies flatter the exploiter most there),
+    # a tie, or a run under the floor.
+    reasons = ([f"copy {quality['verdict']}"] if quality["verdict"] != "close" else []) + \
+              (["strong opponent"] if quality["strong"] else []) + (["a tie"] if tie else []) + \
+              ([f"{result.get('matches', 0):,} matches, under 5,000"] if (result.get("matches") or 0) < 5000 else [])
     warning = None
-    if leader and leader.get("real") and leader["real"]["matches"] >= 2 and leader["real"]["rate"] < 0.5:
+    if leader and leader.get("real") and leader["real"]["matches"] >= 2 and leader["real"]["won"] * 2 < leader["real"]["matches"]:
         warning = (f"{leader['set']} leads against the copy but is {leader['real']['won']} of {leader['real']['matches']} "
                    f"against the real {result['opponent']}")
-    return dict(result, quality=fit_verdict(result), leader=leader["set"] if leader else None, tie=tie,
-                warning=warning, real=real)
+    return dict(result, quality=quality, leader=leader["set"] if leader else None, tie=tie,
+                decisive=not reasons, not_decisive=reasons, warning=warning, real=real)
+
+
+def scout_age(name: str):
+    path = f"{MAIN}/results/chipzen/scout/{name}.json"
+    return round((time.time() - os.path.getmtime(path)) / 86400, 1) if os.path.exists(path) else None
+
+
+def season_index_matches(name: str) -> int:
+    """Matches both scout indexes hold for `name`, which is what choose.py fits from: a paced scout's zero is not the whole story."""
+    season = read_json(f"{MAIN}/results/chipzen/scout/season_matches.json", {}) or {}
+    ids = {m.get("id") for m in season.values() if isinstance(m, dict) and
+           any(p.get("name") == name for p in m.get("participants") or [])}
+    other = ((read_json(f"{MAIN}/results/chipzen/scout/index.json", {}) or {}).get("by_name") or {}).get(name) or []
+    return len(ids | {m.get("id") for m in other if isinstance(m, dict)})
 
 
 def opponent_page(name: str) -> dict:
+    all_sets = sets()
     prof = profiles([name]).get(name, {})
     path = f"{MAIN}/results/chipzen/scout/{name}.json"
     fresh = round((time.time() - os.path.getmtime(path)) / 86400, 1) if os.path.exists(path) else None
@@ -585,7 +748,8 @@ def opponent_page(name: str) -> dict:
         f"{row.get('bets_faced')} bets faced: " + ("enough for the reads" if (row.get("bets_faced") or 0) >= 100
                                                  else "too few for most reads"))
     return {"name": name, "profile": prof, "scouted_days_ago": fresh, "reads": reads, "record": record_vs(name),
-            "choices": [enrich_choice(c) for c in choices() if c.get("opponent") == name][:5]}
+            "season_index_matches": season_index_matches(name),
+            "choices": [enrich_choice(c, all_sets) for c in choices() if c.get("opponent") == name][:5]}
 
 
 def results_summary() -> dict:
@@ -604,12 +768,35 @@ def results_summary() -> dict:
         opps = {}
         for r in v["rows"]:
             opps.setdefault(r["opponent"], []).append(r)
-        out.append(dict(version=key, labels=sorted(v["labels"]), bot=v["rows"][0]["bot"], **tally(v["rows"]),
+        out.append(dict(version=key, labels=sorted(v["labels"]), names=sorted({r["name"] for r in v["rows"]}),
+                        first=min(r.get("at") or 0 for r in v["rows"]), last=max(r.get("at") or 0 for r in v["rows"]),
+                        label_counts={l: sum(1 for r in v["rows"] if r.get("label") == l) for l in v["labels"]},
+                        **tally(v["rows"]),
                         opponents=sorted(({"opponent": o, **tally(rs)} for o, rs in opps.items()), key=lambda x: -x["matches"])[:8]))
     return {"since_days": 14, "versions": out}
 
 
 # --- the overview: fixtures, timers and their states -------------------------------------------------------------
+
+def connect_alarms(live: list, bot: dict, now: float) -> list:
+    """A fixture whose connect time has passed without the bot in the lobby. The Shadow fixture (17 Sept) was a
+    walkover to a timer that never connected, and nothing on screen said so; three minutes allows for the start-up."""
+    out = []
+    status = read_json(f"{CHIPZEN}/status.json", {}) or {}
+    for t in live:
+        connect, deadline = t["connect"]["epoch"], (t["log"].get("deadline") or t["slot"])["epoch"]
+        if not connect + 180 < now < deadline or t["log"]["phase"] == "stopped":
+            continue
+        # status.json outlives the bot, so its lobby state counts only if this run wrote it
+        fresh = (status.get("started_at") or 0) >= connect - 120
+        problem = ("the timer has not logged a connect" if t["log"]["phase"] != "connected" else
+                   "no bot process is running" if not bot["running"] else
+                   "the bot has not reached the lobby" if not fresh or status.get("lobby") != "connected" else None)
+        if problem:
+            out.append({"opponent": t["opponent"], "problem": problem, "connect": t["connect"],
+                        "deadline": t["log"].get("deadline")})
+    return out
+
 
 def overview() -> dict:
     live = timers()
@@ -618,6 +805,8 @@ def overview() -> dict:
     now = time.time()
     registry = [r for r in (read_json(p) for p in glob.glob(f"{ARMED}/*.json")) if r]
     rows, matched = [], set()
+    all_sets = sets()
+    recent = [enrich_choice(c, all_sets) for c in choices()]
     for f in fx["rows"]:
         c = clocks(f["when"])
         timer = next((t for t in live if t["opponent"] == f["opponent"] and t["slot"]["arm"] == c["arm"]), None)
@@ -636,12 +825,20 @@ def overview() -> dict:
             state = "unarmed-soon"
         else:
             state = "unarmed"
-        rows.append({"opponent": f["opponent"], "slot": c, "state": state, "timer": timer, "hours_left": round(left_h, 2)})
+        last = next((x for x in recent if x.get("opponent") == f["opponent"]), None)
+        rows.append({"opponent": f["opponent"], "slot": c, "state": state, "timer": timer, "hours_left": round(left_h, 2),
+                     "scouted_days_ago": scout_age(f["opponent"]),
+                     "last_choice": {"at": last["at"], "decisive": last.get("decisive"), "leader": last.get("leader"),
+                                     "not_decisive": last.get("not_decisive")} if last and not last.get("error") else None})
     orphans = [t for t in live if t["pid"] not in matched]
+    bot = bot_status()
+    alarms = connect_alarms(live, bot, now)
     return {"now": clocks(dt.datetime.now().astimezone()), "fixtures": rows, "fixtures_error": fx.get("error"),
             "timers": live, "orphans": orphans, "quiet": windows,
-            "quiet_now": in_quiet(windows, now, now + 1), "bot": bot_status(), "memory_mb": memory_mb(),
-            "lobby": lobby_hours_today(live), "jobs": jobs(10), "sets": sets()}
+            "quiet_now": in_quiet(windows, now, now + 1), "bot": bot, "memory_mb": memory_mb(),
+            "lobby": lobby_hours_today(live), "jobs": jobs(10), "sets": all_sets, "alarms": alarms,
+            "fixtures_stale": fx.get("stale"), "sets_error": set_evidence()[1],
+            "matches_error": api_health(OPTIMUM_MATCHES)["error"]}
 
 
 # --- actions ------------------------------------------------------------------------------------------------------
@@ -650,12 +847,14 @@ def arm(body: dict) -> dict:
     slot, opponent, setfile = str(body.get("slot", "")), str(body.get("opponent", "")), str(body.get("set", ""))
     if not re.fullmatch(r"\d{4}-\d\d-\d\d \d\d:\d\d", slot) or not NAME.fullmatch(opponent):
         return {"error": "bad slot or opponent"}
-    known = {s["file"]: s for s in sets()}
+    known = {s["file"]: s for s in set_evidence()[0]}
     if setfile not in known:
         return {"error": f"{setfile!r} is not one of the set files"}
-    if not known[setfile]["eligible"]:
-        return {"error": f"{known[setfile]['name']} is not eligible for a fixture: missing {', '.join(known[setfile]['missing'])} "
-                         f"(arena rules: gate, replay and a burst). Record the evidence in sets.json first."}
+    chosen = known[setfile]
+    if not chosen["eligible"]:
+        why = "; ".join(chosen["problems"]) or f"missing {', '.join(chosen['missing'])}"
+        return {"error": f"{chosen['name']} is not eligible for a fixture: {why} (arena rules: gate, replay and a "
+                         f"burst, on this version). Record the evidence in sets.json first."}
     with ARM_LOCK:
         if running_jobs("arm"):
             return {"error": "another arm is still running its dry run; one at a time"}
@@ -755,12 +954,20 @@ def decompose(body: dict) -> dict:
     labels = {r.get("label") for r in real_matches() if r.get("label") and r["bot"] == "NashForge"}
     if label not in labels or label.startswith("-"):
         return {"error": "no matches recorded under that label"}
+    if running_jobs("decompose"):
+        return {"error": "a decomposition is already running; one at a time"}
+    now = time.time()
+    clash = in_quiet(quiet_windows(timers()), now, now + 10 * 60)
+    if clash:
+        return {"error": f"not inside the {clash['opponent']} fixture's window: it reads every match log and would "
+                         f"compete with the live bot for the CPU"}
     command = [PY, "scripts/chipzen_decompose.py", "--label", label]
     if opponent:
         if not NAME.fullmatch(opponent):
             return {"error": "bad opponent name"}
         command += ["--opponent", opponent]
-    return start_job("decompose", f"decompose {label[:50]}{' against ' + opponent if opponent else ''}", command)
+    return start_job("decompose", f"decompose {label[:50]}{' against ' + opponent if opponent else ''}", command,
+                     extra={"label": label, "opponent": opponent})
 
 
 def profiles(names: list) -> dict:
@@ -813,6 +1020,10 @@ class Handler(http.server.BaseHTTPRequestHandler):
         try:
             path, _, query = self.path.partition("?")
             params = dict(p.split("=", 1) for p in query.split("&") if "=" in p)
+            # Reads need the token too: any site open in the browser could otherwise make this machine run ps,
+            # the bot check and the match-log parse in a loop, during a fixture, without reading the answers.
+            if path.startswith("/api/") and self.headers.get("X-Panel-Token") != TOKEN:
+                return self._send(403, {"error": "bad token"})
             if path == "/":
                 page = open(f"{TOOLS}/index.html").read().replace("__TOKEN__", TOKEN)
                 return self._send(200, page.encode(), "text/html; charset=utf-8")
@@ -835,7 +1046,8 @@ class Handler(http.server.BaseHTTPRequestHandler):
                 names = [n for n in urllib.request.unquote(params.get("names", "")).split(",") if n]
                 return self._send(200, profiles(names))
             if path == "/api/choices":
-                return self._send(200, [enrich_choice(c) for c in choices()])
+                all_sets = sets()
+                return self._send(200, [enrich_choice(c, all_sets) for c in choices()])
             if path == "/api/opponent":
                 name = urllib.request.unquote(params.get("name", ""))
                 if not NAME.fullmatch(name):

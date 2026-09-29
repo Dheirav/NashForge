@@ -122,6 +122,7 @@
     <button class="ghost" data-action="profiles">Show</button></div>
   <div class="scroll"><table><thead><tr><th>Bot</th><th>Data</th><th>Plays</th><th>Raises first</th><th>Re-raises</th>
   <th>Folds to re-raise</th><th>Folds to a bet</th><th>River bluffs</th><th>Rating</th></tr></thead><tbody id="profiles"></tbody></table></div>
+  <p class="note">On a phone this table scrolls sideways; an opponent's page shows the same numbers stacked.</p>
 </section>
 
 <section tabindex="0" id="choose" role="tabpanel" aria-labelledby="tab-choose">
@@ -170,8 +171,11 @@ function toast(text, err) {
   const d = document.createElement("div"); d.textContent = text; if (err) d.className = "err";
   $("toasts").appendChild(d); setTimeout(() => d.remove(), err ? 12000 : 6000);
 }
-async function get(path) {
-  const r = await fetch(path, {cache: "no-store"});
+async function get(path, ms = 8000) {
+  // A hung server must show as not answering, not as a dashboard frozen on old fixture states.
+  const ctl = new AbortController(), timer = setTimeout(() => ctl.abort(), ms);
+  let r;
+  try { r = await fetch(path, {cache: "no-store", signal: ctl.signal, headers: {"X-Panel-Token": TOKEN}}); } finally { clearTimeout(timer); }
   const j = await r.json();
   if (!r.ok) throw new Error(j.error || r.status);
   return j;
@@ -205,6 +209,11 @@ function renderBanners() {
   if (failing) b.push(["b-bad", `The panel server is not answering (last update ${lastOk ? until(lastOk/1000) : "never"}). What you see may be stale.`]);
   if (OV) {
     if (OV.fixtures_error) b.push(["b-bad", `Could not load fixtures from Chipzen: ${OV.fixtures_error}. Fixture states are UNKNOWN.`]);
+    (OV.alarms || []).forEach(a => b.push(["b-bad", `${a.opponent}: ${a.problem}, and it should have connected at ${a.connect.ist} IST.`
+      + (a.deadline ? ` Walkover at ${a.deadline.ist} IST.` : "") + ` Check the timer log and the bot now.`]));
+    if (OV.fixtures_stale) b.push(["b-warn", OV.fixtures_stale]);
+    if (OV.sets_error) b.push(["b-bad", OV.sets_error]);
+    if (OV.matches_error) b.push(["b-warn", `OptimumPoker's matches could not be refreshed (${OV.matches_error}); its records may be old.`]);
     OV.fixtures.filter(f => f.state === "died").forEach(f => b.push(["b-bad", `The ${f.opponent} timer died before its fixture (${f.slot.ist} IST). Re-arm it.`]));
     OV.fixtures.filter(f => f.state === "unarmed-urgent" && f.hours_left > 0).forEach(f => b.push(["b-bad", `${f.opponent} starts ${until(f.slot.epoch)} and is NOT armed.`]));
     OV.timers.filter(t => t.set_changed_since_arm).forEach(t => b.push(["b-bad", `The set file for ${t.opponent} changed after arming: the timer will read the new file at connect.`]));
@@ -230,7 +239,9 @@ function renderOverview() {
       <div class="row" style="margin:2px 0"><span class="who">${esc(next.opponent)}</span> ${statePill(next)}</div>
       <div class="count" data-epoch="${next.slot.epoch}">${until(next.slot.epoch)}</div>
       <div>${esc(next.slot.ist)} IST <span class="small">· ${esc(next.slot.machine)} ${esc(next.slot.machine_tz)} on this machine</span></div>
-      <div class="small">Set: ${next.timer ? esc(next.timer.set.label.slice(0, 80)) : "no timer armed"}</div>` :
+      ${next.timer ? `<div>Connects ${esc(next.timer.connect.ist)} IST <span class="small">(<span data-epoch="${next.timer.connect.epoch}">${until(next.timer.connect.epoch)}</span>)</span>
+        · timer <b>${esc(next.timer.log.phase)}</b>${next.timer.log.deadline ? ` · walkover deadline ${esc(next.timer.log.deadline.ist)} IST` : ""}</div>` : ""}
+      <div class="small">Set: ${next.timer ? esc(setName(next.timer.set)) : "no timer armed"}</div>` :
       `<div class="dim">No upcoming fixtures${o.fixtures_error ? " (could not load them)" : ""}.</div>`;
   document.title = next ? `${next.opponent} ${until(next.slot.epoch)} · ${next.state === "armed" ? "armed" : "NOT ARMED"}` : "NashForge panel";
   const soon = upcoming.filter(f => f.hours_left < 48);
@@ -239,18 +250,21 @@ function renderOverview() {
       || `<tr><td colspan="5" class="dim">none in the next 48 hours</td></tr>`;
   $("jobs").innerHTML = o.jobs.map(j => {
     const st = j.state === "running" ? `<span class="pill p-warn">running</span>` : j.state === "ok" ? `<span class="pill p-good">ok</span>` :
-               j.state === "failed" ? `<span class="pill p-bad">failed (exit ${j.exit})</span>` : `<span class="pill p-dim">ended</span>`;
+               j.state === "failed" ? `<span class="pill p-bad">failed (exit ${j.exit})</span>` : `<span class="pill p-dim">ended, no exit code: see log</span>`;
     const prog = j.step ? `<div><progress max="${j.step[1]}" value="${j.step[0]}" aria-label="${esc(j.title)} progress"></progress> <span class="small">step ${j.step[0]} of ${j.step[1]}</span></div>` : "";
     return `<tr><td>${esc(j.title)}<div class="small">started ${until(j.started)}</div></td><td data-label="State">${st}${prog}</td>
       <td class="small hide-sm">${j.tail.map(esc).join("<br>")}</td><td><button class="ghost" data-action="log" data-id="${esc(j.id)}" data-title="${esc(j.title)}">log</button></td></tr>`;
   }).join("") || `<tr><td colspan="4" class="dim">no jobs yet</td></tr>`;
   const opts = o.sets.map(s => `<option value="${esc(s.file)}" ${s.eligible ? "" : "disabled"}>${esc(s.name)}${s.same_as ? " (copy)" : ""} · ${esc(s.file)}${
-      s.eligible ? (s.believed ? "" : " · one burst") : " · not eligible: no " + esc(s.missing.join(", "))}</option>`).join("");
+      s.eligible ? (s.believed ? "" : " · one burst") : " · not eligible: " + esc(s.problems.length ? s.problems[0] : "no " + s.missing.join(", "))}</option>`).join("");
   $("fixtures").innerHTML = o.fixtures.map((f, i) => {
     const action = f.timer
       ? `<button class="ghost" data-action="disarm" data-pid="${f.timer.pid}" data-who="${esc(f.opponent)}">disarm</button>`
       : `<button class="act" data-action="arm" data-i="${i}" ${f.hours_left < 0.42 ? "disabled" : ""}>arm</button>`;
-    const set = f.timer ? setCell(f.timer) : `<label class="sr" for="set${i}">Set for ${esc(f.opponent)}</label><select id="set${i}" data-opp="${esc(f.opponent)}">${opts}</select>`;
+    const lc = f.last_choice, evidence = f.timer ? "" : `<div class="small">${f.scouted_days_ago == null ? "never scouted" : `scouted ${f.scouted_days_ago} d ago`} ·
+      ${lc ? `last duel ${until(lc.at)}: ${lc.decisive ? `${esc(lc.leader)} leads` : `not decisive (${esc(lc.not_decisive.join(", "))})`}` : "no duel"} ·
+      <a class="opp" data-action="gotoopp" data-who="${esc(f.opponent)}" tabindex="0">evidence</a></div>`;
+    const set = f.timer ? setCell(f.timer) : `<label class="sr" for="set${i}">Set for ${esc(f.opponent)}</label><select id="set${i}" data-opp="${esc(f.opponent)}">${opts}</select>${evidence}`;
     return `<tr><td data-label="Opponent">${oppLink(f.opponent)}</td><td data-label="IST">${esc(f.slot.ist)}<div class="small">${esc(f.slot.machine)} here</div></td>
       <td data-label="Starts" class="count" data-epoch="${f.slot.epoch}">${until(f.slot.epoch)}</td><td data-label="State">${statePill(f)}</td><td data-label="Set">${set}</td><td>${action}</td></tr>`;
   }).join("") || `<tr><td colspan="6" class="${o.fixtures_error ? "bad" : "dim"}">${o.fixtures_error ? "Could not load fixtures: " + esc(o.fixtures_error) : "no upcoming fixtures"}</td></tr>`;
@@ -269,22 +283,41 @@ function renderOverview() {
     $("chsets").dataset.done = "1";
   }
 }
+function setName(info) {
+  // A timer's set by its human name when the file is a known set; a frozen copy is named after its label.
+  const s = OV && OV.sets.find(x => x.file === info.file || x.label === info.label);
+  return s ? `${s.name}${s.eligible ? (s.believed ? ", believed" : ", one burst") : ", NOT ELIGIBLE"} (${info.file})` : info.label.slice(0, 80);
+}
 function oppLink(n) { return `<a class="opp" data-action="gotoopp" data-who="${esc(n)}" tabindex="0">${esc(n)}</a>`; }
-function rate(t) { return t && t.matches ? `${t.won} of ${t.matches} (${pct(t.rate)} ± ${pct(t.stderr)})` : `<span class="dim">none</span>`; }
+function rate(t) {
+  if (!t || !t.matches) return t && t.forfeits ? `<span class="dim">only forfeits (${t.forfeits})</span>` : `<span class="dim">none</span>`;
+  const f = t.forfeits ? ` <span class="small">+${t.forfeits} forfeit${t.forfeits > 1 ? "s" : ""} not counted</span>` : "";
+  const who = t.bots && t.bots.length === 1 && t.bots[0] !== "NashForge" ? ` <span class="small">(${esc(t.bots[0])})</span>` : "";
+  return t.rate == null ? `${t.won} of ${t.matches} <span class="small">(too few to rate)</span>${who}${f}`
+                        : `${t.won} of ${t.matches} (${pct(t.rate)} ± ${pct(t.stderr)})${who}${f}`;
+}
 function renderSets() {
   $("setrows").innerHTML = OV.sets.map(s => `<tr><td data-label="Set"><b>${esc(s.name)}</b>${s.same_as ? ` <span class="small">same as ${esc(s.same_as)}</span>` : ""}
       ${s.note ? `<div class="small">${esc(s.note)}</div>` : ""}</td><td data-label="File" class="small">${esc(s.file)}</td>
     <td data-label="Gate">${s.gate ? esc(s.gate) : `<span class="bad">none</span>`}</td><td data-label="Replay">${s.replay ? esc(s.replay) : `<span class="bad">none</span>`}</td>
     <td data-label="Bursts">${s.bursts.length ? s.bursts.map(esc).join("<br>") : `<span class="bad">none</span>`}</td>
     <td data-label="Rated">${rate(s.rated)}<div class="small">as ${esc(s.version)}</div></td>
-    <td data-label="Fixture">${!s.eligible ? `<span class="pill p-bad">not eligible</span>` : s.believed ? `<span class="pill p-good">eligible, believed</span>` : `<span class="pill p-warn">eligible, one burst</span>`}</td></tr>`).join("");
+    <td data-label="Fixture">${s.problems.length ? `<div class="bad small">${s.problems.map(esc).join("; ")}</div>` : ""}
+      ${s.edited_h != null && s.edited_h < 24 ? `<div class="warn small">edited ${s.edited_h} h ago</div>` : ""}${!s.eligible ? `<span class="pill p-bad">not eligible</span>` : s.believed ? `<span class="pill p-good">eligible, believed</span>` : `<span class="pill p-warn">eligible, one burst</span>`}</td></tr>`).join("");
 }
 function store(k, v) { try { if (v === undefined) return localStorage.getItem(k); localStorage.setItem(k, v); } catch (e) { return null; } }
 
+let refreshing = false;
 async function refresh() {
+  if (refreshing) return;                             // never stack requests behind a slow one
+  refreshing = true;
   try {
-    OV = await get("/api/overview"); lastOk = Date.now(); failing = false; renderOverview(); renderSets(); renderQuotaPlan();
+    OV = await get("/api/overview"); lastOk = Date.now(); failing = false;
   } catch (e) { failing = true; }
+  refreshing = false;
+  if (!failing) {                                     // a render bug must not read as the server being down
+    try { renderOverview(); renderSets(); renderQuotaPlan(); } catch (e) { console.error(e); toast(`Page error: ${e.message}`, true); }
+  }
   renderBanners();
 }
 async function refreshQuota() {
@@ -307,20 +340,30 @@ function qualityLine(r) {
   if (q.strong) bits.push(`rated ${q.rating}: a strong bot, where a copy flatters the exploiter most`);
   return `<div class="row"><span class="pill ${cls}">copy ${q.verdict}</span> <span class="small">${esc(bits.join(" · ") || "every statistic within 8 points")}</span></div>`;
 }
+function evidencePill(x) {
+  return x.eligible == null ? "" : !x.eligible ? `<span class="pill p-bad">not eligible</span>` :
+         x.believed ? `<span class="pill p-good">believed</span>` : `<span class="pill p-warn">one burst</span>`;
+}
+function renderChoice(r, compact) {
+  // One card for the Choose tab and the opponent page, so neither can drop the tie or decisive labels.
+  if (r.error) return `<div class="card" style="margin:10px 0"><b>${esc(r.opponent)}</b>: ${esc(r.error)}</div>`;
+  const verdict = r.decisive ? "" : `<div class="warnbox">Not decisive (${esc(r.not_decisive.join(", "))}): play the believed set unless real results say otherwise.</div>`;
+  return `<div class="card" style="margin:10px 0">${compact ? "" : `<b>${esc(r.opponent)}</b> `}<span class="small">${until(r.at)} ·
+     copy fitted from ${esc(r.fit.base)} on ${esc(r.fit.hands)} hands (distance ${Number(r.fit.distance).toFixed(3)}) · ${Number(r.matches).toLocaleString()} matches a set</span>
+     ${qualityLine(r)}${verdict}${r.warning ? `<div class="warnbox">${esc(r.warning)}: the copy disagrees with the real bot.</div>` : ""}
+     ${r.tie ? `<div class="warnbox">A tie: the top two are within two combined standard errors, so the copy does not separate them.</div>` : ""}
+     <table class="stack"><thead><tr><th>Set</th><th>Wins against the copy</th><th>Real record against ${esc(r.opponent)}</th></tr></thead><tbody>${r.results.map(x =>
+       `<tr><td data-label="Set"><b>${esc(x.name || x.set)}</b> ${evidencePill(x)}${x.set === r.leader ? (r.decisive ? ` <span class="pill p-good">leads</span>` : ` <span class="pill p-dim">ahead, not decisive</span>`) : ""}
+          <div class="small">${esc(x.set)}</div></td>
+        <td data-label="Copy">${x.win == null ? "–" : `${x.win}% ± ${x.stderr}`}</td><td data-label="Real">${rate(x.real)}</td></tr>`).join("")}</tbody></table>
+     ${(r.real || []).filter(v => !r.results.some(x => x.version === v.version)).map(v => `<div class="small">also real: ${esc(v.names.join(" / ") || v.version)} ${rate(v)}</div>`).join("")}
+     <details><summary class="small">how close the copy is</summary><pre>${esc(r.fit_table)}</pre></details>
+     ${compact ? "" : `<p class="note">${esc(r.caveat)}</p><button class="ghost" data-action="gotoopp" data-who="${esc(r.opponent)}">${esc(r.opponent)}'s page</button>`}</div>`;
+}
 async function refreshChoices() {
   try {
     const c = await get("/api/choices");
-    $("choices").innerHTML = c.map(r => r.error ? `<div class="card" style="margin:10px 0"><b>${esc(r.opponent)}</b>: ${esc(r.error)}</div>` :
-      `<div class="card" style="margin:10px 0"><b>${esc(r.opponent)}</b> <span class="small">· ${until(r.at)} ·
-       copy fitted from ${esc(r.fit.base)} on ${esc(r.fit.hands)} hands (distance ${Number(r.fit.distance).toFixed(3)}) · ${Number(r.matches).toLocaleString()} matches a set</span>
-       ${qualityLine(r)}${r.warning ? `<div class="warnbox">${esc(r.warning)}: the copy disagrees with the real bot.</div>` : ""}
-       ${r.tie ? `<div class="warnbox">A tie: the top two are within two combined standard errors, so the copy does not separate them.</div>` : ""}
-       <table class="stack"><thead><tr><th>Set</th><th>Wins against the copy</th><th>Real record against ${esc(r.opponent)}</th></tr></thead><tbody>${r.results.map(x =>
-         `<tr><td data-label="Set">${esc(x.set)}${x.set === r.leader && !r.tie ? ` <span class="pill p-good">leads</span>` : ""} <span class="small">${esc(x.version || "")}</span></td>
-          <td data-label="Copy">${x.win == null ? "–" : `${x.win}% ± ${x.stderr}`}</td><td data-label="Real">${rate(x.real)}</td></tr>`).join("")}</tbody></table>
-       ${(r.real || []).filter(v => !r.results.some(x => x.version === v.version)).map(v => `<div class="small">also real: ${esc(v.version)} ${rate(v)}</div>`).join("")}
-       <details><summary class="small">how close the copy is</summary><pre>${esc(r.fit_table)}</pre></details>
-       <p class="note">${esc(r.caveat)}</p><button class="ghost" data-action="gotoopp" data-who="${esc(r.opponent)}">${esc(r.opponent)}'s page</button></div>`).join("") || `<p class="dim">No results yet.</p>`;
+    $("choices").innerHTML = c.map(r => renderChoice(r, false)).join("") || `<p class="dim">No results yet.</p>`;
   } catch (e) {}
 }
 
@@ -328,23 +371,36 @@ let QUOTA = null, RESULTS = null;
 function renderQuotaPlan() {
   const q = QUOTA, l = OV && OV.lobby;
   if (!q || q.error || !l) { $("quotaplan").innerHTML = `<h3>Burst planning</h3><span class="dim">quota unknown</span>`; return; }
-  // The platform allows 20 matches an hour, so a 20-match burst holds the lobby for an hour at least.
-  const left = q.limit - q.used, fit = Math.min(left, Math.floor(l.free * 20));
+  // burst.sh stops after 20 matches or two hours. Most bursts took under an hour, but the v5x practice took 1.95 h
+  // for 11, so the lobby time to set aside is the two-hour cap, not the typical case.
+  const left = q.limit - q.used, fits = l.free >= 2 && left >= 20;
   $("quotaplan").innerHTML = `<h3>Burst planning</h3><div>${left} challenges left today, shared by both bots; lobby ${l.free} h free after armed fixtures.
-    A 20-match burst needs 20 challenges and at least one lobby hour (20 matches an hour at most); today ${fit >= 20 ? "one fits" : `only ${Math.max(fit, 0)} matches fit`}.
+    A burst needs 20 challenges and up to 2 lobby hours (burst.sh stops at 20 matches or two hours). Today:
+    <b>${fits ? "one fits" : left < 20 ? `no, only ${left} challenges left` : `no, under 2 lobby hours free`}</b>.
     The quota resets ${esc(q.reset.ist)} IST.</div><div class="small">A version needs two or three bursts before it is believed; fixtures do not count against the quota.</div>`;
 }
 async function refreshResults() {
   try { RESULTS = await get("/api/results"); } catch (e) { return; }
-  $("resultrows").innerHTML = RESULTS.versions.map(v => `<div class="card" style="margin:10px 0">
-    <div class="row"><b>${esc(v.version)}</b> <span>${rate(v)}</span> <span class="small">${esc(v.bot)}</span></div>
+  const done = (OV ? OV.jobs : []).filter(j => j.kind === "decompose" && j.state === "ok");
+  $("resultrows").innerHTML = RESULTS.versions.map((v, i) => {
+    const last = done.find(j => v.labels.includes(j.label));
+    return `<div class="card" style="margin:10px 0">
+    <div class="row"><b>${esc(v.names.join(" / ") || v.version)}</b> <span>${rate(v)}</span></div>
+    <div class="small">${esc(v.version)} · ${new Date(v.first * 1000).toLocaleDateString("en-IN", {day: "numeric", month: "short", timeZone: "Asia/Kolkata"})}
+      to ${new Date(v.last * 1000).toLocaleDateString("en-IN", {day: "numeric", month: "short", timeZone: "Asia/Kolkata"})}</div>
     <table class="stack"><thead><tr><th>Opponent</th><th>Record</th></tr></thead><tbody>${v.opponents.map(o =>
-      `<tr><td data-label="Opponent">${oppLink(o.opponent)}</td><td data-label="Record">${o.won} of ${o.matches}</td></tr>`).join("")}</tbody></table>
-    ${v.bot === "NashForge" && v.labels.length ? `<div class="row"><label class="sr" for="dl-${esc(v.version)}">Label to decompose</label>
-      <select id="dl-${esc(v.version)}">${v.labels.map(l => `<option value="${esc(l)}">${esc(l.slice(0, 70))}</option>`).join("")}</select>
-      <button class="ghost" data-action="decompose" data-version="${esc(v.version)}">decompose</button></div>` : ""}</div>`).join("")
-    || `<p class="dim">No matches in the last ${RESULTS.since_days} days.</p>`;
+      `<tr><td data-label="Opponent">${oppLink(o.opponent)}</td><td data-label="Record">${o.won} of ${o.matches}${o.forfeits ? ` <span class="small">+${o.forfeits} forfeit</span>` : ""}</td></tr>`).join("")}</tbody></table>
+    ${v.bots.includes("NashForge") && v.labels.length ? `<div class="row"><label class="sr" for="dl-${i}">Label to decompose</label>
+      <select id="dl-${i}">${v.labels.map(l => `<option value="${esc(l)}">${esc(l.length > 60 ? l.slice(0, 28) + " … " + l.slice(-28) : l)} · ${v.label_counts[l]} matches</option>`).join("")}</select>
+      <label class="sr" for="do-${i}">Only against</label><select id="do-${i}"><option value="">every opponent</option>${v.opponents.map(o => `<option value="${esc(o.opponent)}">${esc(o.opponent)}</option>`).join("")}</select>
+      <button class="ghost" data-action="decompose" data-i="${i}">decompose</button></div>` : ""}
+    ${last ? `<details data-log="${esc(last.id)}"><summary class="small">last decomposition: ${esc(last.title)} (${until(last.started)})</summary><pre>loading…</pre></details>` : ""}</div>`;
+  }).join("") || `<p class="dim">No matches in the last ${RESULTS.since_days} days.</p>`;
 }
+document.addEventListener("toggle", async ev => {   // a decomposition's table loads when it is opened
+  const d = ev.target; if (!d.dataset || !d.dataset.log || !d.open) return;
+  try { d.querySelector("pre").textContent = (await get(`/api/log?id=${encodeURIComponent(d.dataset.log)}`)).log.replace(/^\$ .*\n/, "").replace(/\nEXIT \d+\s*$/, ""); } catch (e) {}
+}, true);
 async function showOpponent(name) {
   $("oppname").value = name; $("opppage").innerHTML = `<p class="dim">loading…</p>`;
   let o; try { o = await get(`/api/opponent?name=${encodeURIComponent(name)}`); } catch (e) { $("opppage").innerHTML = `<p class="bad">${esc(e.message)}</p>`; return; }
@@ -353,15 +409,13 @@ async function showOpponent(name) {
   $("opppage").innerHTML = `<div class="grid">
     <div class="card"><h3>Platform</h3><div class="big">${pl.rating ? Math.round(pl.rating) : "–"}</div><div class="small">rating</div></div>
     <div class="card"><h3>Scouted</h3><div class="big">${o.scouted_days_ago == null ? "never" : `${o.scouted_days_ago} days ago`}</div>
-      <div class="small">${s.matches ?? "–"} matches, ${s.hands ?? "–"} hands${o.scouted_days_ago > 3 ? "; stale, scout again before a fixture" : ""}</div></div>
+      <div class="small">${s.hands ? `${s.matches} matches, ${s.hands} hands` : "the paced scout has no hands"}; ${o.season_index_matches} matches in the scout indexes, which the fit reads${o.scouted_days_ago > 3 ? ". Stale: scout again before a fixture" : ""}</div></div>
     <div class="card"><h3>Reads</h3><div>${esc(o.reads)}</div></div>
     <div class="card"><h3>Fixture</h3><div>${fixture ? `${esc(fixture.slot.ist)} IST ${statePill(fixture)}` : `<span class="dim">none listed</span>`}</div></div></div>
-    <h2>Style</h2><div class="small">plays ${pct(s.vpip)}, raises first ${pct(s.pfr)}, re-raises ${pct(s.three_bet)}, folds to a re-raise ${pct(s.fold_to_three_bet)}, folds to a bet ${pct(s.fold_to_bet)}</div>
+    <h2>Style</h2><div class="small">${!s.hands ? "no scouted hands: nothing to show" : `plays ${pct(s.vpip)}, raises first ${pct(s.pfr)}, re-raises ${pct(s.three_bet)}, folds to a re-raise ${pct(s.fold_to_three_bet)}, folds to a bet ${pct(s.fold_to_bet)}`}</div>
     <h2>Real record by version</h2><table class="stack"><thead><tr><th>Version</th><th>Record</th></tr></thead><tbody>${o.record.map(v =>
-      `<tr><td data-label="Version">${esc(v.version)}</td><td data-label="Record">${rate(v)}</td></tr>`).join("") || `<tr><td colspan="2" class="dim">never played</td></tr>`}</tbody></table>
-    <h2>Copy duels</h2>${o.choices.map(r => r.error ? `<div class="small">${esc(r.error)}</div>` :
-      `<div class="card" style="margin:8px 0"><div class="small">${until(r.at)}</div>${qualityLine(r)}${r.warning ? `<div class="warnbox">${esc(r.warning)}</div>` : ""}
-       ${r.results.map(x => `<div>${esc(x.set)}: ${x.win ?? "–"}% ± ${x.stderr ?? "–"} against the copy; real ${rate(x.real)}</div>`).join("")}</div>`).join("")
+      `<tr><td data-label="Version">${esc(v.names.join(" / "))} <div class="small">${esc(v.version)}</div></td><td data-label="Record">${rate(v)}</td></tr>`).join("") || `<tr><td colspan="2" class="dim">never played</td></tr>`}</tbody></table>
+    <h2>Copy duels</h2>${o.choices.map(r => renderChoice(r, true)).join("")
       || `<p class="dim">none yet: run one from Choose a set.</p>`}
     <div class="row"><button class="ghost" data-action="scoutone" data-who="${esc(name)}">scout ${esc(name)}</button>
       <button class="ghost" data-action="chooseone" data-who="${esc(name)}">choose a set for ${esc(name)}</button></div>`;
@@ -373,6 +427,9 @@ document.addEventListener("click", async ev => {
   const a = el.dataset.action;
   if (a === "arm") {
     const f = OV.fixtures[+el.dataset.i], set = $(`set${el.dataset.i}`).value;
+    const info = OV.sets.find(s => s.file === set) || {};
+    if (info.edited_h != null && info.edited_h < 24 &&
+        !confirm(`${set} was edited ${info.edited_h} hours ago. Arena rule: a set is not changed on match day. Arm it anyway?`)) return;
     store(`set:${f.opponent}`, set);
     if (confirm(`Arm ${f.opponent}\n\n${f.slot.ist} IST (${until(f.slot.epoch)})\nthis machine's clock: ${f.slot.arm} ${f.slot.machine_tz} (what the timer arms from)\nset: ${set} (a frozen copy is what plays)\n\nA dry run connects first, about 5 minutes, then the timer detaches.`)) {
       el.disabled = true; el.textContent = "arming…"; post("/api/arm", {slot: f.slot.arm, opponent: f.opponent, set});
@@ -388,8 +445,9 @@ document.addEventListener("click", async ev => {
   } else if (a === "scoutone") { selectTab("scout"); $("scoutnames").value = el.dataset.who;
   } else if (a === "chooseone") { selectTab("choose"); $("chopp").value = el.dataset.who;
   } else if (a === "decompose") {
-    const label = $(`dl-${el.dataset.version}`).value;
-    if (confirm(`Decompose the matches labelled\n${label}\n\nby depth and by which solver decided each hand? It reads the match logs only.`)) post("/api/decompose", {label});
+    const label = $(`dl-${el.dataset.i}`).value, opponent = $(`do-${el.dataset.i}`).value;
+    if (confirm(`Decompose the matches labelled\n${label}\n${opponent ? `against ${opponent} only` : "against every opponent"}\n\nby depth and by which solver decided each hand? It reads the match logs only; the table appears under this card when it finishes.`))
+      post("/api/decompose", {label, opponent}).then(() => setTimeout(refreshResults, 15000));
   } else if (a === "fillscout") { const v = $("scoutnames").value; $("scoutnames").value = v ? `${v}, ${el.dataset.who}` : el.dataset.who;
   } else if (a === "scout") {
     const names = $("scoutnames").value.split(",").map(s => s.trim()).filter(Boolean);
