@@ -404,6 +404,11 @@ def start_job(kind: str, title: str, command: list, cwd: str = MAIN, env: dict |
 
 
 def job_state(record: dict) -> dict:
+    # Jobs are this server's children: reap a finished one, or it stays a zombie that still reads as running.
+    try:
+        os.waitpid(record["pid"], os.WNOHANG)
+    except ChildProcessError:
+        pass
     alive = proc_ticks(record["pid"]) is not None and proc_ticks(record["pid"]) == record.get("ticks")
     try:
         lines = open(record["log"]).read().splitlines()
@@ -427,6 +432,181 @@ def jobs(limit: int = 30) -> list:
 
 def running_jobs(kind: str) -> list:
     return [j for j in jobs(50) if j["kind"] == kind and j["state"] == "running"]
+
+
+# --- real results, sets and their evidence --------------------------------------------------------------------
+
+SETS_REGISTRY = f"{CHIPZEN}/sets.json"
+OPTIMUM = OTHER_BOTS["OptimumPoker"]
+_REAL: dict = {}
+
+
+def version_key(v: dict) -> str:
+    """A version's short name from what the bot recorded at match start: its ladder, purification and river solver."""
+    ladder = os.path.basename((v.get("ladder_dir") or "").rstrip("/")).replace("ladder169l_", "") or "not recorded"
+    name = {"v5iT2full": "v5iT2"}.get(ladder, ladder)
+    purify = v.get("purify") or "none"
+    if purify != "none":
+        name += " purified" if purify == "all" else f" {purify}"
+    if v.get("river_solve"):
+        name += " + river"
+    return name
+
+
+def set_version_key(s: dict) -> str:
+    flags = s.get("flags", "").split()
+    purify = flags[flags.index("--purify") + 1] if "--purify" in flags and flags.index("--purify") + 1 < len(flags) else "none"
+    return version_key({"ladder_dir": s["ladder"], "purify": purify, "river_solve": "--river-solve" in flags})
+
+
+def real_matches() -> list:
+    """Every finished match: NashForge's from its logs (cached by file mtime), OptimumPoker's from the API."""
+    out = []
+    for path in glob.glob(f"{MAIN}/results/chipzen/matches/*.jsonl"):
+        try:
+            mtime = os.path.getmtime(path)
+        except OSError:
+            continue
+        hit = _REAL.get(path)
+        if hit and hit[0] == mtime:
+            record = hit[1]
+        else:
+            record, start, end = None, None, None
+            try:
+                with open(path, errors="replace") as handle:
+                    for line in handle:
+                        if '"frame": "match_start"' in line:
+                            start = json.loads(line)
+                        elif '"frame": "match_end"' in line:
+                            end = json.loads(line)
+            except (OSError, ValueError):
+                pass
+            if start and end:
+                results = end.get("results") or []
+                me = next((r for r in results if r.get("seat") == start.get("seat")), None)
+                opp = next((r for r in results if r.get("seat") != start.get("seat")), None)
+                if me and opp:
+                    version = start.get("version") or {}
+                    record = {"at": start.get("at"), "opponent": opp.get("name"), "version": version_key(version),
+                              "label": version.get("label"), "won": (me.get("net_chips") or 0) > 0, "bot": "NashForge"}
+            _REAL[path] = (mtime, record)
+        if record:
+            out.append(record)
+    reply = api_get(f"/api/matches?bot_id={OPTIMUM}&page=1&page_size=100", ttl=600)
+    for m in reply.get("matches") or []:
+        people = m.get("participants") or []
+        me = next((p for p in people if p.get("bot_id") == OPTIMUM), None)
+        opp = next((p for p in people if p.get("bot_id") != OPTIMUM), None)
+        if m.get("status") == "completed" and me and opp and len(people) == 2:
+            when = m.get("started_at") or ""
+            at = dt.datetime.fromisoformat(when.replace("Z", "+00:00")).timestamp() if when else None
+            out.append({"at": at, "opponent": opp.get("name"), "version": "v5x purified (OptimumPoker, upload)",
+                        "label": "OptimumPoker", "won": (me.get("net_chips") or 0) > 0, "bot": "OptimumPoker"})
+    return out
+
+
+def tally(rows: list) -> dict:
+    n, w = len(rows), sum(1 for r in rows if r["won"])
+    return {"matches": n, "won": w, "rate": round(w / n, 3) if n else None,
+            "stderr": round((w / n * (1 - w / n) / n) ** 0.5, 3) if n else None}
+
+
+def record_vs(opponent: str) -> list:
+    rows = [r for r in real_matches() if r["opponent"] == opponent]
+    versions = sorted({r["version"] for r in rows})
+    return [dict(version=v, **tally([r for r in rows if r["version"] == v])) for v in versions]
+
+
+def sets() -> list:
+    """The set files with their human names, the evidence recorded for them and the rated matches they played."""
+    registry = read_json(SETS_REGISTRY, {}) or {}
+    real = [r for r in real_matches() if r["bot"] == "NashForge"]
+    out = []
+    for s in set_files():
+        entry = registry.get(s["file"], {})
+        canonical = entry.get("same_as")
+        base = registry.get(canonical, {}) if canonical else entry
+        key = set_version_key(s)
+        bursts = base.get("bursts") or []
+        missing = [k for k in ("gate", "replay") if not base.get(k)] + ([] if bursts else ["a burst"])
+        out.append(dict(s, name=base.get("name") or s["file"], same_as=canonical, gate=base.get("gate"),
+                        replay=base.get("replay"), bursts=bursts, note=base.get("note"), version=key,
+                        eligible=not missing, missing=missing, believed=len(bursts) >= 2,
+                        rated=tally([r for r in real if r["version"] == key])))
+    return sorted(out, key=lambda x: (not x["eligible"], x["same_as"] is not None, not x["believed"], x["file"]))
+
+
+def fit_verdict(result: dict) -> dict:
+    """Whether a copy is good enough to decide on: which statistics it misses by more than 8 points, and on how much."""
+    misses = []
+    for line in (result.get("fit_table") or "").splitlines():
+        cells = [c.strip() for c in line.strip("|").split("|")]
+        if len(cells) == 3 and cells[1].endswith("%") and cells[2].endswith("%"):
+            real, fitted = float(cells[1][:-1]), float(cells[2][:-1])
+            if abs(real - fitted) > 8:
+                misses.append(f"{cells[0]} {real:.0f}% against {fitted:.0f}%")
+    try:
+        hands = int(str(result.get("fit", {}).get("hands", "0")).replace(",", ""))
+    except ValueError:
+        hands = 0
+    summary = (read_json(f"{MAIN}/results/chipzen/scout/{result.get('opponent')}.json", {}) or {}).get("summary", {})
+    rating = (summary.get("platform") or {}).get("rating")
+    verdict = "close" if not misses and hands >= 1000 else ("rough" if len(misses) <= 2 and hands >= 300 else "poor")
+    return {"verdict": verdict, "misses": misses, "hands": hands, "rating": round(rating) if rating else None,
+            "strong": bool(rating and rating >= 1900)}
+
+
+def enrich_choice(result: dict) -> dict:
+    if result.get("error"):
+        return result
+    set_keys = {s["file"]: s["version"] for s in sets()}
+    real = record_vs(result["opponent"])
+    ranked = sorted([r for r in result["results"] if r.get("win") is not None], key=lambda r: -r["win"])
+    for r in result["results"]:
+        key = set_keys.get(r["set"])
+        r["version"] = key
+        r["real"] = next((x for x in real if x["version"] == key), None)
+    tie = len(ranked) >= 2 and (ranked[0]["win"] - ranked[1]["win"]) < 2 * ((ranked[0]["stderr"] ** 2 + ranked[1]["stderr"] ** 2) ** 0.5)
+    leader = ranked[0] if ranked else None
+    warning = None
+    if leader and leader.get("real") and leader["real"]["matches"] >= 2 and leader["real"]["rate"] < 0.5:
+        warning = (f"{leader['set']} leads against the copy but is {leader['real']['won']} of {leader['real']['matches']} "
+                   f"against the real {result['opponent']}")
+    return dict(result, quality=fit_verdict(result), leader=leader["set"] if leader else None, tie=tie,
+                warning=warning, real=real)
+
+
+def opponent_page(name: str) -> dict:
+    prof = profiles([name]).get(name, {})
+    path = f"{MAIN}/results/chipzen/scout/{name}.json"
+    fresh = round((time.time() - os.path.getmtime(path)) / 86400, 1) if os.path.exists(path) else None
+    row = prof.get("profile") or {}
+    reads = "no profile: no read can fire" if not row else (
+        f"{row.get('bets_faced')} bets faced: " + ("enough for the reads" if (row.get("bets_faced") or 0) >= 100
+                                                 else "too few for most reads"))
+    return {"name": name, "profile": prof, "scouted_days_ago": fresh, "reads": reads, "record": record_vs(name),
+            "choices": [enrich_choice(c) for c in choices() if c.get("opponent") == name][:5]}
+
+
+def results_summary() -> dict:
+    rows = real_matches()
+    since = time.time() - 14 * 86400
+    versions = {}
+    for r in rows:
+        if (r.get("at") or 0) < since:
+            continue
+        v = versions.setdefault(r["version"], {"rows": [], "labels": set()})
+        v["rows"].append(r)
+        if r.get("label"):
+            v["labels"].add(r["label"])
+    out = []
+    for key, v in sorted(versions.items(), key=lambda kv: -len(kv[1]["rows"])):
+        opps = {}
+        for r in v["rows"]:
+            opps.setdefault(r["opponent"], []).append(r)
+        out.append(dict(version=key, labels=sorted(v["labels"]), bot=v["rows"][0]["bot"], **tally(v["rows"]),
+                        opponents=sorted(({"opponent": o, **tally(rs)} for o, rs in opps.items()), key=lambda x: -x["matches"])[:8]))
+    return {"since_days": 14, "versions": out}
 
 
 # --- the overview: fixtures, timers and their states -------------------------------------------------------------
@@ -461,7 +641,7 @@ def overview() -> dict:
     return {"now": clocks(dt.datetime.now().astimezone()), "fixtures": rows, "fixtures_error": fx.get("error"),
             "timers": live, "orphans": orphans, "quiet": windows,
             "quiet_now": in_quiet(windows, now, now + 1), "bot": bot_status(), "memory_mb": memory_mb(),
-            "lobby": lobby_hours_today(live), "jobs": jobs(10), "sets": set_files()}
+            "lobby": lobby_hours_today(live), "jobs": jobs(10), "sets": sets()}
 
 
 # --- actions ------------------------------------------------------------------------------------------------------
@@ -470,8 +650,12 @@ def arm(body: dict) -> dict:
     slot, opponent, setfile = str(body.get("slot", "")), str(body.get("opponent", "")), str(body.get("set", ""))
     if not re.fullmatch(r"\d{4}-\d\d-\d\d \d\d:\d\d", slot) or not NAME.fullmatch(opponent):
         return {"error": "bad slot or opponent"}
-    if setfile not in {s["file"] for s in set_files()}:
+    known = {s["file"]: s for s in sets()}
+    if setfile not in known:
         return {"error": f"{setfile!r} is not one of the set files"}
+    if not known[setfile]["eligible"]:
+        return {"error": f"{known[setfile]['name']} is not eligible for a fixture: missing {', '.join(known[setfile]['missing'])} "
+                         f"(arena rules: gate, replay and a burst). Record the evidence in sets.json first."}
     with ARM_LOCK:
         if running_jobs("arm"):
             return {"error": "another arm is still running its dry run; one at a time"}
@@ -552,7 +736,8 @@ def choose(body: dict) -> dict:
     sets = [str(s) for s in body.get("sets", []) if str(s) in valid]
     if not NAME.fullmatch(opponent) or not sets:
         return {"error": "need a valid opponent and at least one set file"}
-    matches = max(1000, min(40000, int(body.get("matches", 10000))))
+    # 5,000 at least: 500 matches is ±2 points, too wide to choose between two sets.
+    matches = max(5000, min(40000, int(body.get("matches", 10000))))
     if memory_mb() < HEAVY_MIN_MB:
         return {"error": f"only {memory_mb()} MB available; duels need {HEAVY_MIN_MB}"}
     # About 1.5 minutes per 10,000 matches per set on two workers, measured 29 Sept, plus about 3 minutes of fits.
@@ -563,6 +748,19 @@ def choose(body: dict) -> dict:
         return {"error": f"this would run into the {clash['opponent']} fixture's quiet window; run it after the fixture"}
     command = [PY, f"{TOOLS}/choose.py", "--opponent", opponent, "--matches", str(matches), "--sets", *sets]
     return start_job("choose", f"choose a set against {opponent}", command)
+
+
+def decompose(body: dict) -> dict:
+    label, opponent = str(body.get("label", "")), str(body.get("opponent", ""))
+    labels = {r.get("label") for r in real_matches() if r.get("label") and r["bot"] == "NashForge"}
+    if label not in labels or label.startswith("-"):
+        return {"error": "no matches recorded under that label"}
+    command = [PY, "scripts/chipzen_decompose.py", "--label", label]
+    if opponent:
+        if not NAME.fullmatch(opponent):
+            return {"error": "bad opponent name"}
+        command += ["--opponent", opponent]
+    return start_job("decompose", f"decompose {label[:50]}{' against ' + opponent if opponent else ''}", command)
 
 
 def profiles(names: list) -> dict:
@@ -637,7 +835,14 @@ class Handler(http.server.BaseHTTPRequestHandler):
                 names = [n for n in urllib.request.unquote(params.get("names", "")).split(",") if n]
                 return self._send(200, profiles(names))
             if path == "/api/choices":
-                return self._send(200, choices())
+                return self._send(200, [enrich_choice(c) for c in choices()])
+            if path == "/api/opponent":
+                name = urllib.request.unquote(params.get("name", ""))
+                if not NAME.fullmatch(name):
+                    return self._send(400, {"error": "bad name"})
+                return self._send(200, opponent_page(name))
+            if path == "/api/results":
+                return self._send(200, results_summary())
             return self._send(404, {"error": "not found"})
         except Exception as error:
             return self._send(500, {"error": repr(error)})
@@ -652,7 +857,8 @@ class Handler(http.server.BaseHTTPRequestHandler):
             return self._send(403, {"error": "bad token"})
         try:
             body = json.loads(self.rfile.read(int(self.headers.get("Content-Length") or 0)) or b"{}")
-            action = {"/api/arm": arm, "/api/disarm": disarm, "/api/scout": scout, "/api/choose": choose}.get(self.path)
+            action = {"/api/arm": arm, "/api/disarm": disarm, "/api/scout": scout, "/api/choose": choose,
+                      "/api/decompose": decompose}.get(self.path)
             if not action:
                 return self._send(404, {"error": "not found"})
             return self._send(200, action(body))
