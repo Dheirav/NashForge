@@ -45,15 +45,28 @@ OUT = os.path.join(ROOT, "results", "chipzen", "scout")
 PROFILES = os.path.join(ROOT, "results", "chipzen", "opponents.json")
 
 
+#: Seconds between requests (--pace). The platform rate-limits a burst of hand downloads (RATE_001):
+#: on 28 Sept a back-to-back scan had 227 refused, and the rows built from what got through were
+#: thinner than the ones they replaced.
+PACE = 0.0
+
+
 def get(cfg, path, attempts=4):
-    """One GET, retried: the platform drops a connection now and then mid-scan."""
+    """One GET, paced and retried: dropped connections, and RATE_001 replies with a long back-off."""
     for attempt in range(attempts):
+        if PACE:
+            time.sleep(PACE)
         try:
-            return client._http(cfg["base_url"], cfg["token"], "GET", path)
+            reply = client._http(cfg["base_url"], cfg["token"], "GET", path)
         except Exception as error:               # requests' ConnectionError and friends
             if attempt == attempts - 1:
                 raise
             time.sleep(2 * (attempt + 1))
+            continue
+        if "RATE_001" in json.dumps(reply)[:300] and attempt < attempts - 1:
+            time.sleep(30 * 2 ** attempt)        # 30, 60, 120 s: the limit clears in minutes, not seconds
+            continue
+        return reply
 
 
 def index_matches(cfg, refresh=False):
@@ -290,11 +303,14 @@ def summarise(row, stats):
 def main():
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--names", nargs="*")
+    parser.add_argument("--pace", type=float, default=0.0, help="seconds between requests (1.5 keeps under the limit)")
     parser.add_argument("--max-matches", type=int, default=80)
     parser.add_argument("--refresh", action="store_true", help="re-index the platform's match list")
     parser.add_argument("--seed-profiles", action="store_true",
                         help="write the scouted counts into results/chipzen/opponents.json")
     args = parser.parse_args()
+    global PACE
+    PACE = args.pace
     cfg = run._config()
 
     names = args.names
