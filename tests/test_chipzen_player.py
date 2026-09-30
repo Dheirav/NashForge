@@ -610,3 +610,36 @@ def test_the_honest_river_extension_is_a_fraction_of_the_scale_not_a_step():
     fraction = ArenaPlayer.HONEST_RIVER_CLASS
     assert fraction * 5 >= 4, "top pair on a six-class rung must be reachable"
     assert fraction * 19 < 18, "the top two of twenty must not be"
+
+
+def test_the_preflop_half_of_bluff_withheld_can_be_turned_off_and_the_flop_half_stays(player):
+    # 30 Sept, lil-bot-v2: 9c4c and J3s in the small blind, the solver opening, the read folding them.
+    from chipzen.opponents import Profiles
+    player.profiles = Profiles("/nonexistent/opp.json")
+    player.profiles.rows["station"] = {"bets_faced": 500, "folds": 10, "calls": 490, "raises": 0, "hands": 300}
+    player.opponent = "station"
+    preflop = {"hand_number": 1, "phase": "preflop", "board": [], "your_hole_cards": ["9c", "4c"],
+               "pot": 150, "your_stack": 9950, "opponent_stacks": [9900], "to_call": 50,
+               "min_raise": 200, "max_raise": 9950, "action_history": blinds()}
+    flop = {"hand_number": 2, "phase": "flop", "board": ["Qc", "9s", "Kd"], "your_hole_cards": ["3h", "2c"],
+            "pot": 400, "your_stack": 9800, "opponent_stacks": [9800], "to_call": 0,
+            "min_raise": 100, "max_raise": 9800,
+            "action_history": blinds() + [entry(0, "raise", 200), entry(1, "call", 200),
+                                          entry(1, "check", 0, "flop")]}
+    try:
+        assert player.withhold_preflop                     # on unless asked: the fixtures' behaviour
+        before = player.stats.bluffs_withheld
+        on = [player.decide(preflop, ["fold", "call", "raise"], 0) for _ in range(60)]
+        assert all(o["action"] != "raise" for o in on)
+        assert player.stats.bluffs_withheld > before       # the solver opened it, and the read took it back
+
+        player.withhold_preflop = False
+        before = player.stats.bluffs_withheld
+        [player.decide(preflop, ["fold", "call", "raise"], 0) for _ in range(60)]
+        assert player.stats.bluffs_withheld == before      # never fires before the flop
+        flop_raises = sum(player.decide(flop, ["check", "raise"], 0)["action"] == "raise" for _ in range(60))
+        assert flop_raises == 0 and player.stats.bluffs_withheld > before   # and still fires after it
+    finally:
+        player.withhold_preflop = True
+        player.profiles = None
+        player.opponent = None

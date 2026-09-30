@@ -117,6 +117,7 @@ async def _main(args, config):
                          river_shove_companion=args.river_shove_companion,
                          stack_cap=args.stack_cap,
                          short_solution=not args.no_short_solution)
+    player.withhold_preflop = not args.no_preflop_withhold
     player.profiles = Profiles(os.path.join(ROOT, "results", "chipzen", "opponents.json"),
                                sequential=args.sequential_triggers, bankroll=args.exploit_bankroll,
                                scout_reads=args.scout_reads) \
@@ -139,6 +140,7 @@ async def _main(args, config):
         "purify": args.purify, "river_solve": bool(args.river_solve),
         "sequential_triggers": bool(args.sequential_triggers), "scout_reads": bool(args.scout_reads),
         "exploit_bankroll": bool(args.exploit_bankroll),
+        "withhold_preflop": player.withhold_preflop,
         "ladder": [os.path.basename(p) for p in ladder],
         "companions": [os.path.basename(p) for p in companions],
     }
@@ -303,6 +305,9 @@ def main():
     parser.add_argument("--scout-reads", action="store_true",
                         help="use the two reads that need scouted counts: open into a blind that folds "
                              "to 70%% of opens, and believe the river bets of a bot that never bluffs")
+    parser.add_argument("--no-preflop-withhold", action="store_true",
+                        help="apply 'bluff withheld' after the flop only; before it, the solver's open stands "
+                             "against a station (+0.8 to +1.6 points on the copies, 30 Sept); off by default")
     parser.add_argument("--exploit-bankroll", action="store_true",
                         help="fire the opponent rules only while our net against that opponent is "
                              "not negative (risk what you have won); off by default")

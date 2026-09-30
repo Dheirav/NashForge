@@ -97,6 +97,7 @@ def build(ladder_dir: str, flags: str, label: str, rng: np.random.Generator,
                                    scout_reads="--scout-reads" in flags)
     player.aggro_reads = "--aggro-reads" in flags
     player.reraise_defence = "--reraise-defence" in flags
+    player.withhold_preflop = "--no-preflop-withhold" not in flags
     player.label = label  # noqa: attribute for the report only
     return player
 
