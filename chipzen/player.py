@@ -243,6 +243,10 @@ class ArenaPlayer:
         self.aggro_reads = False
         #: Defend our opens against a frequent re-raiser (27 Sept). Off unless asked for.
         self.reraise_defence = False
+        #: "Bluff withheld" before the flop. Against a station it turns the small blind's open into a fold, which
+        #: gives up the blind a station would often have folded to: turning it off gained 1.6 (hoops) and 0.8
+        #: (PoetAndCoder copy) points at 20,000 matches, 30 Sept, and lost nowhere. On until gated and burst.
+        self.withhold_preflop = True
 
     #: A raise with a hand this weak or weaker is a bluff for the purpose of
     #: withholding it: the bottom two of six strength classes.
@@ -513,6 +517,7 @@ class ArenaPlayer:
             adjusted = "their re-raise is value"
             self.stats.reraises_believed += 1
         if choice in RAISE_ACTIONS and arena[CHECK_CALL] and self.profiles is not None \
+                and (self.withhold_preflop or board) \
                 and self.profiles.never_folds(self.opponent) \
                 and strength(solver) <= self.BLUFF_STRENGTH:
             # A measured station: bluffing it only builds a pot we are behind
