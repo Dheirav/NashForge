@@ -173,3 +173,30 @@ def test_the_native_solver_matches_the_python_reference_and_is_much_faster(hands
     started = time.perf_counter()
     assert cc.solve(400, 30) == 400
     assert time.perf_counter() - started < 1.0, "400 native iterations should take well under a second"
+
+
+def test_the_blend_mixes_the_opponent_range_with_any_two_cards(monkeypatch):
+    # 30 Sept: blend 0 is the blueprint's reach as before; 1 is every hand the board allows, equally.
+    import cfr.river as river
+    seen = {}
+    real = river.make_solver
+    def capture(hands, root, decisions, ranges, native=None):
+        seen["theirs"] = np.asarray(ranges[1], dtype=float)
+        return real(hands, root, decisions, ranges, native)
+    monkeypatch.setattr(river, "make_solver", capture)
+    state = {"pot": 2000, "to_call": 1000, "your_stack": 6000, "opponent_stacks": [5000],
+             "board": BOARD, "your_hole_cards": ["As", "Ac"], "min_raise": 2000, "max_raise": 6000}
+    from abstraction.buckets import CardAbstraction
+    abstraction = CardAbstraction(preflop_buckets=2, postflop_buckets=2,
+                                  samples=20, equity_samples=4).fit(np.random.default_rng(0))
+    legal = np.ones(6)
+    args = (state, parse_cards(["As", "Ac"]), parse_cards(BOARD), "11/11/11/3", {}, abstraction, 2, True,
+            np.random.default_rng(0), legal)
+    plain = decide_river(*args, iterations=50, budget_s=20)
+    assert plain.range_source == "blueprint"
+    mixed = decide_river(*args, iterations=50, budget_s=20, blend=1.0)
+    assert mixed.range_source == "blend 1"
+    assert abs(seen["theirs"].sum() - 1.0) < 1e-9 and np.allclose(seen["theirs"], seen["theirs"][0])
+    half = decide_river(*args, iterations=50, budget_s=20, blend=0.5)
+    assert half.range_source == "blend 0.5" and abs(seen["theirs"].sum() - 1.0) < 1e-9
+    assert half.choice in half.distribution and legal[half.choice]

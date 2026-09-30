@@ -222,6 +222,11 @@ class ArenaPlayer:
         #: blueprint's. No real opponent's policy is known, so nothing that
         #: plays the arena may set this.
         self.river_oracle = None
+        #: The river solve's opponent range, mixed with "any two cards" at this weight (cfr/river.py, 30 Sept).
+        #: 0 is the blueprint's range, as every river solve so far; off until measured.
+        self.river_blend = 0.0
+        #: The river solve's iteration count; None keeps the solver's default (2,000 native).
+        self.river_iterations = None
         self.ladder = sorted((load_solver(p, self.rng, purify, stack_cap) for p in paths),
                              key=lambda s: s.depth_bb)
         if not self.ladder:
@@ -435,7 +440,8 @@ class ArenaPlayer:
                     state, hole, board, node.history, solver.strategy, solver.abstraction,
                     solver.schedule, we_are_small_blind=(posted == seat), rng=self.rng,
                     legal=arena, budget_s=self.river_budget_s, purify=(self.purify != "none"),
-                    opponent_range=opponent_range)
+                    opponent_range=opponent_range, blend=self.river_blend,
+                    **({"iterations": self.river_iterations} if self.river_iterations else {}))
                 choice, missed, fell_back, companion_used = decision.choice, False, False, None
                 river = {"iterations": decision.iterations, "ms": round(decision.ms, 1),
                          "hands": decision.hands, "range": decision.range_source,
