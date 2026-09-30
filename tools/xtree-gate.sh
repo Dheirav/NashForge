@@ -7,6 +7,7 @@
 # to the same change (+2.9 between solves 13 points apart on this one).
 #   tools/xtree-gate.sh results/cfr/experiments/cap2_18bb_50m.pkl            # infers the rung
 #   tools/xtree-gate.sh A.pkl results/cfr/ladder169l/nolimit_18bb.pkl out.json
+#   PURIFY=all tools/xtree-gate.sh A.pkl ...     # gate the set as it plays when purified
 set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 first=$1
@@ -15,4 +16,4 @@ second=${2:-$ROOT/results/cfr/ladder169l/nolimit_${rung}.pkl}
 out=${3:-$ROOT/results/cfr/xtree/$(basename "${first%.pkl}")_vs_$(basename "${second%.pkl}").json}
 mkdir -p "$(dirname "$out")"
 "$ROOT/venv/bin/python" "$ROOT/scripts/cfr/play_pickles.py" "$first" "$second" \
-  --hands "${HANDS:-40000}" --seeds ${SEEDS:-0 1 2} --on-miss call --output "$out"
+  --hands "${HANDS:-40000}" --seeds ${SEEDS:-0 1 2} --on-miss call --purify "${PURIFY:-none}" --output "$out"

@@ -135,3 +135,16 @@ def test_the_field_archetypes_read_even_against_themselves_and_carry_every_param
         diffs = np.array(diffs)
         se = diffs.std() / np.sqrt(diffs.size)
         assert abs(diffs.mean()) < 4 * max(se, 1.0), f"{kind} mirror read {diffs.mean():+.1f} ± {se:.1f}"
+
+
+def test_play_pickles_plays_the_first_pickle_purified_when_asked():
+    # A purified set is gated as it plays: the flag must reach the agent, or the gate measures the unpurified solve.
+    if not os.path.exists(RUNG):
+        pytest.skip("the 18bb rung is not on this machine")
+    sys.path.insert(0, os.path.join(ROOT, "scripts", "cfr"))
+    import play_pickles
+    for mode in ("none", "all"):
+        agent, *_ = play_pickles.load(RUNG, 0, 1, "call", mode)
+        assert agent is not None
+    with pytest.raises(Exception):
+        play_pickles.load(RUNG, 0, 1, "call", "sometimes")
