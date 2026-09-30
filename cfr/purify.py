@@ -8,6 +8,7 @@ keeps the rest mixed. Both raise worst-case exploitability, so each mode is judg
 field duels and LBR together. One function, so the agent that plays and LBR that measures see the same thing.
 
 Modes: "none"; "postflop" and "all" (the most probable action, after the flop or everywhere, first on a tie);
+"allx" (as "all", except facing an all-in, where the mix is kept: see evaluation/benchmark.py);
 "t10", "t20", ... (drop actions under that percentage of the node's mass, renormalise, keep sampling).
 """
 from __future__ import annotations
@@ -16,7 +17,7 @@ from typing import Sequence
 
 import numpy as np
 
-BASE_MODES = ("none", "postflop", "all")
+BASE_MODES = ("none", "postflop", "all", "allx")
 
 
 def valid(mode: str) -> bool:
@@ -29,6 +30,8 @@ def row(probabilities: Sequence[float], mode: str, postflop: bool) -> np.ndarray
     total = p.sum()
     if mode == "none" or total <= 0 or (mode == "postflop" and not postflop):
         return p
+    if mode == "allx":
+        mode = "all"          # the facing-all-in exception needs the history: apply_to_table decides it
     if mode in ("postflop", "all"):
         out = np.zeros_like(p)
         out[int(np.argmax(p))] = total
@@ -44,7 +47,7 @@ def row(probabilities: Sequence[float], mode: str, postflop: bool) -> np.ndarray
 
 def apply_to_table(strategy, mode: str):
     """The whole strategy under `mode`: a FlatStrategy with new values, or a dict of new rows."""
-    if mode == "none":
+    if mode == "none" or getattr(strategy, "is_compact", False):
         return strategy
     from cfr.flat import FlatStrategy
     if isinstance(strategy, FlatStrategy):
@@ -53,6 +56,9 @@ def apply_to_table(strategy, mode: str):
         for i, key in enumerate(strategy._keys):
             a, b = int(offsets[i]), int(offsets[i + 1])
             history = key.decode().split("|", 1)[-1]
+            if mode == "allx" and history.endswith("5"):
+                continue                                  # facing an all-in: the mix stays
             values[a:b] = row(values[a:b], mode, "/" in history)
         return FlatStrategy(strategy._keys, offsets, values.astype(strategy._values.dtype, copy=False))
-    return {k: row(v, mode, "/" in k.split("|", 1)[-1]) for k, v in strategy.items()}
+    return {k: (v if mode == "allx" and k.split("|", 1)[-1].endswith("5") else row(v, mode, "/" in k.split("|", 1)[-1]))
+            for k, v in strategy.items()}
