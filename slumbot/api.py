@@ -38,8 +38,6 @@ from __future__ import annotations
 import json
 import re
 import time
-import urllib.error
-import urllib.request
 from dataclasses import dataclass, field
 from typing import Callable, Dict, List, Optional
 
@@ -124,6 +122,10 @@ class HandState:
 
 
 def _post(path: str, payload: Dict, retries: int = 3) -> Dict:
+    # Imported here rather than at the top: `slumbot.bridge` reads this module's constants, the arena
+    # bot shares that bridge, and the upload sandbox refuses urllib.
+    import urllib.error
+    import urllib.request
     body = json.dumps(payload).encode()
     request = urllib.request.Request(
         f"{BASE}/{path}", data=body,

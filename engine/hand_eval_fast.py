@@ -444,7 +444,7 @@ def score_hand_7(ranks, suits):
 
 
 def _build_rank_tables():
-    straight = np.full(8192, -1, dtype=np.int8)
+    straight = np.full(8192, -1, dtype=np.int32)   # int32, not int8: without numba, `high << 16` overflowed an int8
     top_five = np.zeros(8192, dtype=np.int32)
     for mask in range(8192):
         present = [r for r in range(12, -1, -1) if mask & (1 << r)]

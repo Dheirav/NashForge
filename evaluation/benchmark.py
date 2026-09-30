@@ -56,7 +56,6 @@ from abstraction.betting import ALL_IN, CHECK_CALL, FOLD, raise_sizes_at
 from abstraction.equity import card_index
 from abstraction.betting import legal_actions as solver_legal_actions
 from engine import Action, PokerGame, get_abstract_action_mask
-from training.fitness import abstract_action_to_engine_action, finish_hand
 
 #: An agent is called with the game, its seat, the legality mask over the six
 #: abstract actions, and the solver-format betting history so far. It returns an
@@ -341,6 +340,8 @@ def _play_hand(agents: Sequence[Agent], seed: int, starting_stack: int,
     both agents the same cards — duplicate play, exactly rather than
     approximately.
     """
+    # Imported here: training pulls in torch and multiprocessing, which the arena player never needs.
+    from training.fitness import abstract_action_to_engine_action, finish_hand
     game = PokerGame([starting_stack] * 2, small_blind=small_blind,
                      big_blind=big_blind, seed=seed, enable_history=False)
 
