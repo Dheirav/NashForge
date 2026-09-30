@@ -1,0 +1,579 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>NashForge panel</title>
+<style>
+  :root { color-scheme: light dark; --bg:#f6f6f3; --panel:#ffffff; --fg:#1c1c1a; --dim:#65655f; --line:#dddcd5;
+          --accent:#0b6e4f; --onaccent:#ffffff; --warn:#8a4b00; --warnbg:#fff3df; --bad:#b3261e; --badbg:#fde7e5;
+          --good:#1b6f35; --goodbg:#e4f4e8; --chip:#eeeee8; }
+  @media (prefers-color-scheme: dark) { :root { color-scheme: dark; --bg:#121413; --panel:#1a1d1b; --fg:#e7e7e2;
+          --dim:#a2a29b; --line:#2c302d; --accent:#5fd3a4; --onaccent:#0c1a14; --warn:#f0b35a; --warnbg:#3a2c12;
+          --bad:#ff8a80; --badbg:#3d1714; --good:#7bd88f; --goodbg:#15301d; --chip:#242825; } }
+  * { box-sizing:border-box; }
+  body { margin:0; background:var(--bg); color:var(--fg); font:15px/1.5 system-ui,-apple-system,"Segoe UI",sans-serif; }
+  header { display:flex; gap:10px 18px; align-items:baseline; flex-wrap:wrap; padding:12px 16px; border-bottom:1px solid var(--line); }
+  header h1 { font-size:1.1rem; margin:0; }
+  .now { font-size:1.25rem; font-variant-numeric:tabular-nums; font-weight:600; }
+  .small { font-size:.85rem; color:var(--dim); }
+  #banners > div { padding:9px 16px; font-weight:600; border-bottom:1px solid var(--line); }
+  .b-bad { background:var(--badbg); color:var(--bad); } .b-warn { background:var(--warnbg); color:var(--warn); }
+  nav { display:flex; gap:4px; padding:8px 16px 0; flex-wrap:wrap; }
+  nav button { background:none; border:1px solid transparent; border-bottom:none; color:var(--dim); padding:8px 14px;
+               border-radius:8px 8px 0 0; cursor:pointer; font:inherit; }
+  nav button[aria-selected="true"] { background:var(--panel); color:var(--fg); border-color:var(--line); }
+  button:focus-visible, input:focus-visible, select:focus-visible, summary:focus-visible { outline:3px solid var(--accent); outline-offset:2px; }
+  main { padding:0 16px 32px; }
+  section { display:none; background:var(--panel); border:1px solid var(--line); border-radius:0 10px 10px 10px; padding:16px; }
+  section.on { display:block; }
+  .next { border:1px solid var(--line); border-radius:12px; padding:14px 16px; margin-bottom:14px; }
+  .next .who { font-size:1.35rem; font-weight:700; }
+  .next .count { font-size:1.6rem; font-variant-numeric:tabular-nums; }
+  .grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(200px,1fr)); gap:12px; }
+  .card { border:1px solid var(--line); border-radius:10px; padding:12px; }
+  .card h3, h2 { margin:0 0 6px; font-size:.8rem; text-transform:uppercase; letter-spacing:.04em; color:var(--dim); font-weight:600; }
+  h2 { margin:20px 0 8px; }
+  .big { font-size:1.35rem; font-variant-numeric:tabular-nums; }
+  table { width:100%; border-collapse:collapse; font-variant-numeric:tabular-nums; }
+  th, td { text-align:left; padding:7px 8px; border-bottom:1px solid var(--line); vertical-align:top; }
+  th { color:var(--dim); font-weight:600; font-size:.85rem; }
+  .pill { display:inline-block; border-radius:999px; padding:1px 9px; font-size:.82rem; font-weight:600; white-space:nowrap; }
+  .p-good { background:var(--goodbg); color:var(--good); } .p-warn { background:var(--warnbg); color:var(--warn); }
+  .p-bad { background:var(--badbg); color:var(--bad); } .p-dim { background:var(--chip); color:var(--dim); }
+  .good { color:var(--good); } .warn { color:var(--warn); } .bad { color:var(--bad); } .dim { color:var(--dim); }
+  button.act { background:var(--accent); color:var(--onaccent); border:0; border-radius:7px; padding:6px 12px; cursor:pointer; font:inherit; font-weight:600; }
+  button.ghost { background:none; border:1px solid var(--line); color:var(--fg); border-radius:7px; padding:5px 10px; cursor:pointer; font:inherit; }
+  button:disabled { opacity:.45; cursor:default; }
+  input, select { font:inherit; padding:6px 8px; border:1px solid var(--line); border-radius:7px; background:var(--bg); color:var(--fg); max-width:100%; }
+  .chip { display:inline-block; background:var(--chip); border-radius:6px; padding:2px 8px; margin:2px 4px 2px 0; font-size:.88rem; }
+  pre { background:var(--bg); border:1px solid var(--line); border-radius:8px; padding:10px; overflow:auto; max-height:340px; font-size:.8rem; white-space:pre-wrap; }
+  .row { display:flex; gap:8px; align-items:center; flex-wrap:wrap; margin:8px 0; }
+  .scroll { overflow-x:auto; }
+  p.note { color:var(--dim); margin:4px 0 12px; }
+  progress { width:130px; vertical-align:middle; }
+  .sr { position:absolute; left:-9999px; }
+  #toasts { position:fixed; right:12px; bottom:12px; display:flex; flex-direction:column; gap:8px; z-index:9; max-width:min(420px,92vw); }
+  #toasts div { background:var(--panel); border:1px solid var(--line); border-left:5px solid var(--accent); border-radius:8px; padding:10px 12px; box-shadow:0 4px 18px rgba(0,0,0,.18); }
+  #toasts div.err { border-left-color:var(--bad); }
+  .feed { border:1px solid var(--line); border-radius:12px; padding:10px 14px; margin-bottom:14px; }
+  .feed li { margin:4px 0; } .feed ul { margin:6px 0; padding-left:18px; }
+  .spark { width:100%; max-width:520px; height:70px; display:block; }
+  .spark polyline { fill:none; stroke:var(--accent); stroke-width:2; }
+  .warnbox { background:var(--warnbg); color:var(--warn); border-radius:8px; padding:8px 10px; margin:8px 0; font-weight:600; }
+  a.opp { color:inherit; text-decoration:underline dotted; cursor:pointer; }
+  @media (max-width:640px) { .hide-sm { display:none; } th, td { padding:6px 5px; }
+    /* below phone width a wide table becomes one card a row, each cell labelled, so nothing scrolls sideways */
+    table.stack thead { display:none; }
+    table.stack tr { display:block; border-bottom:1px solid var(--line); padding:6px 0; }
+    table.stack td { display:flex; gap:10px; justify-content:space-between; border:0; padding:3px 2px; }
+    table.stack td[data-label]::before { content:attr(data-label); color:var(--dim); font-size:.85rem; flex:0 0 7.5em; }
+    header .now { font-size:1.05rem; } section { padding:12px; border-radius:10px; } }
+</style>
+</head>
+<body>
+<header>
+  <h1>NashForge</h1>
+  <span class="now" id="nowist">…</span><span class="small" id="nowmachine"></span>
+  <span class="small" id="updated"></span>
+</header>
+<div id="banners" aria-live="polite"></div>
+<nav role="tablist" aria-label="Panel sections">
+  <button role="tab" aria-selected="true" aria-controls="dash" id="tab-dash" data-tab="dash">Dashboard</button>
+  <button role="tab" aria-selected="false" aria-controls="fix" id="tab-fix" data-tab="fix">Fixtures</button>
+  <button role="tab" aria-selected="false" aria-controls="scout" id="tab-scout" data-tab="scout">Scout</button>
+  <button role="tab" aria-selected="false" aria-controls="choose" id="tab-choose" data-tab="choose">Choose a set</button>
+  <button role="tab" aria-selected="false" aria-controls="opp" id="tab-opp" data-tab="opp">Opponents</button>
+  <button role="tab" aria-selected="false" aria-controls="sets" id="tab-sets" data-tab="sets">Sets</button>
+  <button role="tab" aria-selected="false" aria-controls="results" id="tab-results" data-tab="results">Results</button>
+  <button role="tab" aria-selected="false" aria-controls="season" id="tab-season" data-tab="season">Season</button>
+</nav>
+<main>
+<section tabindex="0" id="dash" class="on" role="tabpanel" aria-labelledby="tab-dash">
+  <div class="next" id="nextcard">…</div>
+  <div class="feed" id="feed" hidden></div>
+  <div class="grid">
+    <div class="card"><h3>Bot</h3><div class="big" id="bot">…</div><div class="small" id="botsub"></div></div>
+    <div class="card"><h3>Memory available</h3><div class="big" id="mem">…</div><div class="small">duels need 2,500 MB</div></div>
+    <div class="card"><h3>Challenge quota today</h3><div class="big" id="quota">…</div><div class="small" id="quotasub"></div></div>
+    <div class="card"><h3>Rating</h3><div class="big" id="rating">…</div><div class="small" id="ratingsub"></div></div>
+    <div class="card"><h3>Lobby hours today</h3><div class="big" id="lobby">…</div><div class="small" id="lobbysub"></div></div>
+  </div>
+  <h2>Fixtures in the next 48 hours</h2>
+  <div class="scroll"><table class="stack"><thead><tr><th>Opponent</th><th>IST</th><th>Starts in</th><th>State</th><th>Set it will play</th></tr></thead>
+  <tbody id="soon"></tbody></table></div>
+  <h2>Runs on this machine</h2>
+  <p class="note">Every long job, including ones started by hand. Where a job has a progress reader in tools/, its
+  output is shown, with the ETA it derives from the measured rate; otherwise the counter from the job's log, with an ETA
+  only once the panel has seen the counter move. A partial result is not a result.</p>
+  <div id="runs"><p class="dim">…</p></div>
+  <details><summary class="small">finished recently</summary><div id="runsdone"></div></details>
+  <h2>Panel jobs</h2>
+  <div class="scroll"><table class="stack"><thead><tr><th>Job</th><th>State</th><th class="hide-sm">Last lines</th><th></th></tr></thead><tbody id="jobs"></tbody></table></div>
+  <div id="logbox" hidden><div class="row"><b id="logtitle"></b><button class="ghost" data-action="closelog">close</button></div><pre id="joblog"></pre></div>
+</section>
+
+<section tabindex="0" id="fix" role="tabpanel" aria-labelledby="tab-fix">
+  <p class="note">Times in IST; the smaller time is this machine's clock, which the timer arms from. Arm copies the set
+  (the timer plays that frozen copy), runs a dry run (about 5 minutes: loads the set, reaches the lobby, stops) and then
+  detaches the timer. It is refused inside another fixture's window, where a dry run could stop that fixture's bot.
+  Only gated sets should play a fixture, and nothing is changed on match day.</p>
+  <div class="scroll"><table class="stack"><thead><tr><th>Opponent</th><th>IST</th><th>Starts in</th><th>State</th><th>Set</th><th></th></tr></thead>
+  <tbody id="fixtures"></tbody></table></div>
+  <div id="orphans"></div>
+</section>
+
+<section tabindex="0" id="scout" role="tabpanel" aria-labelledby="tab-scout">
+  <p class="note">The paced scout (1.5 s between requests, backs off on the rate limit) downloads a bot's recent
+  matches and writes its profile; it never replaces a row built from our own matches.</p>
+  <div class="row"><label class="sr" for="scoutnames">Bots to scout</label><input id="scoutnames" list="opps" placeholder="bot names, comma separated">
+    <label><input type="number" id="scoutmatches" value="60" min="10" max="200" style="width:5em"> matches each</label>
+    <label><input type="checkbox" id="scoutrefresh"> refresh the platform index (new bots)</label>
+    <button class="act" data-action="scout">Scout</button></div>
+  <div class="row" id="oppchips"></div>
+  <div class="row"><label class="sr" for="profnames">Profiles to show</label><input id="profnames" list="opps" placeholder="show profiles for (comma separated)">
+    <button class="ghost" data-action="profiles">Show</button></div>
+  <div class="scroll"><table><thead><tr><th>Bot</th><th>Data</th><th>Plays</th><th>Raises first</th><th>Re-raises</th>
+  <th>Folds to re-raise</th><th>Folds to a bet</th><th>River bluffs</th><th>Rating</th></tr></thead><tbody id="profiles"></tbody></table></div>
+  <p class="note">On a phone this table scrolls sideways; an opponent's page shows the same numbers stacked.</p>
+</section>
+
+<section tabindex="0" id="choose" role="tabpanel" aria-labelledby="tab-choose">
+  <p class="note">Fits a scripted copy of the opponent from its scouted hands, then plays each set against it as a
+  fixture plays. A copy flatters an exploiter against a strong real bot; weigh it with real results.</p>
+  <div class="row"><label class="sr" for="chopp">Opponent</label><input id="chopp" list="opps" placeholder="opponent">
+    <label><input type="number" id="chmatches" value="10000" min="5000" max="40000" step="1000" style="width:7em"> matches</label>
+    <button class="act" id="chgo" data-action="choose">Fit and play</button><span class="small" id="chwhy"></span></div>
+  <div class="row" id="chsets"></div>
+  <div id="choices"></div>
+</section>
+<section tabindex="0" id="opp" role="tabpanel" aria-labelledby="tab-opp">
+  <p class="note">Everything known about one opponent: its profile and how fresh it is, whether the reads have enough
+  data to fire, our real record against it by version (NashForge from its match logs, OptimumPoker from the platform),
+  and the copy duels run against it.</p>
+  <div class="row"><label class="sr" for="oppname">Opponent</label><input id="oppname" list="opps" placeholder="opponent">
+    <button class="act" data-action="opp">Show</button></div>
+  <div id="opppage"></div>
+</section>
+
+<section tabindex="0" id="sets" role="tabpanel" aria-labelledby="tab-sets">
+  <p class="note">A set may play a fixture once it has passed the cross-tree gate, a replay on the match record and a
+  burst; it is believed after two or three bursts, since twenty matches is ±11 points. The evidence lives in
+  <code>~/pokerbot-scratch/chipzen/sets.json</code>; rated matches are counted from the match logs by version.</p>
+  <div class="scroll"><table class="stack"><thead><tr><th>Set</th><th>File</th><th>Gate</th><th>Replay</th><th>Bursts</th><th>Rated matches</th><th>Fixture</th></tr></thead>
+  <tbody id="setrows"></tbody></table></div>
+</section>
+
+<section tabindex="0" id="season" role="tabpanel" aria-labelledby="tab-season">
+  <p class="note">NashForge's rating after every rated match, from rating_history.jsonl. The ranking comes from each
+  known bot's own record (the platform's leaderboard is not open to this token), among bots with 20 or more matches,
+  refreshed every six hours and never during a fixture's window.</p>
+  <div id="seasonbody"><p class="dim">…</p></div>
+</section>
+
+<section tabindex="0" id="results" role="tabpanel" aria-labelledby="tab-results">
+  <p class="note">Real matches of the last 14 days by version. A headline win rate put the wrong set forward twice
+  in season 6: decompose a burst (by depth, and by which solver decided each hand) before recommending anything.</p>
+  <div class="card" id="quotaplan" style="margin-bottom:12px"></div>
+  <div id="resultrows"></div>
+</section>
+<datalist id="opps"></datalist>
+</main>
+<div id="toasts" role="status" aria-live="polite"></div>
+<script>
+const TOKEN = "__TOKEN__";
+const $ = id => document.getElementById(id);
+const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+const pct = v => v == null ? "–" : (100 * v).toFixed(0) + "%";
+let OV = null, lastOk = 0, failing = false;
+
+function toast(text, err) {
+  const d = document.createElement("div"); d.textContent = text; if (err) d.className = "err";
+  $("toasts").appendChild(d); setTimeout(() => d.remove(), err ? 12000 : 6000);
+}
+async function get(path, ms = 8000) {
+  // A hung server must show as not answering, not as a dashboard frozen on old fixture states.
+  const ctl = new AbortController(), timer = setTimeout(() => ctl.abort(), ms);
+  let r;
+  try { r = await fetch(path, {cache: "no-store", signal: ctl.signal, headers: {"X-Panel-Token": TOKEN}}); } finally { clearTimeout(timer); }
+  const j = await r.json();
+  if (!r.ok) throw new Error(j.error || r.status);
+  return j;
+}
+async function post(path, body) {
+  try {
+    const r = await fetch(path, {method:"POST", headers:{"Content-Type":"application/json","X-Panel-Token":TOKEN}, body:JSON.stringify(body)});
+    const j = await r.json();
+    if (j.error) { toast(j.error, true); return null; }
+    toast(j.ok || `Started: ${j.title}`); refresh(); return j;
+  } catch (e) { toast(`The panel server did not answer: ${e.message}`, true); return null; }
+}
+function until(epoch) {
+  let s = Math.round(epoch - Date.now() / 1000); const past = s < 0; s = Math.abs(s);
+  const d = Math.floor(s / 86400), h = Math.floor(s % 86400 / 3600), m = Math.floor(s % 3600 / 60), sec = s % 60;
+  const t = d ? `${d}d ${h}h ${m}m` : h ? `${h}h ${m}m` : `${m}m ${String(sec).padStart(2,"0")}s`;
+  return past ? `${t} ago` : `in ${t}`;
+}
+const STATE = { "armed": ["p-good","armed"], "died": ["p-bad","TIMER DIED"], "unarmed-urgent": ["p-bad","NOT ARMED"],
+                "unarmed-soon": ["p-warn","not armed"], "unarmed": ["p-dim","not armed yet"] };
+function statePill(f) { const [c, t] = STATE[f.state] || ["p-dim", f.state]; return `<span class="pill ${c}">${t}</span>`; }
+function setCell(t) {
+  if (!t) return `<span class="dim">–</span>`;
+  const warn = t.set_changed_since_arm ? ` <span class="pill p-bad">SET FILE CHANGED SINCE ARMING</span>` : "";
+  const frozen = t.set.frozen ? ` <span class="pill p-good">frozen</span>` : ` <span class="small">(file read at connect)</span>`;
+  return `${esc(t.set.label.slice(0, 70))}${frozen}${warn}<div class="small">${esc(t.set.file)} · timer ${esc(t.log.phase)}</div>`;
+}
+
+function renderBanners() {
+  const b = [];
+  if (failing) b.push(["b-bad", `The panel server is not answering (last update ${lastOk ? until(lastOk/1000) : "never"}). What you see may be stale.`]);
+  if (OV) {
+    if (OV.fixtures_error) b.push(["b-bad", `Could not load fixtures from Chipzen: ${OV.fixtures_error}. Fixture states are UNKNOWN.`]);
+    (OV.alarms || []).forEach(a => b.push(["b-bad", `${a.opponent}: ${a.problem}, and it should have connected at ${a.connect.ist} IST.`
+      + (a.deadline ? ` Walkover at ${a.deadline.ist} IST.` : "") + ` Check the timer log and the bot now.`]));
+    if (OV.fixtures_stale) b.push(["b-warn", OV.fixtures_stale]);
+    if (OV.sets_error) b.push(["b-bad", OV.sets_error]);
+    if (OV.matches_error) b.push(["b-warn", `OptimumPoker's matches could not be refreshed (${OV.matches_error}); its records may be old.`]);
+    OV.fixtures.filter(f => f.state === "died").forEach(f => b.push(["b-bad", `The ${f.opponent} timer died before its fixture (${f.slot.ist} IST). Re-arm it.`]));
+    OV.fixtures.filter(f => f.state === "unarmed-urgent" && f.hours_left > 0).forEach(f => b.push(["b-bad", `${f.opponent} starts ${until(f.slot.epoch)} and is NOT armed.`]));
+    OV.timers.filter(t => t.set_changed_since_arm).forEach(t => b.push(["b-bad", `The set file for ${t.opponent} changed after arming: the timer will read the new file at connect.`]));
+    if (OV.quiet_now) b.push(["b-warn", `Quiet window for ${OV.quiet_now.opponent}: no dry runs, duels or heavy jobs until it has stopped.`]);
+    (OV.orphans || []).forEach(t => b.push(["b-warn", `A timer for ${t.opponent} at ${t.slot.ist} IST matches no listed fixture (rescheduled?).`]));
+  }
+  $("banners").innerHTML = b.map(([c, t]) => `<div class="${c}">${esc(t)}</div>`).join("");
+}
+
+function renderOverview() {
+  const o = OV;
+  $("nowist").textContent = `${o.now.ist} IST`;
+  $("nowmachine").textContent = `${o.now.machine} ${o.now.machine_tz} on this machine`;
+  $("bot").innerHTML = o.bot.running ? `<span class="good">running</span>` : `<span class="dim">stopped</span>`;
+  $("botsub").textContent = o.bot.running ? `lobby ${o.bot.lobby ?? "?"}; ${o.bot.active ? "a match is live" : "no live match"}` : "no bot process";
+  $("mem").innerHTML = `<span class="${o.memory_mb < 2500 ? "warn" : ""}">${o.memory_mb.toLocaleString()} MB</span>`;
+  const l = o.lobby;
+  $("lobby").innerHTML = `<span class="${l.free < 1 ? "bad" : ""}">${l.used} h used</span>`;
+  $("lobbysub").textContent = `of ${l.limit}; ${l.reserved} h reserved for armed fixtures, ${l.free} h free (an estimate from run.log)`;
+  const upcoming = o.fixtures.filter(f => f.slot.epoch > Date.now()/1000 - 3600);
+  const next = upcoming[0];
+  $("nextcard").innerHTML = next ? `<div class="small">Next fixture</div>
+      <div class="row" style="margin:2px 0"><span class="who">${esc(next.opponent)}</span> ${statePill(next)}</div>
+      <div class="count" data-epoch="${next.slot.epoch}">${until(next.slot.epoch)}</div>
+      <div>${esc(next.slot.ist)} IST <span class="small">· ${esc(next.slot.machine)} ${esc(next.slot.machine_tz)} on this machine</span></div>
+      ${next.timer ? `<div>Connects ${esc(next.timer.connect.ist)} IST <span class="small">(<span data-epoch="${next.timer.connect.epoch}">${until(next.timer.connect.epoch)}</span>)</span>
+        · timer <b>${esc(next.timer.log.phase)}</b>${next.timer.log.deadline ? ` · walkover deadline ${esc(next.timer.log.deadline.ist)} IST` : ""}</div>` : ""}
+      <div class="small">Set: ${next.timer ? esc(setName(next.timer.set)) : "no timer armed"}</div>` :
+      `<div class="dim">No upcoming fixtures${o.fixtures_error ? " (could not load them)" : ""}.</div>`;
+  document.title = next ? `${next.opponent} ${until(next.slot.epoch)} · ${next.state === "armed" ? "armed" : "NOT ARMED"}` : "NashForge panel";
+  const soon = upcoming.filter(f => f.hours_left < 48);
+  $("soon").innerHTML = soon.map(f => `<tr><td data-label="Opponent">${oppLink(f.opponent)}</td><td data-label="IST">${esc(f.slot.ist)}<div class="small">${esc(f.slot.machine)} here</div></td>
+      <td data-label="Starts" class="count" data-epoch="${f.slot.epoch}">${until(f.slot.epoch)}</td><td data-label="State">${statePill(f)}</td><td data-label="Set">${setCell(f.timer)}</td></tr>`).join("")
+      || `<tr><td colspan="5" class="dim">none in the next 48 hours</td></tr>`;
+  $("jobs").innerHTML = o.jobs.map(j => {
+    const st = j.state === "running" ? `<span class="pill p-warn">running</span>` : j.state === "ok" ? `<span class="pill p-good">ok</span>` :
+               j.state === "failed" ? `<span class="pill p-bad">failed (exit ${j.exit})</span>` : `<span class="pill p-dim">ended, no exit code: see log</span>`;
+    const prog = j.step ? `<div><progress max="${j.step[1]}" value="${j.step[0]}" aria-label="${esc(j.title)} progress"></progress> <span class="small">step ${j.step[0]} of ${j.step[1]}</span></div>` : "";
+    return `<tr><td>${esc(j.title)}<div class="small">started ${until(j.started)}</div></td><td data-label="State">${st}${prog}</td>
+      <td class="small hide-sm">${j.tail.map(esc).join("<br>")}</td><td><button class="ghost" data-action="log" data-id="${esc(j.id)}" data-title="${esc(j.title)}">log</button></td></tr>`;
+  }).join("") || `<tr><td colspan="4" class="dim">no jobs yet</td></tr>`;
+  const opts = o.sets.map(s => `<option value="${esc(s.file)}" ${s.eligible ? "" : "disabled"}>${esc(s.name)}${s.same_as ? " (copy)" : ""} · ${esc(s.file)}${
+      s.eligible ? (s.believed ? "" : " · one burst") : " · not eligible: " + esc(s.problems.length ? s.problems[0] : "no " + s.missing.join(", "))}</option>`).join("");
+  $("fixtures").innerHTML = o.fixtures.map((f, i) => {
+    const action = f.timer
+      ? `<button class="ghost" data-action="disarm" data-pid="${f.timer.pid}" data-who="${esc(f.opponent)}">disarm</button>`
+      : `<button class="act" data-action="arm" data-i="${i}" ${f.hours_left < 0.42 ? "disabled" : ""}>arm</button>`;
+    const lc = f.last_choice, evidence = f.timer ? "" : `<div class="small">${f.scouted_days_ago == null ? "never scouted" : `scouted ${f.scouted_days_ago} d ago`} ·
+      ${lc ? `last duel ${until(lc.at)}: ${lc.decisive ? `${esc(lc.leader)} leads` : `not decisive (${esc(lc.not_decisive.join(", "))})`}` : "no duel"} ·
+      <a class="opp" data-action="gotoopp" data-who="${esc(f.opponent)}" tabindex="0">evidence</a></div>`;
+    const set = f.timer ? setCell(f.timer) : `<label class="sr" for="set${i}">Set for ${esc(f.opponent)}</label><select id="set${i}" data-opp="${esc(f.opponent)}">${opts}</select>${evidence}`;
+    return `<tr><td data-label="Opponent">${oppLink(f.opponent)}</td><td data-label="IST">${esc(f.slot.ist)}<div class="small">${esc(f.slot.machine)} here</div></td>
+      <td data-label="Starts" class="count" data-epoch="${f.slot.epoch}">${until(f.slot.epoch)}</td><td data-label="State">${statePill(f)}</td><td data-label="Set">${set}</td><td>${action}</td></tr>`;
+  }).join("") || `<tr><td colspan="6" class="${o.fixtures_error ? "bad" : "dim"}">${o.fixtures_error ? "Could not load fixtures: " + esc(o.fixtures_error) : "no upcoming fixtures"}</td></tr>`;
+  o.fixtures.forEach((f, i) => { const sel = $(`set${i}`); if (sel) { sel.value = store(`set:${f.opponent}`) || "fixture_set_final"; } });
+  $("orphans").innerHTML = (o.orphans || []).length ? `<h2>Timers with no listed fixture</h2>` + o.orphans.map(t =>
+    `<div class="row">${esc(t.opponent)} at ${esc(t.slot.ist)} IST · ${setCell(t)} <button class="ghost" data-action="disarm" data-pid="${t.pid}" data-who="${esc(t.opponent)}">disarm</button></div>`).join("") : "";
+  const names = [...new Set(o.fixtures.map(f => f.opponent))];
+  $("opps").innerHTML = names.map(n => `<option value="${esc(n)}">`).join("");
+  $("oppchips").innerHTML = names.slice(0, 4).map(n => `<button class="ghost" data-action="fillscout" data-who="${esc(n)}">${esc(n)}</button>`).join(" ");
+  const quiet = o.quiet_now;
+  $("chgo").disabled = !!quiet || o.memory_mb < 2500;
+  $("chwhy").textContent = quiet ? `not now: ${quiet.opponent}'s quiet window` : o.memory_mb < 2500 ? "not now: under 2,500 MB free" : "";
+  if (!$("chsets").dataset.done) {
+    $("chsets").innerHTML = "Sets: " + o.sets.filter(s => !s.same_as).map(s => `<label class="chip"><input type="checkbox" value="${esc(s.file)}"
+        ${["fixture_set_final","burst_set_t2"].includes(s.file) ? "checked" : ""}> ${esc(s.name)}</label>`).join(" ");
+    $("chsets").dataset.done = "1";
+  }
+}
+function setName(info) {
+  // A timer's set by its human name when the file is a known set; a frozen copy is named after its label.
+  const s = OV && OV.sets.find(x => x.file === info.file || x.label === info.label);
+  return s ? `${s.name}${s.eligible ? (s.believed ? ", believed" : ", one burst") : ", NOT ELIGIBLE"} (${info.file})` : info.label.slice(0, 80);
+}
+function oppLink(n) { return `<a class="opp" data-action="gotoopp" data-who="${esc(n)}" tabindex="0">${esc(n)}</a>`; }
+function rate(t) {
+  if (!t || !t.matches) return t && t.forfeits ? `<span class="dim">only forfeits (${t.forfeits})</span>` : `<span class="dim">none</span>`;
+  const f = t.forfeits ? ` <span class="small">+${t.forfeits} forfeit${t.forfeits > 1 ? "s" : ""} not counted</span>` : "";
+  const who = t.bots && t.bots.length === 1 && t.bots[0] !== "NashForge" ? ` <span class="small">(${esc(t.bots[0])})</span>` : "";
+  return t.rate == null ? `${t.won} of ${t.matches} <span class="small">(too few to rate)</span>${who}${f}`
+                        : `${t.won} of ${t.matches} (${pct(t.rate)} ± ${pct(t.stderr)})${who}${f}`;
+}
+function renderSets() {
+  $("setrows").innerHTML = OV.sets.map(s => `<tr><td data-label="Set"><b>${esc(s.name)}</b>${s.same_as ? ` <span class="small">same as ${esc(s.same_as)}</span>` : ""}
+      ${s.note ? `<div class="small">${esc(s.note)}</div>` : ""}</td><td data-label="File" class="small">${esc(s.file)}</td>
+    <td data-label="Gate">${s.gate ? esc(s.gate) : `<span class="bad">none</span>`}</td><td data-label="Replay">${s.replay ? esc(s.replay) : `<span class="bad">none</span>`}</td>
+    <td data-label="Bursts">${s.bursts.length ? s.bursts.map(esc).join("<br>") : `<span class="bad">none</span>`}</td>
+    <td data-label="Rated">${rate(s.rated)}<div class="small">as ${esc(s.version)}</div></td>
+    <td data-label="Fixture">${s.problems.length ? `<div class="bad small">${s.problems.map(esc).join("; ")}</div>` : ""}
+      ${s.edited_h != null && s.edited_h < 24 ? `<div class="warn small">edited ${s.edited_h} h ago</div>` : ""}${!s.eligible ? `<span class="pill p-bad">not eligible</span>` : s.believed ? `<span class="pill p-good">eligible, believed</span>` : `<span class="pill p-warn">eligible, one burst</span>`}</td></tr>`).join("");
+}
+function store(k, v) { try { if (v === undefined) return localStorage.getItem(k); localStorage.setItem(k, v); } catch (e) { return null; } }
+
+let refreshing = false;
+async function refresh() {
+  if (refreshing) return;                             // never stack requests behind a slow one
+  refreshing = true;
+  try {
+    OV = await get("/api/overview"); lastOk = Date.now(); failing = false;
+  } catch (e) { failing = true; }
+  refreshing = false;
+  if (!failing) {                                     // a render bug must not read as the server being down
+    try { renderOverview(); renderSets(); renderQuotaPlan(); } catch (e) { console.error(e); toast(`Page error: ${e.message}`, true); }
+  }
+  renderBanners();
+}
+async function refreshQuota() {
+  try {
+    const q = await get("/api/quota");
+    if (q.error) { $("quota").innerHTML = `<span class="warn">unknown</span>`; $("quotasub").textContent = q.error; return; }
+    QUOTA = q; renderQuotaPlan();
+    const full = q.used >= q.limit;
+    $("quota").innerHTML = `<span class="${full ? "bad" : ""}">${q.used} / ${q.limit}${full ? " · full" : ""}</span>`;
+    $("quotasub").textContent = `${Object.entries(q.by_bot).map(([k,v]) => `${k} ${v}`).join(", ")}; ${q.fixtures_excluded} fixture(s) not counted. `
+      + `Resets ${q.reset.ist} IST (in ${Math.floor(q.resets_in_min/60)}h ${q.resets_in_min%60}m). Shared by both bots.`;
+  } catch (e) { $("quota").innerHTML = `<span class="warn">unknown</span>`; $("quotasub").textContent = "the panel server did not answer"; }
+}
+function qualityLine(r) {
+  const q = r.quality; if (!q) return "";
+  const cls = q.verdict === "close" ? "p-good" : q.verdict === "rough" ? "p-warn" : "p-bad";
+  const bits = [];
+  if (q.hands < 1000) bits.push(`only ${q.hands} hands (under 1,000)`);
+  if (q.misses.length) bits.push(`misses by more than 8 points: ${q.misses.join("; ")}`);
+  if (q.strong) bits.push(`rated ${q.rating}: a strong bot, where a copy flatters the exploiter most`);
+  return `<div class="row"><span class="pill ${cls}">copy ${q.verdict}</span> <span class="small">${esc(bits.join(" · ") || "every statistic within 8 points")}</span></div>`;
+}
+function evidencePill(x) {
+  return x.eligible == null ? "" : !x.eligible ? `<span class="pill p-bad">not eligible</span>` :
+         x.believed ? `<span class="pill p-good">believed</span>` : `<span class="pill p-warn">one burst</span>`;
+}
+function renderChoice(r, compact) {
+  // One card for the Choose tab and the opponent page, so neither can drop the tie or decisive labels.
+  if (r.error) return `<div class="card" style="margin:10px 0"><b>${esc(r.opponent)}</b>: ${esc(r.error)}</div>`;
+  const verdict = r.decisive ? "" : `<div class="warnbox">Not decisive (${esc(r.not_decisive.join(", "))}): play the believed set unless real results say otherwise.</div>`;
+  return `<div class="card" style="margin:10px 0">${compact ? "" : `<b>${esc(r.opponent)}</b> `}<span class="small">${until(r.at)} ·
+     copy fitted from ${esc(r.fit.base)} on ${esc(r.fit.hands)} hands (distance ${Number(r.fit.distance).toFixed(3)}) · ${Number(r.matches).toLocaleString()} matches a set</span>
+     ${qualityLine(r)}${verdict}${r.warning ? `<div class="warnbox">${esc(r.warning)}: the copy disagrees with the real bot.</div>` : ""}
+     ${r.tie ? `<div class="warnbox">A tie: the top two are within two combined standard errors, so the copy does not separate them.</div>` : ""}
+     <table class="stack"><thead><tr><th>Set</th><th>Wins against the copy</th><th>Real record against ${esc(r.opponent)}</th></tr></thead><tbody>${r.results.map(x =>
+       `<tr><td data-label="Set"><b>${esc(x.name || x.set)}</b> ${evidencePill(x)}${x.set === r.leader ? (r.decisive ? ` <span class="pill p-good">leads</span>` : ` <span class="pill p-dim">ahead, not decisive</span>`) : ""}
+          <div class="small">${esc(x.set)}</div></td>
+        <td data-label="Copy">${x.win == null ? "–" : `${x.win}% ± ${x.stderr}`}</td><td data-label="Real">${rate(x.real)}</td></tr>`).join("")}</tbody></table>
+     ${(r.real || []).filter(v => !r.results.some(x => x.version === v.version)).map(v => `<div class="small">also real: ${esc(v.names.join(" / ") || v.version)} ${rate(v)}</div>`).join("")}
+     <details><summary class="small">how close the copy is</summary><pre>${esc(r.fit_table)}</pre></details>
+     ${compact ? "" : `<p class="note">${esc(r.caveat)}</p><button class="ghost" data-action="gotoopp" data-who="${esc(r.opponent)}">${esc(r.opponent)}'s page</button>`}</div>`;
+}
+async function refreshChoices() {
+  try {
+    const c = await get("/api/choices");
+    $("choices").innerHTML = c.map(r => renderChoice(r, false)).join("") || `<p class="dim">No results yet.</p>`;
+  } catch (e) {}
+}
+
+let QUOTA = null, RESULTS = null, SEASON = null;
+const dur = s => { s = Math.max(0, Math.round(s)); const h = Math.floor(s / 3600), m = Math.floor(s % 3600 / 60); return h ? `${h}h ${m}m` : `${m}m`; };
+const SINCE = (() => { const v = +store("lastSeen"); return v > 0 ? v : Date.now() / 1000 - 86400; })();
+async function refreshFeed() {
+  let f; try { f = await get(`/api/feed?since=${SINCE}`); } catch (e) { return; }
+  const box = $("feed"); box.hidden = !f.length;
+  box.innerHTML = `<div class="row"><b>Since you were last here</b> <span class="small">(${until(SINCE)})</span>
+      <button class="ghost" data-action="feedread">mark as read</button></div><ul>${f.map(e =>
+      `<li class="${e.level === "bad" ? "bad" : e.level === "warn" ? "warn" : ""}"><span class="small">${esc(new Date(e.at * 1000).toLocaleString("en-IN",
+        {weekday: "short", hour: "2-digit", minute: "2-digit", hour12: false, timeZone: "Asia/Kolkata"}))} IST</span> ${esc(e.text)}
+        ${e.tail && e.tail.length ? `<div class="small">${e.tail.map(esc).join("<br>")}</div>` : ""}</li>`).join("")}</ul>`;
+}
+async function refreshRuns() {
+  let r; try { r = await get("/api/runs", 20000); } catch (e) { return; }
+  $("runs").innerHTML = r.live.map(x => {
+    const c = x.counter;
+    const prog = x.progress ? `<pre>${esc(x.progress.join("\n"))}</pre><div class="small">from tools/${esc(x.reader)}</div>` :
+      c ? `<div><progress max="${c.total}" value="${c.done}" aria-label="progress"></progress> ${c.done.toLocaleString()} of ${c.total.toLocaleString()}
+           · ${c.eta ? `ETA ${esc(c.eta.ist)} IST (rate measured over ${dur(c.measured_over_s)})` : "no rate yet: the counter has not moved while the panel watched"}</div>` :
+      `<div class="small">no progress counter in its log</div>`;
+    return `<div class="card" style="margin:8px 0"><b>${esc(x.title)}</b>
+      <div class="small">running ${dur(x.elapsed_s)} · ${x.rss_mb.toLocaleString()} MB · pid ${x.pid}${x.log ? ` · ${esc(x.log)}` : ""}</div>${prog}
+      ${!x.progress && x.tail.length ? `<div class="small">${x.tail.map(esc).join("<br>")}</div>` : ""}</div>`;
+  }).join("") || `<p class="dim">No long jobs running.</p>`;
+  $("runsdone").innerHTML = r.finished.map(x => `<div class="card" style="margin:8px 0"><b>${esc(x.title)}</b>
+      <div class="small">ended about ${until(x.ended)}, after ${dur(x.ended - x.started)}${x.log ? ` · ${esc(x.log)}` : ""}</div>
+      <div class="small">${(x.tail || []).map(esc).join("<br>")}</div></div>`).join("") || `<p class="dim">none seen yet</p>`;
+}
+function spark(series) {
+  if (series.length < 2) return "";
+  const lo = Math.min(...series), hi = Math.max(...series), w = 520, hgt = 70, span = hi - lo || 1;
+  const pts = series.map((v, i) => `${(i * w / (series.length - 1)).toFixed(1)},${(hgt - 4 - (v - lo) * (hgt - 8) / span).toFixed(1)}`).join(" ");
+  return `<svg class="spark" viewBox="0 0 ${w} ${hgt}" preserveAspectRatio="none" role="img" aria-label="rating over the last ${series.length} rated matches, ${lo} to ${hi}"><polyline points="${pts}"/></svg>
+    <div class="small">last ${series.length} rated matches: low ${lo}, high ${hi}</div>`;
+}
+async function refreshSeason() {
+  try { SEASON = await get("/api/season"); } catch (e) { return; }
+  const s = SEASON, r = s.rating, sign = v => v == null ? "–" : (v > 0 ? "+" : "") + v;
+  if (r) {
+    $("rating").textContent = Math.round(r.rating);
+    const ours = s.ranked.ours.find(o => o.name === "NashForge");
+    $("ratingsub").textContent = `${sign(s.change_24h)} in 24 h, ${sign(s.change_7d)} in 7 days` + (ours && ours.rank ? `; #${ours.rank} of ${s.ranked.of} known bots` : "");
+  }
+  const k = s.ranked;
+  $("seasonbody").innerHTML = `<div class="grid">
+    <div class="card"><h3>NashForge</h3><div class="big">${r ? Math.round(r.rating) : "–"}</div>
+      <div class="small">${r ? `± ${Math.round(r.rating_deviation)}; ${r.wins} won, ${r.losses} lost of ${r.matches_played}; ${r.bb_per_100.toFixed(1)} bb/100` : ""}</div>
+      <div class="small">${sign(s.change_24h)} in 24 h, ${sign(s.change_7d)} in 7 days</div></div>
+    ${k.ours.filter(o => o.name !== "NashForge").map(o => `<div class="card"><h3>${esc(o.name)}</h3><div class="big">${o.rating ? Math.round(o.rating) : "–"}</div>
+      <div class="small">${o.matches_played != null ? `${o.wins} won, ${o.losses} lost of ${o.matches_played}` : "not fetched yet"}${o.rank ? `; #${o.rank} of ${k.of}` : o.matches_played != null ? "; unranked: under 20 matches" : ""}</div></div>`).join("")}
+    </div>${spark(s.series)}
+    <h2>Fixtures played this season</h2>${s.fixtures_played.length ? `<table class="stack"><tbody>${s.fixtures_played.map(f =>
+      `<tr><td data-label="When">${esc(f.ist)} IST</td><td data-label="Opponent">${oppLink(f.opponent)}</td><td data-label="Result" class="${f.won ? "good" : "bad"}">${f.won ? "won" : "lost"}</td><td data-label="As">${esc(f.name)}</td></tr>`).join("")}</tbody></table>`
+      : `<p class="dim">None recorded yet: the panel knows a fixture once it has seen it in the upcoming list.</p>`}
+    <h2>Ranking</h2><p class="small">${k.at ? `fetched ${until(k.at)}` : "not fetched yet"}${k.refreshing ? "; refreshing now (about three minutes)" : ""}</p>
+    ${k.top.length ? `<table class="stack"><thead><tr><th>#</th><th>Bot</th><th>Rating</th><th>Record</th></tr></thead><tbody>${[...k.top,
+      ...k.ours.filter(o => o.rank && o.rank > k.top.length)].map(b => `<tr${["NashForge","OptimumPoker"].includes(b.name) ? ` class="good"` : ""}>
+      <td data-label="#">${b.rank}</td><td data-label="Bot">${oppLink(b.name)}</td><td data-label="Rating">${Math.round(b.rating)} <span class="small">± ${Math.round(b.rating_deviation || 0)}</span></td>
+      <td data-label="Record">${b.wins} of ${b.matches_played}</td></tr>`).join("")}</tbody></table>` : ""}`;
+}
+function renderQuotaPlan() {
+  const q = QUOTA, l = OV && OV.lobby;
+  if (!q || q.error || !l) { $("quotaplan").innerHTML = `<h3>Burst planning</h3><span class="dim">quota unknown</span>`; return; }
+  // burst.sh stops after 20 matches or two hours. Most bursts took under an hour, but the v5x practice took 1.95 h
+  // for 11, so the lobby time to set aside is the two-hour cap, not the typical case.
+  const left = q.limit - q.used, fits = l.free >= 2 && left >= 20;
+  $("quotaplan").innerHTML = `<h3>Burst planning</h3><div>${left} challenges left today, shared by both bots; lobby ${l.free} h free after armed fixtures.
+    A burst needs 20 challenges and up to 2 lobby hours (burst.sh stops at 20 matches or two hours). Today:
+    <b>${fits ? "one fits" : left < 20 ? `no, only ${left} challenges left` : `no, under 2 lobby hours free`}</b>.
+    The quota resets ${esc(q.reset.ist)} IST.</div><div class="small">A version needs two or three bursts before it is believed; fixtures do not count against the quota.</div>`;
+}
+async function refreshResults() {
+  try { RESULTS = await get("/api/results"); } catch (e) { return; }
+  const done = (OV ? OV.jobs : []).filter(j => j.kind === "decompose" && j.state === "ok");
+  $("resultrows").innerHTML = RESULTS.versions.map((v, i) => {
+    const last = done.find(j => v.labels.includes(j.label));
+    return `<div class="card" style="margin:10px 0">
+    <div class="row"><b>${esc(v.names.join(" / ") || v.version)}</b> <span>${rate(v)}</span></div>
+    <div class="small">${esc(v.version)} · ${new Date(v.first * 1000).toLocaleDateString("en-IN", {day: "numeric", month: "short", timeZone: "Asia/Kolkata"})}
+      to ${new Date(v.last * 1000).toLocaleDateString("en-IN", {day: "numeric", month: "short", timeZone: "Asia/Kolkata"})}</div>
+    <table class="stack"><thead><tr><th>Opponent</th><th>Record</th></tr></thead><tbody>${v.opponents.map(o =>
+      `<tr><td data-label="Opponent">${oppLink(o.opponent)}</td><td data-label="Record">${o.won} of ${o.matches}${o.forfeits ? ` <span class="small">+${o.forfeits} forfeit</span>` : ""}</td></tr>`).join("")}</tbody></table>
+    ${v.bots.includes("NashForge") && v.labels.length ? `<div class="row"><label class="sr" for="dl-${i}">Label to decompose</label>
+      <select id="dl-${i}">${v.labels.map(l => `<option value="${esc(l)}">${esc(l.length > 60 ? l.slice(0, 28) + " … " + l.slice(-28) : l)} · ${v.label_counts[l]} matches</option>`).join("")}</select>
+      <label class="sr" for="do-${i}">Only against</label><select id="do-${i}"><option value="">every opponent</option>${v.opponents.map(o => `<option value="${esc(o.opponent)}">${esc(o.opponent)}</option>`).join("")}</select>
+      <button class="ghost" data-action="decompose" data-i="${i}">decompose</button></div>` : ""}
+    ${last ? `<details data-log="${esc(last.id)}"><summary class="small">last decomposition: ${esc(last.title)} (${until(last.started)})</summary><pre>loading…</pre></details>` : ""}</div>`;
+  }).join("") || `<p class="dim">No matches in the last ${RESULTS.since_days} days.</p>`;
+}
+document.addEventListener("toggle", async ev => {   // a decomposition's table loads when it is opened
+  const d = ev.target; if (!d.dataset || !d.dataset.log || !d.open) return;
+  try { d.querySelector("pre").textContent = (await get(`/api/log?id=${encodeURIComponent(d.dataset.log)}`)).log.replace(/^\$ .*\n/, "").replace(/\nEXIT \d+\s*$/, ""); } catch (e) {}
+}, true);
+async function showOpponent(name) {
+  $("oppname").value = name; $("opppage").innerHTML = `<p class="dim">loading…</p>`;
+  let o; try { o = await get(`/api/opponent?name=${encodeURIComponent(name)}`); } catch (e) { $("opppage").innerHTML = `<p class="bad">${esc(e.message)}</p>`; return; }
+  const s = (o.profile.scout) || {}, pl = o.profile.platform || {};
+  const fixture = OV && OV.fixtures.find(f => f.opponent === name);
+  $("opppage").innerHTML = `<div class="grid">
+    <div class="card"><h3>Platform</h3><div class="big">${pl.rating ? Math.round(pl.rating) : "–"}</div><div class="small">rating</div></div>
+    <div class="card"><h3>Scouted</h3><div class="big">${o.scouted_days_ago == null ? "never" : `${o.scouted_days_ago} days ago`}</div>
+      <div class="small">${s.hands ? `${s.matches} matches, ${s.hands} hands` : "the paced scout has no hands"}; ${o.season_index_matches} matches in the scout indexes, which the fit reads${o.scouted_days_ago > 3 ? ". Stale: scout again before a fixture" : ""}</div></div>
+    <div class="card"><h3>Reads</h3><div>${esc(o.reads)}</div></div>
+    <div class="card"><h3>Fixture</h3><div>${fixture ? `${esc(fixture.slot.ist)} IST ${statePill(fixture)}` : `<span class="dim">none listed</span>`}</div></div></div>
+    <h2>Style</h2><div class="small">${!s.hands ? "no scouted hands: nothing to show" : `plays ${pct(s.vpip)}, raises first ${pct(s.pfr)}, re-raises ${pct(s.three_bet)}, folds to a re-raise ${pct(s.fold_to_three_bet)}, folds to a bet ${pct(s.fold_to_bet)}`}</div>
+    <h2>Real record by version</h2><table class="stack"><thead><tr><th>Version</th><th>Record</th></tr></thead><tbody>${o.record.map(v =>
+      `<tr><td data-label="Version">${esc(v.names.join(" / "))} <div class="small">${esc(v.version)}</div></td><td data-label="Record">${rate(v)}</td></tr>`).join("") || `<tr><td colspan="2" class="dim">never played</td></tr>`}</tbody></table>
+    <h2>Copy duels</h2>${o.choices.map(r => renderChoice(r, true)).join("")
+      || `<p class="dim">none yet: run one from Choose a set.</p>`}
+    <div class="row"><button class="ghost" data-action="scoutone" data-who="${esc(name)}">scout ${esc(name)}</button>
+      <button class="ghost" data-action="chooseone" data-who="${esc(name)}">choose a set for ${esc(name)}</button></div>`;
+}
+document.addEventListener("keydown", ev => { if (ev.key === "Enter" && ev.target.matches("a.opp")) ev.target.click(); });
+document.addEventListener("click", async ev => {
+  const el = ev.target.closest("[data-action],[data-tab]"); if (!el) return;
+  if (el.dataset.tab) return selectTab(el.dataset.tab);
+  const a = el.dataset.action;
+  if (a === "arm") {
+    const f = OV.fixtures[+el.dataset.i], set = $(`set${el.dataset.i}`).value;
+    const info = OV.sets.find(s => s.file === set) || {};
+    if (info.edited_h != null && info.edited_h < 24 &&
+        !confirm(`${set} was edited ${info.edited_h} hours ago. Arena rule: a set is not changed on match day. Arm it anyway?`)) return;
+    store(`set:${f.opponent}`, set);
+    if (confirm(`Arm ${f.opponent}\n\n${f.slot.ist} IST (${until(f.slot.epoch)})\nthis machine's clock: ${f.slot.arm} ${f.slot.machine_tz} (what the timer arms from)\nset: ${set} (a frozen copy is what plays)\n\nA dry run connects first, about 5 minutes, then the timer detaches.`)) {
+      el.disabled = true; el.textContent = "arming…"; post("/api/arm", {slot: f.slot.arm, opponent: f.opponent, set});
+    }
+  } else if (a === "disarm") {
+    if (confirm(`Disarm the ${el.dataset.who} timer (pid ${el.dataset.pid})?`)) post("/api/disarm", {pid: +el.dataset.pid});
+  } else if (a === "log") {
+    const l = await get(`/api/log?id=${encodeURIComponent(el.dataset.id)}`); $("logtitle").textContent = el.dataset.title;
+    $("joblog").textContent = l.log; $("logbox").hidden = false; $("logbox").scrollIntoView({block: "nearest"});
+  } else if (a === "closelog") { $("logbox").hidden = true;
+  } else if (a === "feedread") { store("lastSeen", String(Date.now() / 1000)); $("feed").hidden = true;
+  } else if (a === "gotoopp") { selectTab("opp"); showOpponent(el.dataset.who);
+  } else if (a === "opp") { const n = $("oppname").value.trim(); if (n) showOpponent(n);
+  } else if (a === "scoutone") { selectTab("scout"); $("scoutnames").value = el.dataset.who;
+  } else if (a === "chooseone") { selectTab("choose"); $("chopp").value = el.dataset.who;
+  } else if (a === "decompose") {
+    const label = $(`dl-${el.dataset.i}`).value, opponent = $(`do-${el.dataset.i}`).value;
+    if (confirm(`Decompose the matches labelled\n${label}\n${opponent ? `against ${opponent} only` : "against every opponent"}\n\nby depth and by which solver decided each hand? It reads the match logs only; the table appears under this card when it finishes.`))
+      post("/api/decompose", {label, opponent}).then(() => setTimeout(refreshResults, 15000));
+  } else if (a === "fillscout") { const v = $("scoutnames").value; $("scoutnames").value = v ? `${v}, ${el.dataset.who}` : el.dataset.who;
+  } else if (a === "scout") {
+    const names = $("scoutnames").value.split(",").map(s => s.trim()).filter(Boolean);
+    if (names.length && confirm(`Scout ${names.join(", ")}? Paced at 1.5 s a request.`))
+      post("/api/scout", {names, matches: +$("scoutmatches").value, refresh: $("scoutrefresh").checked});
+  } else if (a === "profiles") {
+    const names = $("profnames").value.split(",").map(s => s.trim()).filter(Boolean);
+    const p = await get(`/api/profiles?names=${encodeURIComponent(names.join(","))}`);
+    $("profiles").innerHTML = Object.entries(p).map(([n, r]) => { const s = r.scout || {}, pr = r.profile || {};
+      return `<tr><td>${esc(n)}</td><td>${s.matches ?? "–"} matches, ${s.hands ?? "–"} hands${pr.bets_faced != null ? `; ${pr.bets_faced} bets faced` : "; no profile row"}</td>
+        <td>${pct(s.vpip)}</td><td>${pct(s.pfr)}</td><td>${pct(s.three_bet)}</td><td>${pct(s.fold_to_three_bet)}</td>
+        <td>${pct(s.fold_to_bet)}</td><td>${pr.river_bets ? `${pr.river_bluffs} of ${pr.river_bets}` : "–"}</td>
+        <td>${r.platform.rating ? Math.round(r.platform.rating) : "–"}</td></tr>`; }).join("") || `<tr><td colspan="9" class="dim">no valid names</td></tr>`;
+  } else if (a === "choose") {
+    const opponent = $("chopp").value.trim(), sets = [...document.querySelectorAll("#chsets input:checked")].map(i => i.value);
+    if (opponent && sets.length && confirm(`Fit ${opponent} and play ${sets.join(", ")}, ${(+$("chmatches").value).toLocaleString()} matches each?`))
+      post("/api/choose", {opponent, sets, matches: +$("chmatches").value});
+  }
+});
+function selectTab(id) {
+  document.querySelectorAll("[role=tab]").forEach(b => { const on = b.dataset.tab === id;
+    b.setAttribute("aria-selected", String(on)); b.tabIndex = on ? 0 : -1; });
+  document.querySelectorAll("section").forEach(s => s.classList.toggle("on", s.id === id));
+  store("tab", id);
+  if (id === "results") refreshResults();
+  if (id === "season") refreshSeason();
+}
+document.querySelector("[role=tablist]").addEventListener("keydown", ev => {
+  if (!["ArrowLeft","ArrowRight"].includes(ev.key)) return;
+  const tabs = [...document.querySelectorAll("[role=tab]")], i = tabs.findIndex(t => t.getAttribute("aria-selected") === "true");
+  const next = tabs[(i + (ev.key === "ArrowRight" ? 1 : tabs.length - 1)) % tabs.length]; selectTab(next.dataset.tab); next.focus();
+});
+setInterval(() => {                                   // the countdowns tick every second between refreshes
+  document.querySelectorAll("[data-epoch]").forEach(el => el.textContent = until(+el.dataset.epoch));
+  if (lastOk) $("updated").textContent = `updated ${Math.round((Date.now() - lastOk) / 1000)} s ago`;
+  if (OV && OV.fixtures[0]) { const n = OV.fixtures.find(f => f.slot.epoch > Date.now()/1000 - 3600);
+    if (n) document.title = `${n.opponent} ${until(n.slot.epoch)} · ${n.state === "armed" ? "armed" : "NOT ARMED"}`; }
+}, 1000);
+(async () => {
+  await refresh();
+  const saved = store("tab"), soonest = OV && OV.fixtures.find(f => f.hours_left > -1);
+  selectTab(soonest && soonest.hours_left < 3 ? "dash" : (saved || "dash"));   // match day opens on the dashboard
+  refreshQuota(); refreshChoices(); refreshResults(); refreshFeed(); refreshRuns(); refreshSeason();
+})();
+setInterval(refresh, 5000); setInterval(refreshQuota, 120000); setInterval(refreshChoices, 15000); setInterval(refreshResults, 300000);
+setInterval(refreshRuns, 30000); setInterval(refreshFeed, 120000); setInterval(refreshSeason, 300000);
+</script>
+</body>
+</html>
