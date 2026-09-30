@@ -356,7 +356,12 @@ def main():
                 with open(PROFILES) as handle:
                     rows = json.load(handle)
             existing = rows.get(name, {})
-            if not existing or existing.get("scouted"):
+            # Never shrink a row: a scout of the last 60 matches replaced wsp's 15,266 bets faced with 4,049 on
+            # 30 Sept (and five rows on 28 Sept). A fresh, smaller sample is kept in scout/<name>.json instead.
+            if existing and row["bets_faced"] < (existing.get("bets_faced") or 0):
+                print(f"  kept {name}'s profile ({existing.get('bets_faced')} bets faced; this scout has "
+                      f"{row['bets_faced']})", flush=True)
+            elif not existing or existing.get("scouted"):
                 rows[name] = {"bets_faced": row["bets_faced"], "folds": row["folds"], "calls": row["calls"],
                               "raises": row["raises"], "hands": row["hands"], "net": 0,
                               "by_history": row["by_history"], "scouted": True,
