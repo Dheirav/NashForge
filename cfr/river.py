@@ -502,7 +502,8 @@ def decide_river(state: dict, hole: Sequence[Card], board: Sequence[Card], histo
                  rng: np.random.Generator, legal: Optional[np.ndarray] = None,
                  iterations: int = ITERATIONS, budget_s: float = TIME_BUDGET_S,
                  purify: bool = False,
-                 opponent_range: Optional[Callable[[np.ndarray], np.ndarray]] = None) -> RiverDecision:
+                 opponent_range: Optional[Callable[[np.ndarray], np.ndarray]] = None,
+                 blend: float = 0.0) -> RiverDecision:
     """
     Solve this river and choose. `state` is the arena's turn state: pot (with
     the outstanding bet in it), to_call, your_stack, opponent_stacks.
@@ -512,6 +513,13 @@ def decide_river(state: dict, hole: Sequence[Card], board: Sequence[Card], histo
     is zero everywhere means the model could not have played this hand the
     way it was played, and the blueprint's is kept rather than solving
     against nothing.
+
+    `blend` mixes the opponent's blueprint range with every hand the board
+    allows, each normalised to one: 0 is the blueprint's reach, 1 is "any two
+    cards". The blueprint's range assumes the opponent plays as we do, which is
+    wrong for a bot that shoves a pair of fives (RiverReasonBot, 30 Sept: a
+    ten-high flush folded to three queens); "any two" is wrong for one whose big
+    bets are all value. The blend is the knob between them.
     """
     started = time.perf_counter()
     hands = HandSet.build(board)
@@ -531,6 +539,12 @@ def decide_river(state: dict, hole: Sequence[Card], board: Sequence[Card], histo
             ranges, range_source = (ranges[0], theirs_reach), "oracle"
         else:
             range_source = "blueprint (oracle empty)"
+    if blend > 0 and range_source == "blueprint":
+        theirs = np.asarray(ranges[1], dtype=float)
+        total = theirs.sum()
+        uniform = np.full_like(theirs, 1.0 / len(theirs))
+        mixed = (1.0 - blend) * (theirs / total if total > 0 else uniform) + blend * uniform
+        ranges, range_source = (ranges[0], mixed), f"blend {blend:g}"
     solver = make_solver(hands, root, decisions, ranges)
     if isinstance(solver, NativeRiverSolver) and iterations == ITERATIONS:
         iterations = NATIVE_ITERATIONS
