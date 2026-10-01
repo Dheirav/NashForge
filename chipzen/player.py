@@ -89,6 +89,8 @@ class Stats:
     river_bluffs_caught: int = 0   # a river fold turned into a call against an over-bluffer
     overfolders_bet: int = 0       # a flop or turn check turned into a half-pot bet
     reraises_defended: int = 0     # a fold of our open to a re-raise turned into a call
+    match_folds: int = 0           # a call of a preflop all-in turned into a fold for the match's sake
+    match_calls: int = 0           # and the reverse, against a stronger opponent
     miss_depths: Dict[int, int] = field(default_factory=dict)
     depths_used: Dict[str, int] = field(default_factory=dict)
     actions_sent: Dict[str, int] = field(default_factory=dict)
@@ -252,6 +254,10 @@ class ArenaPlayer:
         #: gives up the blind a station would often have folded to: turning it off gained 1.6 (hoops) and 0.8
         #: (PoetAndCoder copy) points at 20,000 matches, 30 Sept, and lost nowhere. On until gated and burst.
         self.withhold_preflop = True
+        #: Answer a stack-deciding preflop all-in for the match rather than the chips (1 Oct). Off until measured.
+        self.match_caution = False
+        #: Our chance of winning an even match against this opponent; 0.637 is the real record over 477 matches.
+        self.match_edge = 0.637
 
     #: A raise with a hand this weak or weaker is a bluff for the purpose of
     #: withholding it: the bottom two of six strength classes.
@@ -590,6 +596,11 @@ class ArenaPlayer:
                         adjusted = "re-raise defended"
                         self.stats.reraises_defended += 1
         opponent_stack = int((state.get("opponent_stacks") or [0])[0])
+        if self.match_caution and not board and to_call > 0 and choice in (FOLD, CHECK_CALL) \
+                and arena[CHECK_CALL] and arena[FOLD]:
+            flipped = self._match_answer(hole, state, choice)
+            if flipped is not None:
+                choice, adjusted = flipped
         if to_call > 0 and opponent_stack <= 0 and arena[CHECK_CALL] and choice == FOLD \
                 and to_call * self.POT_ODDS_FLOOR <= int(state.get("pot") or 0) - to_call:
             # An opponent all in for a fraction of a blind: the 5bb blueprint
@@ -654,6 +665,61 @@ class ArenaPlayer:
             memo.clear()
         memo[key] = found
         return found
+
+    #: A preflop call is stack-deciding when the opponent is all in, or it commits this share of our stack.
+    MATCH_COMMIT = 0.9
+    #: The shoving range a stack-deciding all-in is read as: the top 30% of hands.
+    MATCH_SHOVE_RANGE = 0.30
+
+    def _match_answer(self, hole, state: dict, choice: int):
+        """
+        Call or fold a stack-deciding preflop all-in by the match, not the chips.
+
+        The arena pays for winning the match. With an edge over the opponent the chance of winning is
+        concave in our chip share: measured over 477 real matches it sits 11 to 15 points above the
+        share (~/pokerbot-scratch/matchwin/curve.md), so a flip for the stack while ahead risks more
+        match than it can win. Against a stronger opponent the curve bends the other way. It is modelled
+        as V(x) = (1 - e^(-kx)) / (1 - e^(-k)), with k from our chance p of winning an even match
+        (V(0.5) = p gives k = 2 ln(p / (1 - p))), which is linear, the chip line, at p = 0.5.
+
+        Only the gap between the two thresholds changes: a call whose equity clears the price in chips
+        but not in match equity becomes a fold, and against a stronger opponent the reverse. Everything
+        else is the solver's answer. Returns (choice, label) or None.
+        """
+        import math
+        ours = int(state.get("your_stack") or 0)
+        theirs = int((state.get("opponent_stacks") or [0])[0])
+        pot = int(state.get("pot") or 0)
+        to_call = int(state.get("to_call") or 0)
+        call = min(to_call, ours)
+        # Stack-deciding: the opponent is all in (the effective stack is theirs, as when we are ahead),
+        # or the call commits nearly all of ours.
+        if ours <= 0 or (theirs > 0 and call < self.MATCH_COMMIT * ours):
+            return None
+        total = float(ours + theirs + pot)
+        p = min(max(self.match_edge, 0.05), 0.95)
+        k = 2.0 * math.log(p / (1.0 - p))
+        def value(x: float) -> float:
+            x = min(max(x, 0.0), 1.0)
+            return x if abs(k) < 1e-9 else (1.0 - math.exp(-k * x)) / (1.0 - math.exp(-k))
+        # If we fold we keep our stack; if we call we win the whole pot or lose the call. Their excess
+        # over our stack comes back to them either way, so it is left out of the pot we can win.
+        excess = max(0, to_call - ours)
+        fold_v = value(ours / total)
+        win_v, lose_v = value((ours + pot - excess) / total), value((ours - call) / total)
+        if win_v <= lose_v:
+            return None
+        match_price = (fold_v - lose_v) / (win_v - lose_v)
+        chip_price = call / float(pot - excess + call)
+        from chipzen.ranges import equity_vs_top
+        q = equity_vs_top([c.index for c in hole], self.MATCH_SHOVE_RANGE)
+        if choice == CHECK_CALL and chip_price <= q < match_price:
+            self.stats.match_folds += 1
+            return FOLD, "match: fold the flip"
+        if choice == FOLD and match_price <= q < chip_price:
+            self.stats.match_calls += 1
+            return CHECK_CALL, "match: take the flip"
+        return None
 
     @staticmethod
     def _top(solver: Solver) -> int:

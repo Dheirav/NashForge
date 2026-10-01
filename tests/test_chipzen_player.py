@@ -643,3 +643,25 @@ def test_the_preflop_half_of_bluff_withheld_can_be_turned_off_and_the_flop_half_
         player.withhold_preflop = True
         player.profiles = None
         player.opponent = None
+
+
+def test_the_match_rule_folds_a_chip_call_that_risks_too_much_match_and_only_that(player):
+    # 1 Oct: ahead 12,000 to 8,000 and facing their all-in preflop. With an edge (p 0.70) the match curve
+    # asks more equity than the pot odds; at p 0.5 the curve is the chip line and nothing may change.
+    from slumbot.bridge import parse_cards
+    from abstraction.betting import CHECK_CALL, FOLD
+    state = {"pot": 8100, "to_call": 7900, "your_stack": 11900, "opponent_stacks": [0]}
+    def answer(cards, p):
+        player.match_edge = p
+        return player._match_answer(parse_cards(cards), state, CHECK_CALL)
+    try:
+        assert answer(["As", "Ah"], 0.70) is None                       # far above either price
+        assert answer(["7c", "2d"], 0.5) is None                        # the chip line: no gap at all
+        flips = [answer(c, 0.70) for c in (["Ts", "9s"], ["Ad", "Th"], ["8s", "8d"], ["Kc", "Jd"], ["6h", "6c"])]
+        assert any(f is not None and f[0] == FOLD for f in flips)       # some marginal call is in the gap
+        assert all(f is None or f[0] == FOLD for f in flips)            # and a call is never forced
+        small = {"pot": 400, "to_call": 200, "your_stack": 11900, "opponent_stacks": [7800]}
+        player.match_edge = 0.70
+        assert player._match_answer(parse_cards(["Ts", "9s"]), small, CHECK_CALL) is None   # not stack-deciding
+    finally:
+        player.match_edge = 0.637
