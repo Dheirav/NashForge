@@ -68,6 +68,17 @@ def _config():
     }
 
 
+def _rungs(ladder_dir, pattern):
+    """
+    The rungs in `ladder_dir` matching `pattern` (a `*.pkl` glob), named by their pickle path. A rung stored
+    compactly (cfr/pure.py) has a `.rung.json` and no pickle, and is named by the pickle it stands for, which
+    `load_strategy` resolves to the compact table first; so a compact folder needs no placeholder pickles.
+    """
+    found = set(glob.glob(os.path.join(ladder_dir, pattern)))
+    found |= {p[:-len(".rung.json")] + ".pkl" for p in glob.glob(os.path.join(ladder_dir, pattern[:-4] + ".rung.json"))}
+    return sorted(found)
+
+
 def ladder_paths(ladder_dir, deep_primary=False, ladder=None, companions=None):
     """
     Which pickles play at which depth, from a ladder directory.
@@ -80,7 +91,7 @@ def ladder_paths(ladder_dir, deep_primary=False, ladder=None, companions=None):
     # A ladder directory's own 100bb rung replaces the shipped solver, so a
     # 200-sample or texture-aware set is complete on its own; the shipped
     # solvers only fill in what the directory lacks.
-    own = sorted(glob.glob(os.path.join(ladder_dir, "nolimit_*bb.pkl")))
+    own = _rungs(ladder_dir, "nolimit_*bb.pkl")
     ladder = list(ladder) if ladder else \
         own + [p for p in DEFAULT_LADDER
                if not any(os.path.basename(p).replace("nolimit_strategy", "nolimit_100bb") ==
@@ -88,9 +99,9 @@ def ladder_paths(ladder_dir, deep_primary=False, ladder=None, companions=None):
                           for o in own)]
     # Companions: a full-size raise-cap-2 solver beats a (4, 2) taper at the
     # same depth, because its re-raises have every size rather than two.
-    cap2 = sorted(glob.glob(os.path.join(ladder_dir, "cap2_*bb.pkl")))
+    cap2 = _rungs(ladder_dir, "cap2_*bb.pkl")
     cap2_depths = {os.path.basename(p).split("_")[1] for p in cap2}
-    tapers = [p for p in sorted(glob.glob(os.path.join(ladder_dir, "taper42_*bb.pkl")))
+    tapers = [p for p in _rungs(ladder_dir, "taper42_*bb.pkl")
               if os.path.basename(p).split("_")[1] not in cap2_depths]
     if ladder_dir == LADDER_DIR:
         tapers = [p for p in DEFAULT_COMPANIONS if os.path.exists(p) and "100bb" not in cap2_depths] + tapers

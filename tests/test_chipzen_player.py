@@ -643,3 +643,14 @@ def test_the_preflop_half_of_bluff_withheld_can_be_turned_off_and_the_flop_half_
         player.withhold_preflop = True
         player.profiles = None
         player.opponent = None
+
+
+def test_a_compact_ladder_folder_is_found_without_placeholder_pickles(tmp_path):
+    # 1 Oct: a compact rung is a .rung.json and a .compact.npz, with no pickle; the runner must still see it.
+    from scripts.chipzen_run import ladder_paths
+    for name in ("nolimit_25bb", "cap2_25bb", "taper42_12bb"):
+        (tmp_path / f"{name}.rung.json").write_text("{}")
+    (tmp_path / "nolimit_50bb.pkl").write_bytes(b"")
+    _, ladder, companions = ladder_paths(str(tmp_path), False, None, None)
+    names = {os.path.basename(p) for p in ladder + companions}
+    assert {"nolimit_25bb.pkl", "nolimit_50bb.pkl", "cap2_25bb.pkl", "taper42_12bb.pkl"} <= names
