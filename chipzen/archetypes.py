@@ -46,7 +46,7 @@ import numpy as np
 from chipzen.bridge import parse_cards
 
 ARCHETYPES = ("station", "nit", "maniac", "foldraise", "hoops",
-              "sticky", "nofold3bet", "folder", "wildpassive", "meek", "bully")
+              "sticky", "nofold3bet", "folder", "wildpassive", "meek", "bully", "reraiser")
 
 #: Each shape is a parameter row; `scripts/chipzen_calibrate.py` measures the
 #: row with the scout's own statistics beside the bot it stands for, and the
@@ -152,6 +152,11 @@ PARAMS = {
     "bully":    dict(open_eq=0.47, limp_eq=0.60, threebet_eq=0.56, fold_margin=0.16, raise_eq=0.45,
                      raise_p=0.80, bluff_p=0.45, call_p=0.25, defend_eq=0.52, defend3_eq=0.60,
                      open_frac=1.0),
+    # reraiser: the maniac's shape re-raising from 0.38 equity four times in five (call_p 0.2). v5x folds about
+    # 80% of its opens to a re-raise, and against this shape it fell from 68.2% (maniac) to 64.1% (30 Sept,
+    # 10,000 matches); the maniac re-raises only above 0.53, so training against it never reached the leak.
+    "reraiser": dict(open_eq=0.50, limp_eq=0.45, threebet_eq=0.38, fold_margin=0.02, raise_eq=0.52,
+                     raise_p=0.6, bluff_p=0.15, call_p=0.20, defend_eq=0.45, defend3_eq=0.78),
 }
 
 
