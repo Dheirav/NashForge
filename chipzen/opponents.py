@@ -378,6 +378,27 @@ class Profiles:
             json.dump(self.rows, handle, indent=1, sort_keys=True)
         os.replace(tmp, self.path)
 
+    #: Opponents that changed: their rows count only hands from matches that started after this time (epoch seconds),
+    #: from `results/chipzen/profile_since.json` ({"Blueprint": "2026-09-30T00:00:00+05:30"}). A bot its author
+    #: rewrote is a new bot, and 14,000 hands of the old one teach the reads the wrong thing: Blueprint went from
+    #: playing 35% of its small blinds to over 90% between two matches on 29 Sept, for every opponent.
+    SINCE_FILE = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "results", "chipzen",
+                              "profile_since.json")
+
+    def since(self) -> Dict[str, float]:
+        import datetime as dt
+        try:
+            raw = json.load(open(self.SINCE_FILE))
+        except (OSError, ValueError):
+            return {}
+        out = {}
+        for name, when in raw.items():
+            try:
+                out[name] = dt.datetime.fromisoformat(str(when)).timestamp()
+            except ValueError:
+                continue
+        return out
+
     def rebuild(self, *dirs: str) -> "Profiles":
         """
         Recount from every match log, so the file is never the only copy.
@@ -389,6 +410,7 @@ class Profiles:
         only kind that helps.
         """
         self.rows = {name: row for name, row in self.rows.items() if row.get("scouted")}
+        cutoff = self.since()
         seen = set()
         for directory in dirs:
             for path in sorted(glob.glob(os.path.join(directory, "*.jsonl"))):
@@ -406,6 +428,8 @@ class Profiles:
                             seat = frame.get("seat")
                             opponent = next((s.get("display_name") for s in frame.get("seats") or []
                                              if not s.get("is_self")), None)
+                            if opponent in cutoff and (frame.get("at") or 0) < cutoff[opponent]:
+                                opponent = None          # an older version of this bot: not counted
                         elif frame.get("frame") == "round_start":
                             before = (frame.get("state") or {}).get("stacks")
                         elif frame.get("frame") == "round_result" and seat is not None and opponent:

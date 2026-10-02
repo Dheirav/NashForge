@@ -643,3 +643,29 @@ def test_the_preflop_half_of_bluff_withheld_can_be_turned_off_and_the_flop_half_
         player.withhold_preflop = True
         player.profiles = None
         player.opponent = None
+
+
+def test_a_profile_since_date_drops_an_opponent_s_older_matches(tmp_path, monkeypatch):
+    # 2 Oct: Blueprint was rewritten on 29 Sept; its rows must count only hands from after the change.
+    import json as _json
+    from chipzen.opponents import Profiles
+    def match(name, at, folds):
+        lines = [{"frame": "match_start", "seat": 0, "at": at,
+                  "seats": [{"seat": 0, "is_self": True}, {"seat": 1, "display_name": name}]}]
+        for i in range(folds):
+            lines += [{"frame": "round_start", "state": {"stacks": [10000, 10000]}},
+                      {"frame": "round_result", "result": {"stacks": [10150, 9850], "action_history": blinds() + [
+                          entry(0, "raise", 300), entry(1, "call", 300), entry(0, "raise", 600, "flop"), entry(1, "fold", 0, "flop")]}}]
+        return "\n".join(_json.dumps(l) for l in lines)
+    logs = tmp_path / "matches"; logs.mkdir()
+    (logs / "old.jsonl").write_text(match("Blueprint", 1790000000, 5))      # 21 Sept
+    (logs / "new.jsonl").write_text(match("Blueprint", 1790800000, 2))      # 1 Oct
+    (logs / "other.jsonl").write_text(match("wsp", 1790000000, 3))
+    since = tmp_path / "since.json"
+    since.write_text(_json.dumps({"Blueprint": "2026-09-30T00:00:00+05:30"}))
+    monkeypatch.setattr(Profiles, "SINCE_FILE", str(since))
+    p = Profiles(str(tmp_path / "opp.json")).rebuild(str(logs))
+    assert p.rows["Blueprint"]["hands"] == 2 and p.rows["Blueprint"]["folds"] == 2   # only the new version's
+    assert p.rows["wsp"]["hands"] == 3                                               # others untouched
+    monkeypatch.setattr(Profiles, "SINCE_FILE", str(tmp_path / "absent.json"))
+    assert Profiles(str(tmp_path / "opp.json")).rebuild(str(logs)).rows["Blueprint"]["hands"] == 7   # no file: as before
