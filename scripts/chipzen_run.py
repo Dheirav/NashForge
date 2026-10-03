@@ -116,7 +116,8 @@ async def _main(args, config):
                          river=args.river_solve, river_budget_s=args.river_budget,
                          river_shove_companion=args.river_shove_companion,
                          stack_cap=args.stack_cap,
-                         short_solution=not args.no_short_solution)
+                         short_solution=not args.no_short_solution,
+                         pushfold_primary=args.pushfold_primary)
     player.withhold_preflop = not args.no_preflop_withhold
     player.profiles = Profiles(os.path.join(ROOT, "results", "chipzen", "opponents.json"),
                                sequential=args.sequential_triggers, bankroll=args.exploit_bankroll,
@@ -137,6 +138,7 @@ async def _main(args, config):
         "ladder_dir": os.path.relpath(ladder_dir, ROOT), "deep_primary": bool(args.deep_primary),
         "river_shove_companion": bool(args.river_shove_companion),
         "stack_cap": bool(args.stack_cap),
+        "pushfold_primary": bool(args.pushfold_primary),
         "purify": args.purify, "river_solve": bool(args.river_solve),
         "sequential_triggers": bool(args.sequential_triggers), "scout_reads": bool(args.scout_reads),
         "exploit_bankroll": bool(args.exploit_bankroll),
@@ -320,6 +322,9 @@ def main():
     parser.add_argument("--no-short-solution", action="store_true",
                         help="answer a short-stack preflop all-in with the old rule instead of the "
                              "exact push-fold solution (chipzen/pushfold.py); the control arm")
+    parser.add_argument("--pushfold-primary", action="store_true",
+                        help="at 8bb and shorter, play the exact push-fold solution first rather than only "
+                             "after a miss: shove or fold in the small blind, priced calls of an all-in")
     parser.add_argument("--deep-primary", action="store_true",
                         help="play the cap2_*bb.pkl solvers as the main solver at their depths")
     parser.add_argument("--ladder-dir", help="use this directory's nolimit_*bb.pkl, cap2_*bb.pkl "

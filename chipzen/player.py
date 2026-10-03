@@ -84,6 +84,7 @@ class Stats:
     river_oracle_ranges: int = 0   # river solves given the opponent's true range
     fallbacks: int = 0
     short_stack_answers: int = 0   # a preflop all-in answered by the exact solution
+    pushfold_primary: int = 0      # a short-stack preflop answer the exact solution changed
     reraises_believed: int = 0     # a re-raise from a bot that never re-raises
     collapsed_hits: int = 0            # answered on a re-read history after a pseudo all-in
     river_bluffs_caught: int = 0   # a river fold turned into a call against an over-bluffer
@@ -196,7 +197,7 @@ class ArenaPlayer:
                  companions: Sequence[str] = (), purify: str = "none",
                  river: bool = False, river_budget_s: float = 8.0,
                  river_shove_companion: bool = False, stack_cap: bool = False,
-                 short_solution: bool = True):
+                 short_solution: bool = True, pushfold_primary: bool = False):
         self.rng = rng if rng is not None else np.random.default_rng()
         self.purify = purify
         #: Honour the trees' stack cap in every lookup (see `_shim`). Off by
@@ -238,6 +239,11 @@ class ArenaPlayer:
         #: and then the rule stands: that is the arm the change is measured
         #: against, and the switch back if it ever misbehaves in a match.
         self.short_ranges = ShortStackRanges.load() if short_solution else None
+        #: At PUSHFOLD_PRIMARY_MAX_BB and shorter the exact solution answers
+        #: first, not only after a miss: our first action in the small blind
+        #: is shove or fold, and an all-in against us is priced against the
+        #: solved range. Off by default until a duel and a burst have gated it.
+        self.pushfold_primary = pushfold_primary and self.short_ranges is not None
         self.stats = Stats()
         self.probe: List = []
         #: Set by the client at match start; read by the one adjustment below.
@@ -288,6 +294,11 @@ class ArenaPlayer:
     #: the wrong model. The table itself is solved to 20bb so the boundary can
     #: move on a measurement rather than on a rebuild.
     SHORT_STACK_MAX_BB = 14.0
+    #: Where the exact solution replaces the tree rather than covering its
+    #: misses. The 5 and 8bb rungs are one-raise trees, so a shove over our
+    #: open is always off the tree there, and at this depth shove-or-fold
+    #: gives up almost nothing to the full game.
+    PUSHFOLD_PRIMARY_MAX_BB = 8.0
     #: The three-bet-into-a-folder read fires only this deep, so a four-bet
     #: can be folded to without having committed the stack.
     THREE_BET_MIN_BB = 30.0
@@ -429,6 +440,12 @@ class ArenaPlayer:
                     choice = answer
                     short_stack = "short-stack solution"
                     self.stats.short_stack_answers += 1
+        if self.pushfold_primary and not board and hand.effective_bb <= self.PUSHFOLD_PRIMARY_MAX_BB:
+            answer = self._pushfold_answer(hole, hand.effective_bb, node.history, arena, state, seat)
+            if answer is not None and answer != choice:
+                choice = answer
+                short_stack = "push/fold primary"
+                self.stats.pushfold_primary += 1
         river = None
         if self.river and len(board) == 5:
             try:
@@ -689,6 +706,31 @@ class ArenaPlayer:
         if calls is None:
             return None
         return CHECK_CALL if calls else FOLD
+
+    def _pushfold_answer(self, hole, effective_bb: float, history: str, mask, state, seat: int):
+        """
+        The exact solution's move at a short stack, or None where it has none.
+
+        Two spots only. Facing an all-in, the same pricing `_short_stack_answer`
+        gives a miss. First to act in the small blind, the solved shoving range:
+        shove it, fold the rest. Everything else (a limp or a small raise from
+        the small blind, anything postflop) stays with the tree, because the
+        solution never saw those lines.
+        """
+        answer = self._short_stack_answer(hole, (), effective_bb, mask, state, seat)
+        if answer is not None:
+            return answer
+        if history != "" or not mask[ALL_IN] or not mask[FOLD]:
+            return None
+        if any(a.get("seat") == seat and a.get("phase") == "preflop"
+               and not str(a.get("action", "")).startswith("post")
+               for a in state.get("action_history") or []):
+            return None
+        row = self.short_ranges._row(effective_bb)
+        klass = self.short_ranges.class_of(hole)
+        if row is None or klass is None:
+            return None
+        return ALL_IN if self.short_ranges.shove[row][klass] else FOLD
 
     def _fallback(self, solver: Solver, hole, board, mask, state) -> int:
         """A policy for a node the strategy never stored; see `fallback_choice`."""

@@ -91,6 +91,7 @@ def build(ladder_dir: str, flags: str, label: str, rng: np.random.Generator,
                          river_shove_companion="--river-shove-companion" in flags,
                          stack_cap="--stack-cap" in flags,
                          short_solution="--no-short-solution" not in flags,
+                         pushfold_primary="--pushfold-primary" in flags,
                          river="--river-solve" in flags)
     if profiles_path:
         player.profiles = Profiles(profiles_path, sequential="--sequential-triggers" in flags,

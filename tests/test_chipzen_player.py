@@ -669,3 +669,50 @@ def test_a_profile_since_date_drops_an_opponent_s_older_matches(tmp_path, monkey
     assert p.rows["wsp"]["hands"] == 3                                               # others untouched
     monkeypatch.setattr(Profiles, "SINCE_FILE", str(tmp_path / "absent.json"))
     assert Profiles(str(tmp_path / "opp.json")).rebuild(str(logs)).rows["Blueprint"]["hands"] == 7   # no file: as before
+
+
+def short_open(hole):
+    """8bb effective, first to act in the small blind: shove or fold under the exact solution."""
+    return {"hand_number": 30, "phase": "preflop", "board": [], "your_hole_cards": hole,
+            "pot": 150, "your_stack": 750, "opponent_stacks": [700], "to_call": 50,
+            "min_raise": 200, "max_raise": 750, "action_history": blinds()}
+
+
+@pytest.fixture(scope="module")
+def pushfold_player():
+    return ArenaPlayer([SHIPPED], np.random.default_rng(3), pushfold_primary=True)
+
+
+def test_push_fold_primary_shoves_the_solved_range_and_folds_the_rest(pushfold_player):
+    """
+    At 8bb the small blind's first move is the solution's: shove the 62% of
+    hands in its range, fold the rest, and leave limps and small raises to
+    trees that were never solved for this depth.
+    """
+    shoved = pushfold_player.decide(short_open(["Kh", "6d"]), ["fold", "call", "raise"], 0)
+    folded = pushfold_player.decide(short_open(["7h", "2d"]), ["fold", "call", "raise"], 0)
+    assert shoved["action"] == "raise" and shoved["params"]["amount"] == 750, shoved
+    assert folded["action"] == "fold", folded
+    for out in (shoved, folded):
+        assert out["record"]["adjusted"] == "push/fold primary"
+
+
+def test_push_fold_primary_prices_an_all_in_the_tree_could_answer(pushfold_player):
+    """An open shove into the big blind is on every tree; the solution answers it anyway."""
+    state = {"hand_number": 31, "phase": "preflop", "board": [], "your_hole_cards": ["7h", "2d"],
+             "pot": 900, "your_stack": 700, "opponent_stacks": [0], "to_call": 700,
+             "min_raise": 0, "max_raise": 0, "action_history": blinds() + [entry(0, "raise", 800)]}
+    assert pushfold_player.decide(state, ["fold", "call"], 1)["action"] == "fold"
+    state["your_hole_cards"] = ["Ah", "Kd"]
+    assert pushfold_player.decide(state, ["fold", "call"], 1)["action"] == "call"
+
+
+def test_push_fold_primary_is_off_by_default_and_stays_out_of_deep_and_postflop_play(player, pushfold_player):
+    assert not player.pushfold_primary
+    deep = short_open(["7h", "2d"])
+    deep.update(your_stack=1950, opponent_stacks=[1900], max_raise=1950)     # 20bb
+    flop = short_open(["7h", "2d"])
+    flop.update(phase="flop", board=["Qs", "7h", "3d"], to_call=0, min_raise=100,
+                action_history=blinds() + [entry(0, "call", 50), entry(1, "check", 0)])
+    for state, legal, seat in ((deep, ["fold", "call", "raise"], 0), (flop, ["check", "raise"], 1)):
+        assert pushfold_player.decide(state, legal, seat)["record"]["adjusted"] != "push/fold primary"
