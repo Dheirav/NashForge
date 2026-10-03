@@ -669,3 +669,14 @@ def test_a_profile_since_date_drops_an_opponent_s_older_matches(tmp_path, monkey
     assert p.rows["wsp"]["hands"] == 3                                               # others untouched
     monkeypatch.setattr(Profiles, "SINCE_FILE", str(tmp_path / "absent.json"))
     assert Profiles(str(tmp_path / "opp.json")).rebuild(str(logs)).rows["Blueprint"]["hands"] == 7   # no file: as before
+
+
+def test_never_calls_needs_a_real_fold_or_raise_bot_not_a_near_half_caller():
+    # 3 Oct: the read fired on Dronev4 at a 46% call share and cost 10 points on its copy; it was written for 34%.
+    from chipzen.opponents import Profiles
+    p = Profiles("/nonexistent/opp.json", sequential=True)
+    p.rows["dronelike"] = {"bets_faced": 105, "folds": 38, "calls": 31, "raises": 36, "hands": 300}
+    p.rows["blueprint14sep"] = {"bets_faced": 400, "folds": 289, "calls": 38, "raises": 73, "hands": 400}
+    p.rows["oldblueprint"] = {"bets_faced": 1366, "folds": 1005, "calls": 39, "raises": 322, "hands": 1500}
+    assert not p.never_calls("dronelike")
+    assert p.never_calls("blueprint14sep") and p.never_calls("oldblueprint")
