@@ -35,12 +35,12 @@ betting. It never reads ``state.hole`` for the player it is exploiting.
 """
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Dict, Hashable, List, Optional, Sequence, Tuple
 
 import numpy as np
 
-from abstraction.betting import ALL_IN, CHECK_CALL, FOLD
+from abstraction.betting import ALL_IN, CHECK_CALL, FOLD, raise_sizes_at
 from abstraction.equity import FULL_DECK
 from abstraction.translation import translate, translation_distribution
 from engine.hand_eval_fast import evaluate_hand_fast
@@ -60,9 +60,14 @@ class Move:
 
     Exactly one field is set. ``fraction`` carries a raise the abstraction does
     not have, which must be translated before an opponent can be asked about it.
+
+    ``probe`` marks a raise made where the tree's menu is all-in only. It is
+    translated the way the live bridge translates it rather than the way LBR
+    translates its other sizes, because that mapping is the thing being probed.
     """
     action: Optional[int]
     fraction: Optional[float]
+    probe: bool = False
 
 
 @dataclass(frozen=True)
@@ -71,6 +76,10 @@ class LBRResult:
     hands: int
     mean: float
     stderr: float
+    #: Per-hand results, in hand order, so two runs on the same paired seed can
+    #: be differenced hand by hand. Not compared: two results are the same
+    #: measurement when their summaries agree.
+    values: Optional[np.ndarray] = field(default=None, repr=False, compare=False)
 
     @property
     def ci95(self) -> tuple:
@@ -129,7 +138,8 @@ class LocalBestResponse:
     def __init__(self, game, strategy: Dict[Hashable, np.ndarray],
                  rollout_samples: int = 60, candidates: int = 32,
                  bet_sizes: Sequence[float] = DEFAULT_BET_SIZES,
-                 trace: Optional[list] = None):
+                 trace: Optional[list] = None,
+                 offtree_third_raise: Sequence[float] = ()):
         self.game = game
         self.strategy = strategy
         self.rollout_samples = rollout_samples
@@ -143,8 +153,118 @@ class LocalBestResponse:
         #: strength estimate draws from its own generator, so tracing does not
         #: change the hands played.
         self.trace = trace
+        #: Pot fractions LBR may raise where the tree offers only all-in. Our
+        #: (4, 2, 1) rungs have that at the third raise of a street, and the
+        #: live bridge reads any raise there as all-in, so a 0.4 pot raise
+        #: buys the fold equity of a shove at a fraction of the risk. LBR's own
+        #: sizes cannot reach it: they are translated onto the tree's sized
+        #: raises, and at that depth there are none. Empty leaves every hand
+        #: exactly as it was.
+        self.offtree_third_raise = tuple(float(f) for f in offtree_third_raise)
+        #: The bridge's view of the hand in progress (a ``chipzen.bridge.Hand``)
+        #: while probes are on, so its pseudo all-in record and street re-reads
+        #: are the bridge's own and not a copy of them.
+        self._bridge = None
+        #: Counts for the report: how often a probe was made and answered, and
+        #: how the strategy was asked after a collapsed street.
+        self.probe_stats = {"probes": 0, "folded": 0, "called": 0,
+                            "collapsed_streets": 0, "alt_hits": 0, "alt_misses": 0}
 
     # ------------------------------------------------------------------
+    # The live bridge's reading of a probe, through its own functions.
+
+    def _probe_node(self, state, me: int) -> bool:
+        """
+        True where LBR may probe: the tree's menu at this depth is all-in only,
+        and LBR has chips for a raise that is not one.
+        """
+        if not self.offtree_third_raise:
+            return False
+        street_actions = state.history.split("/")[-1]
+        depth = sum(1 for a in street_actions if a in "2345")
+        if raise_sizes_at(self.game.raise_cap, depth, state.street) != (ALL_IN,):
+            return False
+        return ALL_IN in self.game.legal_actions(state)
+
+    def _probe_cost(self, state, me: int, fraction: float) -> Optional[int]:
+        """Chips a probe costs, or None when it would be a real all-in anyway."""
+        cost = self.game._raise_cost(state, me, fraction)
+        return None if cost >= state.stacks[me] else cost
+
+    def _bridge_hand(self, me: int):
+        from chipzen.bridge import Hand
+        from slumbot.bridge import Node
+        start = [self.game.starting_stack, self.game.starting_stack]
+        return Hand(node=Node(), seat=1 - me, big_blind=self.game.big_blind,
+                    start_stacks=start)
+
+    def _bridge_perceive(self, state, me: int, fraction: float, hand,
+                         rng: np.random.Generator) -> int:
+        """
+        What the live bridge reads this raise as, from ``chipzen.bridge._as_abstract``.
+
+        The bridge sees chips, not a fraction, so the fraction it is handed is
+        recomputed from the real cost the way ``replay`` computes it from the
+        arena's levels; the ceiling is the stack the bettor had when the street
+        began, which is what the bridge's ``start - prior`` comes to.
+        """
+        from chipzen.bridge import _as_abstract
+        opponent = 1 - me
+        cost = self.game._raise_cost(state, me, fraction)
+        to_call = max(state.committed[opponent] - state.committed[me], 0)
+        pot_after_call = sum(state.contributions) + to_call
+        seen = (cost - to_call) / pot_after_call if pot_after_call else 0.0
+        level = state.committed[me] + cost
+        ceiling = state.committed[me] + state.stacks[me]
+        node = hand.node
+        node.history = state.history
+        node.raises_this_street = sum(1 for a in state.history.split("/")[-1] if a in "2345")
+        return _as_abstract(seen, level, ceiling, node, self.game.raise_cap, hand, rng)
+
+    def _street_closes(self, state) -> None:
+        """A street is about to be dealt: let the bridge re-read it (``_close_street``)."""
+        if self._bridge is None:
+            return
+        from chipzen.bridge import _close_street
+        self._bridge.node.history = state.history
+        before = self._bridge.collapsed
+        _close_street(self._bridge, self.game.raise_cap)
+        self.probe_stats["collapsed_streets"] += self._bridge.collapsed - before
+
+    def _alt_history(self, history: str) -> Optional[str]:
+        """
+        ``history`` with the bridge's collapsed streets re-read, or None.
+
+        The same splice ``replay`` applies to its own history once it has
+        walked the hand; the edits sit before the current street, so they
+        apply to any continuation of the history they were made on.
+        """
+        if self._bridge is None or not self._bridge._edits:
+            return None
+        alt = history
+        for position, replacement in sorted(self._bridge._edits, reverse=True):
+            alt = alt[:position] + replacement + alt[position + 2:]
+        return alt
+
+    def _policy(self, bucket, history: str, num_actions: int) -> Optional[np.ndarray]:
+        """
+        The strategy's answer as the live player would look it up.
+
+        The true history first. After a collapsed street it is a line the tree
+        treats as ended, so the player asks again on the re-read history
+        (``ChipzenPlayer.decide``, the "collapsed" stage). The companion solver
+        it tries in between is not modelled: LBR measures one strategy.
+        """
+        probabilities = self.strategy.get(f"{bucket}|{history}")
+        if probabilities is not None and probabilities.size == num_actions:
+            return probabilities
+        alt = self._alt_history(history)
+        if alt is None:
+            return None
+        probabilities = self.strategy.get(f"{bucket}|{alt}")
+        if probabilities is None or probabilities.size != num_actions:
+            return None
+        return probabilities
 
     def _deal_range(self, state, me: int, rng: np.random.Generator) -> Range:
         """
@@ -208,11 +328,7 @@ class LocalBestResponse:
     def _action_probabilities(self, candidate_range: Range, index: int,
                               state, num_actions: int) -> Optional[np.ndarray]:
         """How a given candidate hand would act here, or None if unmodelled."""
-        probabilities = self.strategy.get(
-            f"{candidate_range.buckets[index]}|{state.history}")
-        if probabilities is None or probabilities.size != num_actions:
-            return None
-        return probabilities
+        return self._policy(candidate_range.buckets[index], state.history, num_actions)
 
     def _update_belief(self, candidate_range: Range, state,
                        action_index: int) -> None:
@@ -371,8 +487,14 @@ class LocalBestResponse:
 
     def _choose(self, state, me: int, candidate_range: Range,
                 rng: np.random.Generator) -> "Move":
+        """The move with the highest one-step value; see :meth:`_candidates`."""
+        moves, values = self._candidates(state, me, candidate_range, rng)
+        return moves[int(np.argmax(values))]
+
+    def _candidates(self, state, me: int, candidate_range: Range,
+                    rng: np.random.Generator) -> Tuple[List["Move"], List[float]]:
         """
-        The move with the highest one-step value.
+        Every move LBR considers here, with its one-step value.
 
         Folding is worth losing what we already put in. Any other move is valued
         by rolling the hand out to showdown, plus — for a raise — the chance the
@@ -447,7 +569,19 @@ class LocalBestResponse:
                 moves.append(Move(None, fraction))
                 values.append(priced(after, folds_each))
 
-        return moves[int(np.argmax(values))]
+        if self._probe_node(state, me):
+            # Priced against a scratch copy of the bridge's hand, so weighing a
+            # probe records nothing; only the one played is recorded.
+            for fraction in self.offtree_third_raise:
+                if self._probe_cost(state, me, fraction) is None:
+                    continue
+                perceived = self._bridge_perceive(state, me, fraction,
+                                                  self._bridge_hand(me), rng)
+                after = self.game.raise_by_fraction(state, fraction, perceived)
+                moves.append(Move(None, fraction, probe=True))
+                values.append(priced(after, self._fold_probabilities(after, candidate_range)))
+
+        return moves, values
 
     def _apply_move(self, state, move: "Move", rng: np.random.Generator):
         """
@@ -461,6 +595,14 @@ class LocalBestResponse:
         if move.fraction is None:
             return self.game.next_state(state, move.action)
 
+        if move.probe:
+            me = self.game.current_player(state)
+            if self._bridge is None:
+                self._bridge = self._bridge_hand(me)
+            perceived = self._bridge_perceive(state, me, move.fraction, self._bridge, rng)
+            self.probe_stats["probes"] += 1
+            return self.game.raise_by_fraction(state, move.fraction, perceived)
+
         perceived, sizes = self._abstract_raises(self.game.legal_actions(state))
         index = translate(sizes, move.fraction, rng)
         return self.game.raise_by_fraction(state, move.fraction, perceived[index])
@@ -468,28 +610,49 @@ class LocalBestResponse:
     # ------------------------------------------------------------------
 
     def play(self, hands: int, rng: Optional[np.random.Generator] = None,
-             alternate_seats: bool = True) -> LBRResult:
-        """Play ``hands`` hands as the exploiter and report the average won."""
+             alternate_seats: bool = True,
+             paired_seed: Optional[int] = None) -> LBRResult:
+        """
+        Play ``hands`` hands as the exploiter and report the average won.
+
+        With ``paired_seed`` each hand draws from its own generators, one for
+        the cards and one for every decision, both seeded by the hand's index.
+        Two runs that differ only in a menu then play the same cards, and the
+        same decisions until the first one that differs, so their per-hand
+        difference is zero wherever the change was never used. Without it a
+        single generator is shared, as it always was, and a change anywhere
+        reshuffles every later deal.
+        """
         rng = rng if rng is not None else np.random.default_rng()
         outcomes = []
-        for _ in range(hands):
-            if alternate_seats:
-                outcomes.append((self._one(0, rng) + self._one(1, rng)) / 2.0)
+        for hand in range(hands):
+            if paired_seed is not None:
+                def one(seat):
+                    return self._one(seat, np.random.default_rng([paired_seed, hand, seat, 1]),
+                                     np.random.default_rng([paired_seed, hand, seat, 0]))
             else:
-                outcomes.append(self._one(0, rng))
+                def one(seat):
+                    return self._one(seat, rng)
+            if alternate_seats:
+                outcomes.append((one(0) + one(1)) / 2.0)
+            else:
+                outcomes.append(one(0))
 
         values = np.asarray(outcomes, dtype=np.float64)
         stderr = (values.std(ddof=1) / np.sqrt(values.size)
                   if values.size > 1 else float("nan"))
-        return LBRResult(values.size, float(values.mean()), float(stderr))
+        return LBRResult(values.size, float(values.mean()), float(stderr), values)
 
-    def _one(self, me: int, rng: np.random.Generator) -> float:
+    def _one(self, me: int, rng: np.random.Generator,
+             deal_rng: Optional[np.random.Generator] = None) -> float:
         """One hand with LBR in seat ``me``; returns chips won by LBR."""
         game = self.game
+        deal_rng = deal_rng if deal_rng is not None else rng
         state = game.initial_state()
         candidate_range = None
         guard = 0
         records, awaiting = [], None
+        self._bridge = None
 
         while not game.is_terminal(state):
             guard += 1
@@ -497,7 +660,9 @@ class LocalBestResponse:
                 raise RuntimeError(f"hand did not terminate: {state.history!r}")
 
             if game.is_chance(state):
-                state = game.next_state(state, game.sample_chance(state, rng))
+                if state.hole:
+                    self._street_closes(state)
+                state = game.next_state(state, game.sample_chance(state, deal_rng))
                 if candidate_range is None and state.hole:
                     candidate_range = self._deal_range(state, me, rng)
                 continue
@@ -514,6 +679,9 @@ class LocalBestResponse:
                               "raise": bool(state.committed[1 - me] > state.committed[me]),
                               "pot_bb": sum(state.contributions) / game.big_blind,
                               "equity": float(self._win_probability(state, me, candidate_range, own))}
+                    if move.probe:
+                        record["probe"] = True
+                        record["depth"] = sum(1 for a in state.history.split("/")[-1] if a in "2345")
                 state = self._apply_move(state, move, rng)
                 if record is not None:
                     record["perceived"] = int(state.history[-1])       # the size the strategy saw
@@ -521,11 +689,20 @@ class LocalBestResponse:
                     awaiting = record
                 continue
 
-            key = game.information_set(state, player)
-            probabilities = self.strategy.get(key)
+            if self._bridge is None:
+                key = game.information_set(state, player)
+                probabilities = self.strategy.get(key)
+            else:
+                probabilities = self._policy(game._bucket(state, player), state.history, len(actions))
+                if self._alt_history(state.history) is not None:
+                    self.probe_stats["alt_hits" if probabilities is not None else "alt_misses"] += 1
             if probabilities is None or probabilities.size != len(actions):
                 probabilities = np.full(len(actions), 1.0 / len(actions))
             index = int(rng.choice(len(actions), p=probabilities))
+            if self._bridge is not None and state.history.endswith(str(ALL_IN)) \
+                    and self._bridge.pseudo_allins \
+                    and self._bridge.pseudo_allins[-1][0] == len(state.history) - 1:
+                self.probe_stats["folded" if actions[index] == FOLD else "called"] += 1
             if awaiting is not None:
                 answer = actions[index]
                 awaiting["answer"] = "fold" if answer == FOLD else ("call" if answer == CHECK_CALL else "raise")
@@ -545,7 +722,9 @@ def lbr_value(game, strategy: Dict[Hashable, np.ndarray], hands: int = 2000,
               rng: Optional[np.random.Generator] = None,
               rollout_samples: int = 60, candidates: int = 32,
               bet_sizes: Sequence[float] = DEFAULT_BET_SIZES,
-              trace: Optional[list] = None) -> LBRResult:
+              trace: Optional[list] = None,
+              offtree_third_raise: Sequence[float] = (),
+              paired_seed: Optional[int] = None) -> LBRResult:
     """
     Lower bound on the exploitability of ``strategy``, in chips per hand.
 
@@ -556,4 +735,5 @@ def lbr_value(game, strategy: Dict[Hashable, np.ndarray], hands: int = 2000,
     exploiter lost money, so the bound is slack and says nothing at all.
     """
     return LocalBestResponse(game, strategy, rollout_samples, candidates,
-                             bet_sizes, trace).play(hands, rng)
+                             bet_sizes, trace, offtree_third_raise).play(
+                                 hands, rng, paired_seed=paired_seed)
