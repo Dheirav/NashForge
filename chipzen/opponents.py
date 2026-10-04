@@ -86,6 +86,12 @@ OVER_FOLD_MAX_RAISE = 0.15
 #: re-raise at every depth, where any two break even at about 62%.
 RERAISE_MIN = 60
 EQUILIBRIUM_CALL_SHARE = 0.5
+#: "Never calls" fires below this share of calls among the non-fold answers, in both of its rules. It was CALL_FLOOR
+#: and EQUILIBRIUM_CALL_SHARE (0.5), which on 3 Oct fired on bots calling 46 to 48% (Dronev4, drone, LazerTank): on
+#: Dronev4's copy the read cost 9.9 points (59.0 on, 68.9 off, 20,000 matches), and in the logs its 12 firings on
+#: Shadow (59% now) cost 19,896 chips while its 650 on old Blueprint saved 9,979. 0.35 keeps Blueprint as measured
+#: on 14 Sept (0.34, the profile the read was written for) and drops the near-half callers.
+NEVER_CALL_SHARE = 0.35
 
 
 def _private_overrides() -> dict:
@@ -365,11 +371,11 @@ class Profiles:
             return False
         answered = row["calls"] + row["raises"]
         if self.sequential and answered >= SEQ_MIN_OBSERVED // 2 and \
-                _upper_bound(row["calls"], answered) < EQUILIBRIUM_CALL_SHARE:
+                _upper_bound(row["calls"], answered) < NEVER_CALL_SHARE:
             return True
         if row["bets_faced"] < MIN_OBSERVED:
             return False
-        return answered >= 40 and row["calls"] / answered < CALL_FLOOR
+        return answered >= 40 and row["calls"] / answered < NEVER_CALL_SHARE
 
     def save(self) -> None:
         os.makedirs(os.path.dirname(self.path) or ".", exist_ok=True)
