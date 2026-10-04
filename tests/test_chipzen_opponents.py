@@ -137,3 +137,56 @@ def test_the_sizing_tell_needs_both_halves():
     assert on.big_bets_are_value("poet")
     assert not on.big_bets_are_value("nit")
     assert not profile().big_bets_are_value("poet")
+
+
+def _match_log(directory, opponent="stranger", hands=3):
+    """A minimal logged match: we raise preflop each hand and the opponent calls."""
+    import json
+    rows = [{"frame": "match_start", "seat": 0, "at": 1_800_000_000,
+             "seats": [{"display_name": "us", "is_self": True}, {"display_name": opponent, "is_self": False}]}]
+    for h in range(1, hands + 1):
+        rows.append({"frame": "round_start", "state": {"stacks": [10000, 10000]}})
+        rows.append({"frame": "round_result", "result": {"hand_number": h, "stacks": [10100, 9900], "action_history": [
+            {"seat": 0, "action": "post_small_blind", "amount": 50, "phase": "preflop"},
+            {"seat": 1, "action": "post_big_blind", "amount": 100, "phase": "preflop"},
+            {"seat": 0, "action": "raise", "amount": 300, "phase": "preflop"},
+            {"seat": 1, "action": "call", "amount": 200, "phase": "preflop"}]}})
+    (directory / "m1.jsonl").write_text("\n".join(json.dumps(r) for r in rows) + "\n")
+
+
+def test_every_start_counts_the_live_hands_once_not_once_more(tmp_path):
+    """
+    4 Oct: the rebuild started from the saved row, which already held the live
+    hands, so each bot start added them again (Blueprint +2,916 hands a start
+    with no new match). Three starts in a row must leave the row where one did.
+    """
+    import json
+    logs = tmp_path / "logs"; logs.mkdir()
+    _match_log(logs, hands=3)
+    path = tmp_path / "opponents.json"
+    base = {"bets_faced": 500, "folds": 100, "calls": 350, "raises": 50, "hands": 600, "net": 0,
+            "by_history": {"preflop:Ur": {"call": 350}}, "scouted": True}
+    path.write_text(json.dumps({"stranger": dict(base, scout_base=dict(base))}))
+    seen = []
+    for _ in range(3):
+        p = Profiles(str(path)).rebuild(str(logs))
+        p.save()
+        row = p.rows["stranger"]
+        seen.append((row["hands"], row["bets_faced"], row["calls"], row["net"], row["by_history"]["preflop:Ur"]["call"]))
+    assert seen[0] == (603, 503, 353, 300, 353)               # the scout's counts plus the three live hands, once
+    assert seen[1] == seen[0] and seen[2] == seen[0]
+    assert Profiles(str(path)).rows["stranger"]["scout_base"]["hands"] == 600
+
+
+def test_a_row_from_before_the_fix_stops_growing(tmp_path):
+    """A saved row with no `scout_base` becomes its own base once, then holds still."""
+    import json
+    logs = tmp_path / "logs"; logs.mkdir()
+    _match_log(logs, hands=2)
+    path = tmp_path / "opponents.json"
+    path.write_text(json.dumps({"stranger": {"bets_faced": 500, "folds": 100, "calls": 350, "raises": 50,
+                                             "hands": 600, "net": 0, "by_history": {}, "scouted": True}}))
+    first = Profiles(str(path)).rebuild(str(logs)); first.save()
+    second = Profiles(str(path)).rebuild(str(logs)); second.save()
+    assert first.rows["stranger"]["hands"] == second.rows["stranger"]["hands"] == 602
+    assert second.rows["stranger"]["scout_base"]["hands"] == 600

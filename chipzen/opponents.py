@@ -20,6 +20,7 @@ Nothing is guessed from a few hands. Below MIN_OBSERVED bets the profile is
 """
 from __future__ import annotations
 
+import copy
 import glob
 import json
 import os
@@ -408,8 +409,28 @@ class Profiles:
         starting point, and live hands accumulate on top of them: a round-robin
         meets each opponent once, so a read that starts at hand one is the
         only kind that helps.
+
+        The starting point is the row's `scout_base`, the scout's own counts,
+        never the saved row. Until 4 Oct it was the saved row, which already
+        held the live hands, so every start counted every live hand once more:
+        Blueprint's row grew by 2,916 hands a start with no new match, and the
+        scout's never-shrink rule then refused every fresh scout of it. A row
+        written before `scout_base` existed is frozen as its own base the first
+        time through, so it stops growing; re-seeding it from the scout cache
+        is what makes it clean.
         """
-        self.rows = {name: row for name, row in self.rows.items() if row.get("scouted")}
+        kept = {}
+        for name, row in self.rows.items():
+            if not row.get("scouted"):
+                continue
+            base = row.get("scout_base")
+            if base is None:
+                base = {k: v for k, v in row.items() if k != "scout_base"}
+            fresh = copy.deepcopy(base)
+            fresh["scouted"] = True
+            fresh["scout_base"] = base
+            kept[name] = fresh
+        self.rows = kept
         cutoff = self.since()
         seen = set()
         for directory in dirs:

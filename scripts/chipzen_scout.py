@@ -308,6 +308,9 @@ def main():
     parser.add_argument("--refresh", action="store_true", help="re-index the platform's match list")
     parser.add_argument("--seed-profiles", action="store_true",
                         help="write the scouted counts into results/chipzen/opponents.json")
+    parser.add_argument("--reseed", action="store_true",
+                        help="with --seed-profiles, replace a row even if the scout is smaller: the way to clean a row "
+                             "inflated by the pre-4 Oct rebuild, which counted live hands once per bot start")
     args = parser.parse_args()
     global PACE
     PACE = args.pace
@@ -358,7 +361,10 @@ def main():
             existing = rows.get(name, {})
             # Never shrink a row: a scout of the last 60 matches replaced wsp's 15,266 bets faced with 4,049 on
             # 30 Sept (and five rows on 28 Sept). A fresh, smaller sample is kept in scout/<name>.json instead.
-            if existing and row["bets_faced"] < (existing.get("bets_faced") or 0):
+            # Compared with the scout's own counts in the row (`scout_base`), not its total: the total holds our
+            # live hands as well, and until 4 Oct counted them once per bot start, so it outgrew every fresh scout.
+            if existing and not args.reseed and \
+                    row["bets_faced"] < ((existing.get("scout_base") or existing).get("bets_faced") or 0):
                 print(f"  kept {name}'s profile ({existing.get('bets_faced')} bets faced; this scout has "
                       f"{row['bets_faced']})", flush=True)
             elif not existing or existing.get("scouted"):
@@ -368,6 +374,7 @@ def main():
                               "river_bets": row["river_bets"], "river_bluffs": row["river_bluffs"],
                               "big_bets": row["big_bets"], "big_bets_air": row["big_bets_air"],
                               "small_bets": row["small_bets"], "small_bets_air": row["small_bets_air"]}
+                rows[name]["scout_base"] = {k: v for k, v in rows[name].items()}
                 tmp = PROFILES + ".tmp"
                 with open(tmp, "w") as handle:
                     json.dump(rows, handle, indent=1, sort_keys=True)
