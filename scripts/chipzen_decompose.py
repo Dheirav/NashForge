@@ -33,21 +33,24 @@ DEEP = {"50bb", "70bb", "100bb", "200bb"}
 
 
 def hand_nets(rows, seat):
-    """Net chips per hand for our seat, from the result frames' payouts and our own puts."""
-    net = {}
+    """
+    Net chips per hand for our seat: our stack after the hand minus before it.
+
+    Until 2 Oct this was payouts minus our puts, with a raise's amount taken as everything we had put in; it is the
+    street's total, so a raise forgot what we had put in on earlier streets and the net read too high in 26 to 34% of
+    hands, every printed row optimistic by about +100 to +190 chips a hand. The stack difference agrees with payouts
+    minus true contributions on all 21,450 logged hands (~/pokerbot-scratch/offtree/report.md).
+    """
+    net, before = {}, None
     for r in rows:
-        if r.get("frame") != "round_result":
-            continue
-        res = r["result"]
-        pay = sum(p["amount"] for p in res["payouts"] if p["seat"] == seat)
-        put = 0
-        for a in res.get("action_history", []):
-            if a["seat"] == seat:
-                if a["action"] in ("raise", "bet", "all_in"):
-                    put = a["amount"]              # a raise's amount is the total put in this street
-                elif a["action"] in ("call", "post_small_blind", "post_big_blind"):
-                    put += a["amount"]
-        net[res["hand_number"]] = pay - put
+        if r.get("frame") == "round_start":
+            before = (r.get("state") or {}).get("stacks")
+        elif r.get("frame") == "round_result":
+            res = r["result"]
+            after = res.get("stacks")
+            if before and after:
+                net[res["hand_number"]] = after[seat] - before[seat]
+            before = None
     return net
 
 
