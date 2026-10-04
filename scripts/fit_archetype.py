@@ -82,6 +82,33 @@ def distance(got, want):
     return sum(w * ((got.get(k) or 0) - (want.get(k) or 0)) ** 2 for k, w in COLUMNS.items())
 
 
+def search(start, want, measure_fn, rounds, rng, label="start", log=True):
+    """Hill-climb a parameter row towards `want`: perturb three parameters, keep the trial if it is closer.
+
+    `measure_fn(params, r)` returns the summarised statistics of `params` at round `r` (0 for the start). It is
+    a function so that a cheaper measurement than a duel against v5i can drive the same search: the copy
+    validator (`scripts/copy_validate.py`) scores a row at the real bot's own decision points instead."""
+    best = dict(start)
+    got = measure_fn(best, 0)
+    score = distance(got, want)
+    if log:
+        print(f"  start from {label}: distance {score:.4f}", flush=True)
+    started = time.time()
+    for r in range(1, rounds + 1):
+        trial = dict(best)
+        for key in rng.choice(list(trial), size=3, replace=False):
+            step = rng.normal(0, 0.06)
+            trial[key] = float(np.clip(trial[key] + step, 0.0 if key in PROBABILITIES else -0.3, 1.0))
+        got_t = measure_fn(trial, r)
+        d = distance(got_t, want)
+        if d < score:
+            best, score, got = trial, d, got_t
+        if log:
+            el = time.time() - started
+            print(f"  round {r}/{rounds}: distance {score:.4f}  {el:.0f}s, eta {(rounds - r) * el / r:.0f}s", flush=True)
+    return best, score, got
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("name")
@@ -103,23 +130,9 @@ def main():
     os.chdir(MAIN)
     opponent = build("results/cfr/ladder169l_v5i", "--deep-primary --stack-cap", "v5i",
                      np.random.default_rng(args.seed), None)
-    rng = np.random.default_rng(args.seed + 7)
-    best = dict(arch.PARAMS[args.base])
-    got = measure(best, opponent, args.matches, args.seed)
-    score = distance(got, want)
-    print(f"  start from {args.base}: distance {score:.4f}", flush=True)
-    started = time.time()
-    for r in range(1, args.rounds + 1):
-        trial = dict(best)
-        for key in rng.choice(list(trial), size=3, replace=False):
-            step = rng.normal(0, 0.06)
-            trial[key] = float(np.clip(trial[key] + step, 0.0 if key in PROBABILITIES else -0.3, 1.0))
-        got_t = measure(trial, opponent, args.matches, args.seed + r)
-        d = distance(got_t, want)
-        if d < score:
-            best, score, got = trial, d, got_t
-        el = time.time() - started
-        print(f"  round {r}/{args.rounds}: distance {score:.4f}  {el:.0f}s, eta {(args.rounds - r) * el / r:.0f}s", flush=True)
+    best, score, got = search(arch.PARAMS[args.base], want,
+                              lambda params, r: measure(params, opponent, args.matches, args.seed + r),
+                              args.rounds, np.random.default_rng(args.seed + 7), label=args.base)
     # A final, larger measurement of the chosen shape, so the table is not the lucky sample that won the search.
     got = measure(best, opponent, 4 * args.matches, args.seed + 999)
 
