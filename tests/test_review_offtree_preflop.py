@@ -439,4 +439,15 @@ def test_flag_off_decides_exactly_as_main(tmp_path, guard):
             o = stand.decide(state, ["fold", "call", "raise"], seat)
             out.append((o["action"], o["params"], o["record"]["adjusted"], o["record"]["choice"]))
         outs.append(out)
-    assert outs[0] == outs[1]
+    if not guard:
+        assert outs[0] == outs[1]
+        return
+    # With the guard on, the one intended difference is stack-cap's fix (merged 6 Oct): a bet that covers our stack
+    # is a real all-in, so the guard no longer calls it a misread. Any other difference is still a failure.
+    every = [s for s, _ in states] + [s for s, _ in states[:5]]
+    for i, (new, old) in enumerate(zip(outs[0], outs[1])):
+        if new == old:
+            continue
+        st = every[i]
+        assert int(st["to_call"]) >= int(st["your_stack"]), (i, new, old)
+        assert "priced a misread all-in" in old and "priced a misread all-in" not in new, (i, new, old)

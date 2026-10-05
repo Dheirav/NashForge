@@ -523,7 +523,8 @@ def test_the_first_rebuild_of_a_pre_fix_file_counts_as_main_did_and_the_second_n
         (tmp_path / f"{tag}.json").write_text(json.dumps(saved))
     old_p = old.Profiles(str(tmp_path / "old.json")).rebuild(str(logs))
     new_p = Profiles(str(tmp_path / "new.json")).rebuild(str(logs))
-    strip = lambda row: {k: v for k, v in row.items() if k != "scout_base"}  # noqa: E731
+    # by_size (fold-by-size, merged 6 Oct) is new data beside the old counts; the old counts must still match.
+    strip = lambda row: {k: v for k, v in row.items() if k not in ("scout_base", "by_size")}  # noqa: E731
     assert strip(new_p.rows["stranger"]) == strip(old_p.rows["stranger"])
     assert "live_only" not in new_p.rows and "live_only" not in old_p.rows   # a row not scouted is recounted
     old_p.save(), new_p.save()
