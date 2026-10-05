@@ -10,15 +10,15 @@
   "label": "hoops"
  },
  "arena_matches": 2000,
- "win_rate": 0.564,
- "stderr": 0.011088372288122365,
- "hands_per_match": 36.3205,
+ "win_rate": 0.598,
+ "stderr": 0.010963484847437881,
+ "hands_per_match": 39.0345,
  "seed": 7,
  "workers": 4,
  "a_stats": {
-  "decisions": 140313,
-  "misses": 823,
-  "consulted": 140313,
+  "decisions": 172571,
+  "misses": 526,
+  "consulted": 172571,
   "off_abstraction": 0,
   "companion_hits": 0,
   "river_shoves_to_companion": 0,
@@ -32,38 +32,44 @@
   "big_bets_believed": 0,
   "small_bets_called": 0,
   "river_failures": 0,
-  "fallbacks": 823,
-  "short_stack_answers": 71,
+  "river_oracle_ranges": 0,
+  "fallbacks": 526,
+  "short_stack_answers": 80,
   "reraises_believed": 0,
   "collapsed_hits": 0,
+  "river_bluffs_caught": 0,
+  "overfolders_bet": 0,
+  "reraises_defended": 0,
+  "misread_prices_called": 0,
+  "offtree_preflop_calls": 0,
   "miss_depths": {
-   "1": 35,
-   "2": 10
+   "1": 34,
+   "2": 2
   },
   "depths_used": {
-   "100bb": 42858,
-   "70bb": 25226,
-   "25bb": 12418,
-   "35bb": 18511,
-   "18bb": 8203,
-   "50bb": 25997,
-   "12bb": 3991,
-   "8bb": 1714,
-   "5bb": 1395
+   "100bb": 52129,
+   "50bb": 33853,
+   "70bb": 30700,
+   "35bb": 22877,
+   "5bb": 1260,
+   "25bb": 15183,
+   "18bb": 9880,
+   "12bb": 4748,
+   "8bb": 1941
   },
   "actions_sent": {
-   "call": 27716,
-   "raise": 52847,
-   "check": 35534,
-   "fold": 24216
+   "call": 31465,
+   "check": 59933,
+   "raise": 62175,
+   "fold": 18998
   },
-  "slowest_ms": 193.73723401804455
+  "slowest_ms": 55.00940198544413
  },
  "b_stats": {
-  "decisions": 165099,
+  "decisions": 198807,
   "misses": 0,
   "companion_hits": 0,
   "fallbacks": 0
  },
- "measured": "2026-09-24 04:36"
+ "measured": "2026-10-05 23:45"
 }
