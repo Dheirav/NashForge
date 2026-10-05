@@ -94,11 +94,13 @@ def build(ladder_dir: str, flags: str, label: str, rng: np.random.Generator,
                          river="--river-solve" in flags)
     if profiles_path:
         player.profiles = Profiles(profiles_path, sequential="--sequential-triggers" in flags,
-                                   scout_reads="--scout-reads" in flags)
+                                   scout_reads="--scout-reads" in flags,
+                                   posteriors="--posterior-reads" in flags)
     player.aggro_reads = "--aggro-reads" in flags
     player.reraise_defence = "--reraise-defence" in flags
     player.withhold_preflop = "--no-preflop-withhold" not in flags
     player.price_misread = "--price-misread" in flags
+    player.size_aware_bluffs = "--size-aware-bluffs" in flags
     if "--river-blend" in tokens:
         player.river_blend = float(tokens[tokens.index("--river-blend") + 1])
     if "--river-iterations" in tokens:

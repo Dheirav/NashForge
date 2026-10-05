@@ -130,16 +130,19 @@ async def _main(args, config):
                          short_solution=not args.no_short_solution)
     player.withhold_preflop = not args.no_preflop_withhold
     player.price_misread = args.price_misread
+    player.size_aware_bluffs = args.size_aware_bluffs
     player.profiles = Profiles(os.path.join(ROOT, "results", "chipzen", "opponents.json"),
                                sequential=args.sequential_triggers, bankroll=args.exploit_bankroll,
-                               scout_reads=args.scout_reads) \
+                               scout_reads=args.scout_reads, posteriors=args.posterior_reads) \
         .rebuild(args.matches_dir, os.path.join(args.log_dir, "matches"))
     player.profiles.save()
     for name, row in sorted(player.profiles.rows.items(), key=lambda kv: -kv[1]["bets_faced"])[:6]:
         rate, n = player.profiles.fold_to_bet(name)
+        upper = player.profiles.fold_floor_upper(name) if args.posterior_reads else None
         logging.info("opponent %-16s %3d hands, %3d bets faced, fold-to-bet %s%s", name, row["hands"], n,
                      f"{rate:.0%}" if rate is not None else "unknown",
-                     "  (station: bluffs withheld)" if player.profiles.never_folds(name) else "")
+                     ("  (station: bluffs withheld" + (f" that need over {upper:.0%} folds)" if upper is not None
+                                                        else ")")) if player.profiles.never_folds(name) else "")
     logging.info("ladder: %s", ", ".join(f"{s.depth_bb:g}bb {s.schedule}" for s in player.ladder))
     logging.info("companions: %s", ", ".join(f"{s.depth_bb:g}bb {s.schedule}" for s in player.companions) or "none")
     logging.info("warm-up: %.2fs", player.warm_up())
@@ -151,9 +154,11 @@ async def _main(args, config):
         "stack_cap": bool(args.stack_cap),
         "purify": args.purify, "river_solve": bool(args.river_solve),
         "sequential_triggers": bool(args.sequential_triggers), "scout_reads": bool(args.scout_reads),
+        "posterior_reads": bool(args.posterior_reads),
         "exploit_bankroll": bool(args.exploit_bankroll),
         "withhold_preflop": player.withhold_preflop,
         "price_misread": player.price_misread,
+        "size_aware_bluffs": player.size_aware_bluffs,
         "ladder": [os.path.basename(p) for p in ladder],
         "companions": [os.path.basename(p) for p in companions],
     }
@@ -318,6 +323,13 @@ def main():
     parser.add_argument("--scout-reads", action="store_true",
                         help="use the two reads that need scouted counts: open into a blind that folds "
                              "to 70%% of opens, and believe the river bets of a bot that never bluffs")
+    parser.add_argument("--size-aware-bluffs", action="store_true",
+                        help="with --posterior-reads, withhold a bluff from a station only when its fold bound is under "
+                             "that bet's break-even (cost 1.2 points on the hoops copy, 5 Oct); off by default")
+    parser.add_argument("--posterior-reads", action="store_true",
+                        help="decide every read on a Beta posterior bound (population prior, within-match "
+                             "correlation) and withhold only bluffs whose size needs more folds than the "
+                             "opponent gives (docs/research/2026-10-05-posterior-reads.md); off by default")
     parser.add_argument("--no-preflop-withhold", action="store_true",
                         help="apply 'bluff withheld' after the flop only; before it, the solver's open stands "
                              "against a station (+0.8 to +1.6 points on the copies, 30 Sept); off by default")

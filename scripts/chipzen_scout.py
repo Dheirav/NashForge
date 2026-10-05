@@ -368,8 +368,10 @@ def main():
                 print(f"  kept {name}'s profile ({existing.get('bets_faced')} bets faced; this scout has "
                       f"{row['bets_faced']})", flush=True)
             elif not existing or existing.get("scouted"):
+                # `matches` lets the posterior reads count clustering from the real match count rather
+                # than hands over a typical match length (chipzen.opponents.matches_of).
                 rows[name] = {"bets_faced": row["bets_faced"], "folds": row["folds"], "calls": row["calls"],
-                              "raises": row["raises"], "hands": row["hands"], "net": 0,
+                              "raises": row["raises"], "hands": row["hands"], "matches": row["matches"], "net": 0,
                               "by_history": row["by_history"], "scouted": True,
                               "river_bets": row["river_bets"], "river_bluffs": row["river_bluffs"],
                               "big_bets": row["big_bets"], "big_bets_air": row["big_bets_air"],
