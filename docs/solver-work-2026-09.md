@@ -89,6 +89,14 @@ but is about a point stronger head to head (48.9 ± 0.7 for 20M against 60M, mat
 for v5m against v5h), and it removes rare bad nodes. Trials run at 20M; sets that will play get the
 60M polish.
 
+**10M against 20M (5 October).** On a 70bb (4,2,1) six-class self-play rung, 10M is level with 20M on
+the cross-tree gate (+0.3 ± 2.5 BB/100) and on paired LBR (+2.8 ± 16.5), so trials on trees of this
+size can stop at 10M, and an arena head to head with only that rung swapped agrees (50.1 ± 0.7 of 5,000
+matches). The one point the 60M polish bought was on 20-class histogram rungs, while the six-class v5x60
+read 49.4, so the polish is a rule for histogram sets. Bigger trees are different: the cap-2 deep rungs at 20M beat their 10M solves
+on the same tree by 3 to 6 BB/100, and cap-2 rungs kept improving to 100M. Details in
+`docs/research/2026-10-05-visit-counter.md`.
+
 **Discounted CFR is closed.** A grid on v5i's 70bb recipe, 10M, 60,000 hands on two seeds per pair
 (`results/cfr/lbr_grid_2026-09-28/`, head to heads in its `h2h.txt`):
 
