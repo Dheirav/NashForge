@@ -209,6 +209,12 @@ READS: List[dict] = [
          acts="facing a bet on a collapsed or misread all-in history, the solver folding: call at a real price of 25% "
               "or less with a hand that beats a random one half the time (--price-misread)",
          premises=[]),
+    # Behind --offtree-preflop, off by default. Also not a read: the range it prices against is the answering
+    # solution's own, not anything measured on the opponent.
+    dict(name="priced an off-tree raise", predicate=None,
+         acts="facing a preflop raise read as all-in while the bettor kept chips, the solver folding: call when "
+              "equity against the solution's range for that line beats the real price by 5 points (--offtree-preflop)",
+         premises=[]),
 ]
 
 

@@ -39,7 +39,8 @@ from typing import Dict, List, Optional, Sequence
 
 import numpy as np
 
-from abstraction.betting import ALL_IN, CHECK_CALL, FOLD, RAISE_ACTIONS, RAISE_HALF, RAISE_POT, schedule_from_args
+from abstraction.betting import (ALL_IN, CHECK_CALL, FOLD, RAISE_ACTIONS, RAISE_HALF, RAISE_POT, raise_sizes_at,
+                                 schedule_from_args)
 
 ACTION_NAMES = {FOLD: "fold", CHECK_CALL: "check/call", RAISE_HALF: "raise ½", RAISE_POT: "raise pot",
                 ALL_IN: "all-in"}       # for the log's `adjusted` field; other raises print as their index
@@ -91,6 +92,7 @@ class Stats:
     overfolders_bet: int = 0       # a flop or turn check turned into a half-pot bet
     reraises_defended: int = 0     # a fold of our open to a re-raise turned into a call
     misread_prices_called: int = 0  # a fold on a misread all-in turned into a call at the real price
+    offtree_preflop_calls: int = 0  # a fold to a preflop raise read as all-in called against the solution's range
     miss_depths: Dict[int, int] = field(default_factory=dict)
     depths_used: Dict[str, int] = field(default_factory=dict)
     actions_sent: Dict[str, int] = field(default_factory=dict)
@@ -282,6 +284,9 @@ class ArenaPlayer:
         #: keep the full bet. Off by default: it changes default play, so it plays only once the audit
         #: (scripts/audit_capped_price.py) and a burst have gated it.
         self.capped_price = False
+        #: Price a preflop raise read as all-in while the bettor kept chips (the small four-bet) against the
+        #: answering solution's own range for that line, and call a fold the equity pays for (5 Oct). Off unless asked for.
+        self.offtree_preflop = False
         #: Under --posterior-reads, withhold a bluff only when the station's fold bound is under that bet's break-even.
         #: Off on its own: on 5 Oct it cost 1.2 points on the hoops copy (52,181 withheld bluffs down to 35,121) while
         #: one overall fold rate stands in for the fold rate at each size, which no profile counts yet.
@@ -354,6 +359,13 @@ class ArenaPlayer:
     #: And only with a hand that beats a random hand this often, the same line
     #: the river bluff-catch uses: a misread is no reason to call with air.
     MISREAD_EQUITY = 0.5
+    #: The off-tree preflop answer calls when our equity against the solution's range for the raise beats the price
+    #: by this much. The call is not all in: about ninety blinds stay behind at 100bb, out of position half the time,
+    #: against a range that is ahead of us, so less than the full equity is realised, and the log audit scores each
+    #: call as if it were the last chip in, which flatters calling. On the main set's replay of every logged decision
+    #: (5 Oct) 0.05 fires 14 times, two of them small losses; 0 fires 25 and 0.08 keeps 6 (docs/research/
+    #: 2026-10-05-offtree-preflop.md).
+    OFFTREE_MARGIN = 0.05
 
     def solver_for(self, effective_bb: float) -> Solver:
         """Nearest rung in ratio, so 70bb goes to 100 rather than to 50 by a hair."""
@@ -427,6 +439,11 @@ class ArenaPlayer:
         #: The history the strategy that chose was actually asked about; the
         #: misread-price guard reads its last action.
         answered_history = node.history
+        #: Which solver that was, so the off-tree preflop answer reads its range from the same strategy.
+        answered_by = solver
+        #: The companion's own translation whenever one was asked, hit or miss: without it 453 companion
+        #: folds in the 5 Oct audit could not be judged, because the primary's history is not the one it answered.
+        companion_history = None
         if self.river_shove_companion and not missed and len(board) == 5 and to_call > 0 \
                 and node.history.endswith("5"):
             deep = self.companion_for(hand.effective_bb)
@@ -434,6 +451,7 @@ class ArenaPlayer:
                 deep_hand = replay(state, seat, self.rng, schedule=deep.schedule)
                 deep_mask = legal_mask(deep_hand.node, valid_actions, deep.schedule)
                 deep_before = deep.misses[0]
+                companion_history = deep_hand.node.history
                 answer = deep.agent(_shim(hole, board, to_call, int(state.get("your_stack") or 0)), 0, deep_mask, deep_hand.node.history)
                 if deep.misses[0] == deep_before:
                     river_shove = f"river shove: {ACTION_NAMES.get(choice, choice)} -> companion "
@@ -441,6 +459,7 @@ class ArenaPlayer:
                     choice = answer
                     companion_used = f"{deep.depth_bb:g}bb{deep.schedule}"
                     answered_history = deep_hand.node.history
+                    answered_by = deep
                     self.stats.river_shoves_to_companion += 1
         if missed:
             deep = self.companion_for(hand.effective_bb)
@@ -448,11 +467,13 @@ class ArenaPlayer:
                 deep_hand = replay(state, seat, self.rng, schedule=deep.schedule)
                 deep_mask = legal_mask(deep_hand.node, valid_actions, deep.schedule)
                 deep_before = deep.misses[0]
+                companion_history = deep_hand.node.history
                 choice = deep.agent(_shim(hole, board, to_call, int(state.get("your_stack") or 0)), 0, deep_mask,
                                     deep_hand.node.history)
                 if deep.misses[0] == deep_before:
                     companion_used = f"{deep.depth_bb:g}bb{deep.schedule}"
                     answered_history = deep_hand.node.history
+                    answered_by = deep
                     self.stats.companion_hits += 1
                     # The (4, 2) taper keeps only two-times-pot and all-in for
                     # a re-raise, so whenever it wants to raise it shoves. On
@@ -481,6 +502,7 @@ class ArenaPlayer:
                         choice = answer
                         companion_used = f"collapsed:{c_hand.alt_history}"
                         answered_history = c_hand.alt_history
+                        answered_by = candidate
                         self.stats.collapsed_hits += 1
                         break
             if companion_used is None:
@@ -488,6 +510,7 @@ class ArenaPlayer:
                 # The rule and the short-stack table price the arena's own pot,
                 # so no history of theirs can be misread.
                 answered_history = None
+                answered_by = None
                 answer = self._short_stack_answer(hole, board, hand.effective_bb, arena, state, seat)
                 if answer is None:
                     choice = self._fallback(solver, hole, board, arena, state)
@@ -516,6 +539,7 @@ class ArenaPlayer:
                 choice, missed, fell_back, companion_used = decision.choice, False, False, None
                 answered_history = node.history
                 river_solved = True
+                answered_by = solver
                 river = {"iterations": decision.iterations, "ms": round(decision.ms, 1),
                          "hands": decision.hands, "range": decision.range_source,
                          "strategy": {str(a): round(p, 3) for a, p in decision.distribution.items()}}
@@ -689,8 +713,27 @@ class ArenaPlayer:
             # 14 September. Any two cards call at these odds.
             choice = CHECK_CALL
             adjusted = "called for pot odds"
+        offtree = None
+        if self.offtree_preflop and not board and choice == FOLD and to_call > 0 and arena[CHECK_CALL] \
+                and adjusted == (river_shove or short_stack) and answered_by is not None \
+                and opponent_stack > 0 and to_call < int(state.get("your_stack") or 0) \
+                and str(answered_history or "").endswith(str(ALL_IN)) \
+                and self._unnamed_raise(answered_by, answered_history):
+            # A preflop raise the schedule cannot name at its depth (the live cap-2 rungs have only all-in at the
+            # third raise) was read as all-in, so the fold priced a shove of the whole stack. The arena's price
+            # is a fraction of that: 7 folds of 5 Oct's audit were small four-bets at 17 to 23 percent. No tree
+            # node matches the real size, so the real price is set against the range the same solution raises
+            # with on this line, which is the one model of the bettor the strategy itself implies.
+            # Both conditions on chips matter: the bettor kept some, and the call leaves us some. When their
+            # raise covers what we have left, the call puts us all in, so the tree's all-in is the bet we
+            # actually face and the fold priced it correctly.
+            offtree = self._offtree_price(answered_by, answered_history, hole, state)
+            if offtree is not None and offtree["equity"] >= offtree["price"] + self.OFFTREE_MARGIN:
+                choice = CHECK_CALL
+                adjusted = "priced an off-tree raise"
+                self.stats.offtree_preflop_calls += 1
         if self.price_misread and choice == FOLD and to_call > 0 and arena[CHECK_CALL] \
-                and adjusted == (river_shove or short_stack) and not river_solved \
+                and adjusted == (river_shove or short_stack) and not river_solved and offtree is None \
                 and self._misread(companion_used, answered_history, opponent_stack, to_call, mine):
             # The strategy folded on a history that is not the hand: either a
             # street re-read after a pseudo all-in (the tree's pot is then far
@@ -736,6 +779,15 @@ class ArenaPlayer:
             "legal": [int(m) for m in mask], "choice": int(choice),
             "sent": outgoing, "ms": round(elapsed, 2),
         }
+        # The history the answering strategy was asked about (None when the rule or the short-stack table
+        # answered), and the companion's own translation whenever one was asked. Both are short strings.
+        record["answered_history"] = answered_history
+        if companion_history is not None:
+            record["companion_history"] = companion_history
+        if hand.alt_history is not None:
+            record["alt_history"] = hand.alt_history
+        if offtree is not None:
+            record["offtree"] = offtree
         if withheld is not None:
             # The raise taken back. Without it, which bluffs a size-aware rule would have let through
             # could be answered only by reloading the rung that played (5 Oct audit).
@@ -816,6 +868,74 @@ class ArenaPlayer:
             return True
         covered = mine > 0 and to_call >= mine
         return opponent_stack > 0 and not covered and str(answered_history or "").endswith(str(ALL_IN))
+
+    def raise_reach(self, solver: Solver, history: str) -> Optional[np.ndarray]:
+        """
+        The bettor's range for a preflop line, as the solver plays it: per class of 169, the product of
+        the probabilities of each action the bettor took in `history`. None if no class reaches the line
+        (a one-raise tree never re-raises, so its range for a re-raise is empty). Memoised per solver and
+        line, since a line recurs every time an opponent repeats its sizing.
+        """
+        if self.short_ranges is None or not history or "/" in history:
+            return None
+        memo = self.__dict__.setdefault("_reach_memo", {})
+        key = (id(solver), history)
+        if key in memo:
+            return memo[key]
+        from engine.cards import Card
+        from evaluation.benchmark import _solver_actions
+        reach = np.ones(len(self.short_ranges.labels))
+        for i, label in enumerate(self.short_ranges.labels):
+            hole = [Card(label[0], "h"), Card(label[1], "h" if label.endswith("s") else "d")]
+            bucket = solver.abstraction.bucket(hole, [])
+            # Preflop the small blind acts first and the turns alternate, so the bettor took every
+            # second action counting back from the last.
+            for at in range(len(history) - 1, -1, -2):
+                prefix = history[:at]
+                facing = prefix == "" or prefix[-1] in "2345"
+                row = solver.strategy.get(f"{bucket}|{prefix}")
+                actions = _solver_actions(prefix, 1 if facing else 0, solver.schedule)
+                if row is not None and facing and row.size == 2:
+                    actions = [FOLD, CHECK_CALL]       # a stack-capped node, read as cfr_agent reads it
+                if row is None or len(actions) != row.size:
+                    reach[i] = 0.0
+                    break
+                reach[i] *= sum(float(p) for a, p in zip(actions, row) if a == int(history[at]))
+        found = reach if reach.sum() > 0 else None
+        if len(memo) >= 512:
+            memo.clear()
+        memo[key] = found
+        return found
+
+    @staticmethod
+    def _unnamed_raise(solver: Solver, history: str) -> bool:
+        """
+        Whether the last raise of `history` sits at a depth where the solver's schedule offers all-in and
+        nothing else, so a raise of any size had to be read as all-in. Only there is the solution's shove
+        range the range of the raise actually made. A pseudo all-in where sized raises exist is one at least
+        half again the largest of them, a big bet, and its price is close to the shove's anyway.
+        """
+        street = history.split("/")[-1]
+        depth = sum(1 for c in street[:-1] if int(c) in RAISE_ACTIONS)
+        return tuple(raise_sizes_at(solver.schedule, depth, history.count("/"))) == (ALL_IN,)
+
+    def _offtree_price(self, solver: Solver, history: str, hole, state: dict) -> Optional[dict]:
+        """
+        Our equity against the solution's range for the raise, and the real price, for the record. The call
+        is capped at our stack and their uncalled excess is taken out of the pot, as the price guard does.
+        """
+        reach = self.raise_reach(solver, history)
+        if reach is None:
+            return None
+        equity = self.short_ranges.equity_against(hole, reach)
+        if equity is None:
+            return None
+        to_call = int(state.get("to_call") or 0)
+        mine = int(state.get("your_stack") or 0)
+        called = min(to_call, mine) if mine > 0 else to_call
+        price = called / float(int(state.get("pot") or 0) - (to_call - called) + called)
+        return {"equity": round(equity, 4), "price": round(price, 4),
+                "range_share": round(float((self.short_ranges.weights * reach).sum()), 4), "line": history}
 
     @staticmethod
     def _top(solver: Solver) -> int:

@@ -131,6 +131,7 @@ async def _main(args, config):
     player.withhold_preflop = not args.no_preflop_withhold
     player.price_misread = args.price_misread
     player.capped_price = args.capped_price
+    player.offtree_preflop = args.offtree_preflop
     player.size_aware_bluffs = args.size_aware_bluffs
     player.profiles = Profiles(os.path.join(ROOT, "results", "chipzen", "opponents.json"),
                                sequential=args.sequential_triggers, bankroll=args.exploit_bankroll,
@@ -160,6 +161,7 @@ async def _main(args, config):
         "withhold_preflop": player.withhold_preflop,
         "price_misread": player.price_misread,
         "capped_price": player.capped_price,
+        "offtree_preflop": player.offtree_preflop,
         "size_aware_bluffs": player.size_aware_bluffs,
         "ladder": [os.path.basename(p) for p in ladder],
         "companions": [os.path.basename(p) for p in companions],
@@ -347,6 +349,10 @@ def main():
                              "that weigh a price on the chips we can call, the bettor's uncalled excess out of the "
                              "pot; changes default play, so off by default "
                              "until audited and burst (5 Oct review, scripts/audit_capped_price.py)")
+    parser.add_argument("--offtree-preflop", action="store_true",
+                        help="answer a fold to a preflop raise read as all-in while the bettor kept chips (the small "
+                             "four-bet at a cap-2 rung's third raise) at the real price, against the answering "
+                             "solution's own range for that line; off by default (5 Oct)")
     parser.add_argument("--stack-cap", action="store_true",
                         help="honour the trees' fold/call-only nodes in every lookup instead of "
                              "rebuilding the full action list and falling to the rule (19 Sept)")
