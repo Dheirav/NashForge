@@ -444,7 +444,11 @@ class Profiles:
         row = self.rows.get(name or "") or {}
         bets = row.get("river_bets", 0)
         if self.posteriors:
-            return bets >= NEVER_BLUFF_MIN and self.upper(name, "river_bluff") < NEVER_BLUFF_BOUND
+            # The exact zero `river_never_bluffs` keeps stands here too. The player asks that read only after
+            # this one, and a strong prior lifts a zero's bound over 0.10 (thirty bots bluffing 40 percent put 0 of
+            # 150 above it), so without this the pair would be stricter than main, which fires both on that zero.
+            zero = bets >= HONEST_RIVER_MIN and row.get("river_bluffs", 0) == 0
+            return bets >= NEVER_BLUFF_MIN and (zero or self.upper(name, "river_bluff") < NEVER_BLUFF_BOUND)
         return bets >= NEVER_BLUFF_MIN and row.get("river_bluffs", 0) / bets < NEVER_BLUFF_RATE
 
     def never_three_bets(self, name: Optional[str]) -> bool:

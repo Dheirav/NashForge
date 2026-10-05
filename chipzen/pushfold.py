@@ -89,7 +89,10 @@ class ShortStackRanges:
         Whether to call this all-in: the price against the range that shoved it.
 
         `pot` is the arena's, which already holds the shove; calling `to_call`
-        more plays for `pot + to_call`. `reraise` says the all-in came over a
+        more plays for `pot + to_call`. Under the arena player's --capped-price
+        both come in capped (`chipzen.player.capped_call`): a shove that covers
+        our stack is priced at our stack, with their excess out of the pot,
+        which is the effective-stack all-in the table was solved for. `reraise` says the all-in came over a
         raise of ours, in which case the range that shoved is the solution's
         calling range, which is much the tighter of the two; an open shove is
         priced against its shoving range. None means the table cannot answer

@@ -154,7 +154,23 @@ def strength_class(abstraction, hole, board) -> int:
     return bucket
 
 
-def fallback_choice(bucket: int, top: int, mask, pot: int, to_call: int) -> int:
+def capped_call(pot: int, to_call: int, stack: Optional[int]):
+    """
+    The pot and the call as they really are when the bet covers our stack.
+
+    The arena's `to_call` is the bettor's full raise, but we can put in only
+    what we have, and their chips beyond that come back to them uncalled, so
+    they are neither our price nor in the pot we can win. Returns (pot, call),
+    the pot still holding the part of their bet we can match. A stack of 0 or
+    less means the stack is not known, and the arena's numbers stand.
+    """
+    if stack is None or stack <= 0 or to_call <= stack:
+        return pot, to_call
+    return pot - (to_call - stack), stack
+
+
+def fallback_choice(bucket: int, top: int, mask, pot: int, to_call: int,
+                    stack: Optional[int] = None) -> int:
     """
     A policy for a node the strategy never stored. Crude on purpose.
 
@@ -164,7 +180,15 @@ def fallback_choice(bucket: int, top: int, mask, pot: int, to_call: int) -> int:
     uniformly at random on a miss, a shove one time in six, and at 3,000 hands
     the 135 hands with a miss carried 68 percent of the loss while the hands
     without one were not separated from zero.
+
+    With `stack` (the arena player's --capped-price) the bet is priced as the
+    chips we can call: at 8bb with 1,000 behind, a raise to 16,500 into 21,000
+    is a call of 1,000 into 8,000, an eighth, and not the 15,000 that reads as
+    a bet of more than the pot. Without it the arena's full bet is priced, as
+    every match before 5 October was played.
     """
+    if stack is not None:
+        pot, to_call = capped_call(pot, to_call, stack)
     def first_legal(*preferred):
         for action in preferred:
             if mask[action]:
@@ -252,6 +276,12 @@ class ArenaPlayer:
         self.reraise_defence = False
         #: Call a fold the strategy made on a misread all-in when the real price is small (5 Oct). Off unless asked for.
         self.price_misread = False
+        #: Price the fallback rule, "called for pot odds", the short-stack table and the reads that weigh a price
+        #: (their re-raise is value, re-raise defended, river bluff caught) on the chips we can call, with the
+        #: bettor's uncalled excess out of the pot (5 Oct review). Reads on their bet's size are not prices and
+        #: keep the full bet. Off by default: it changes default play, so it plays only once the audit
+        #: (scripts/audit_capped_price.py) and a burst have gated it.
+        self.capped_price = False
         #: Under --posterior-reads, withhold a bluff only when the station's fold bound is under that bet's break-even.
         #: Off on its own: on 5 Oct it cost 1.2 points on the hoops copy (52,181 withheld bluffs down to 35,121) while
         #: one overall fold rate stands in for the fold rate at each size, which no profile counts yet.
@@ -376,6 +406,15 @@ class ArenaPlayer:
         mask = legal_mask(node, valid_actions, solver.schedule)
         arena = legal_mask(node, valid_actions, tree=False)
         to_call = int(state.get("to_call") or 0)
+        mine = int(state.get("your_stack") or 0)
+        # What a call costs and what it plays for, for the reads that compare a price with a threshold. Under
+        # --capped-price that is the call we can make against the pot without their uncalled excess; off, the
+        # arena's full bet, as main prices it. The reads that take their bet SIZE as a tell about their range
+        # ("big bet believed", "small bet called", "shove call declined") keep the full bet either way, because
+        # what they bet says what they hold whether or not we can match all of it.
+        price_pot, price_call = int(state.get("pot") or 0), to_call
+        if self.capped_price:
+            price_pot, price_call = capped_call(price_pot, to_call, mine)
 
         before = list(solver.misses)
         self.probe[:] = []
@@ -457,6 +496,8 @@ class ArenaPlayer:
                     short_stack = "short-stack solution"
                     self.stats.short_stack_answers += 1
         river = None
+        #: The river solve priced the arena's own pot and stacks, so nothing it folds is a misread.
+        river_solved = False
         if self.river and len(board) == 5:
             try:
                 posted = next((a.get("seat") for a in state.get("action_history") or []
@@ -474,6 +515,7 @@ class ArenaPlayer:
                     **({"iterations": self.river_iterations} if self.river_iterations else {}))
                 choice, missed, fell_back, companion_used = decision.choice, False, False, None
                 answered_history = node.history
+                river_solved = True
                 river = {"iterations": decision.iterations, "ms": round(decision.ms, 1),
                          "hands": decision.hands, "range": decision.range_source,
                          "strategy": {str(a): round(p, 3) for a, p in decision.distribution.items()}}
@@ -515,6 +557,9 @@ class ArenaPlayer:
             choice = FOLD
             adjusted = "river bet believed"
             self.stats.river_bets_believed += 1
+        # The size of their bet, which is what the profile counted when it found their big bets value and their
+        # small ones air. It is a tell and not our price, so --capped-price leaves it on the full bet: a shove
+        # that covers our stack is still a big bet from them, and capping it could read it as a small one.
         pot_before = int(state.get("pot") or 0) - to_call
         if self.profiles is not None and to_call > 0 and board and pot_before > 0 \
                 and hand.effective_bb >= self.SHOVE_RULE_MIN_BB \
@@ -545,7 +590,9 @@ class ArenaPlayer:
             # and ace-king is precisely the hand this is here to stop, so the
             # first version of this rule excluded the only case it was written
             # for. Aces lose nothing by calling a range they are ahead of.
-            price = to_call / float(int(state.get("pot") or 0) + to_call)
+            # A price, so it is the call we can make: their four-bet shove of 100bb into our 60bb is a call of
+            # our 60bb, and the 40bb they keep back was never on offer.
+            price = price_call / float(price_pot + price_call)
             choice = CHECK_CALL if arena[CHECK_CALL] and price <= self.VALUE_RERAISE_PRICE else \
                 (FOLD if arena[FOLD] else CHECK_CALL)
             adjusted = "their re-raise is value"
@@ -567,6 +614,8 @@ class ArenaPlayer:
             choice = FOLD if to_call > 0 and arena[FOLD] else CHECK_CALL
             adjusted = "bluff withheld"
             self.stats.bluffs_withheld += 1
+        # Their bet's size, not our price: a fold-or-raise bot that bets the pot has a made hand however much of
+        # that bet we can match, so --capped-price leaves this on the full bet.
         big_bet = to_call > 0 and to_call >= int(state.get("pot") or 0) - to_call
         if choice == CHECK_CALL and big_bet and arena[FOLD] and self.profiles is not None \
                 and hand.effective_bb >= self.SHOVE_RULE_MIN_BB \
@@ -583,9 +632,10 @@ class ArenaPlayer:
             # (1 - b) * price, the pot already holding its bet) and our hand
             # beats a bluff. The mirror of "river bet believed".
             import pokerbot_native as native    # loaded lazily, as cfr/river.py does
+            # The break-even is a price: the bluff share wins the pot we can contest and the rest costs the call
+            # we can make, so under --capped-price both leave out their uncalled excess.
             floor = self.profiles.river_bluff_floor(self.opponent)
-            pot = int(state.get("pot") or 0)
-            if floor is not None and floor * pot >= (1.0 - floor) * to_call \
+            if floor is not None and floor * price_pot >= (1.0 - floor) * price_call \
                     and float(native.equity_vs_random([c.index for c in hole], [c.index for c in board],
                                                       200, 17)) >= self.BLUFF_CATCH_EQUITY:
                 choice = CHECK_CALL
@@ -617,23 +667,31 @@ class ArenaPlayer:
                 floor = self.profiles.reraise_floor(self.opponent)
                 if floor is not None and floor >= self.RERAISE_OFTEN:
                     from chipzen.ranges import equity_vs_top
-                    pot = int(state.get("pot") or 0)
-                    price = to_call / float(pot + to_call)
+                    # The re-raising range is a tell and stays as it is; the price it is weighed against is
+                    # the call we can make.
+                    price = price_call / float(price_pot + price_call)
                     if equity_vs_top([c.index for c in hole], floor) >= price + self.RERAISE_MARGIN:
                         choice = CHECK_CALL
                         adjusted = "re-raise defended"
                         self.stats.reraises_defended += 1
         opponent_stack = int((state.get("opponent_stacks") or [0])[0])
-        if to_call > 0 and opponent_stack <= 0 and arena[CHECK_CALL] and choice == FOLD \
-                and to_call * self.POT_ODDS_FLOOR <= int(state.get("pot") or 0) - to_call:
+        odds_pot, odds_call = price_pot, price_call
+        last_chips = opponent_stack <= 0
+        if self.capped_price:
+            # The bet as we can meet it. A call that puts us all in ends the betting as surely as their
+            # all-in does, so the same odds decide it: 50 behind against a shove into 35,450 is a call of 50
+            # into 10,950 once their 24,500 uncalled comes back, and main folded it at the full 24,550.
+            last_chips = last_chips or (0 < mine <= to_call)
+        if to_call > 0 and last_chips and arena[CHECK_CALL] and choice == FOLD \
+                and odds_call * self.POT_ODDS_FLOOR <= odds_pot - odds_call:
             # An opponent all in for a fraction of a blind: the 5bb blueprint
             # prices "all-in" at several blinds and folded T5o at 33 to 1 on
             # 14 September. Any two cards call at these odds.
             choice = CHECK_CALL
             adjusted = "called for pot odds"
         if self.price_misread and choice == FOLD and to_call > 0 and arena[CHECK_CALL] \
-                and adjusted == (river_shove or short_stack) \
-                and self._misread(companion_used, answered_history, opponent_stack):
+                and adjusted == (river_shove or short_stack) and not river_solved \
+                and self._misread(companion_used, answered_history, opponent_stack, to_call, mine):
             # The strategy folded on a history that is not the hand: either a
             # street re-read after a pseudo all-in (the tree's pot is then far
             # smaller than the arena's, so any bet reads as a big one) or a
@@ -641,7 +699,6 @@ class ArenaPlayer:
             # not the real one, so the real one decides with a strong hand. A
             # read that folded on purpose is left alone; it priced the real bet.
             import pokerbot_native as native    # loaded lazily, as cfr/river.py does
-            mine = int(state.get("your_stack") or 0)
             called = min(to_call, mine) if mine > 0 else to_call
             # Their chips beyond our stack come back uncalled, so they are not in the pot we win.
             price = called / float(int(state.get("pot") or 0) - (to_call - called) + called)
@@ -740,19 +797,25 @@ class ArenaPlayer:
         return upper is not None and upper < self.bluff_break_even(choice, state)
 
     @staticmethod
-    def _misread(companion_used, answered_history: str, opponent_stack: int) -> bool:
+    def _misread(companion_used, answered_history: str, opponent_stack: int,
+                 to_call: int = 0, mine: int = 0) -> bool:
         """
         Whether the answer came from a history whose price is not the arena's.
 
         A collapsed re-read always is, even facing a real all-in: on 5 October
         the river shove was a real one, but the turn under it had been
         collapsed, so the tree priced it as a whole stack into a small pot. A
-        history ending in all-in is a misread only while the bettor still has
-        chips; a real all-in on a true history is the pot-odds rule's job.
+        history ending in all-in is a misread only while the bettor kept chips
+        beyond what we can call. A bet that covers our stack is an all-in in
+        the only sense the tree has, the effective stack, whatever the bettor
+        kept, so its price there is the real one (5 Oct review). A real all-in
+        on a true history is the pot-odds rule's job. `mine` of 0 means our
+        stack is not known, and then the bettor's chips alone decide, as before.
         """
         if str(companion_used or "").startswith("collapsed:"):
             return True
-        return opponent_stack > 0 and str(answered_history or "").endswith(str(ALL_IN))
+        covered = mine > 0 and to_call >= mine
+        return opponent_stack > 0 and not covered and str(answered_history or "").endswith(str(ALL_IN))
 
     @staticmethod
     def _top(solver: Solver) -> int:
@@ -777,14 +840,20 @@ class ArenaPlayer:
             return None
         to_call = int(state.get("to_call") or 0)
         opponent_stack = int((state.get("opponent_stacks") or [0])[0])
-        all_in = to_call > 0 and (opponent_stack <= 0 or to_call >= int(state.get("your_stack") or 0))
+        mine = int(state.get("your_stack") or 0)
+        all_in = to_call > 0 and (opponent_stack <= 0 or to_call >= mine)
         if not all_in or not mask[FOLD] or not mask[CHECK_CALL]:
             return None
         raised = any(a.get("seat") == seat and a.get("action") == "raise"
                      and a.get("phase") == "preflop"
                      for a in state.get("action_history") or [])
-        calls = self.short_ranges.calls(hole, effective_bb, to_call,
-                                        int(state.get("pot") or 0), reraise=raised)
+        pot, call = int(state.get("pot") or 0), to_call
+        if self.capped_price:
+            # The solution's all-in is the effective stack, so its price is our stack into the pot they can
+            # lose. A shove of 20bb over our 6bb priced at the full 20bb asks for equity the solved game never
+            # asks of that hand; capped, the price is the one the table was solved at.
+            pot, call = capped_call(pot, to_call, mine)
+        calls = self.short_ranges.calls(hole, effective_bb, call, pot, reraise=raised)
         if calls is None:
             return None
         return CHECK_CALL if calls else FOLD
@@ -792,7 +861,8 @@ class ArenaPlayer:
     def _fallback(self, solver: Solver, hole, board, mask, state) -> int:
         """A policy for a node the strategy never stored; see `fallback_choice`."""
         return fallback_choice(self._bucket(solver, hole, board), self._top(solver), mask,
-                               int(state.get("pot") or 0), int(state.get("to_call") or 0))
+                               int(state.get("pot") or 0), int(state.get("to_call") or 0),
+                               stack=int(state.get("your_stack") or 0) if self.capped_price else None)
 
     def warm_up(self) -> float:
         """
