@@ -1,0 +1,86 @@
+Abstract game: cap=(4, 2, 1)  preflop=169 flop=6 turn=6 river=6  infosets=3,438,484  table=330.1 MB
+  (raise cap is the parameter that decides feasibility — see measure_abstraction.py)
+
+Fitting card abstraction (800 situations/street)...
+  fitted in 0.6s
+preflop  169 buckets over 169 hands
+postflop signal: equity
+flop     6 buckets, centroids 0.21 0.32 0.43 0.55 0.69 0.86
+turn     6 buckets, centroids 0.16 0.28 0.42 0.56 0.72 0.88
+river    6 buckets, centroids 0.08 0.24 0.41 0.57 0.75 0.93
+
+Training MCCFR (native) for 4,000,000 iterations on 2 threads...
+warm start mapped by action onto this tree: 51,107 entries, 0 dropped (no action list of that width at their node)
+warm start (frozen): 51,107 entries from /home/dheirav/Code/PokerBot/results/cfr/ladder169l/nolimit_12bb.pkl, weight 100,000 iterations at 2 chips
+pruning from iteration 410,000: regret below -7,200 chips, 95% of iterations
+      82,000/4,100,000   0.584 ms/it     54,706 infosets     186 MB  eta   39.1 min
+     164,000/4,100,000   0.404 ms/it     61,540 infosets     187 MB  eta   26.5 min
+     246,000/4,100,000   0.318 ms/it     63,280 infosets     187 MB  eta   20.4 min
+     328,000/4,100,000   0.277 ms/it     64,294 infosets     187 MB  eta   17.4 min
+     410,000/4,100,000   0.262 ms/it     65,177 infosets     187 MB  eta   16.1 min
+     492,000/4,100,000   0.258 ms/it     65,968 infosets     187 MB  eta   15.5 min
+     574,000/4,100,000   0.272 ms/it     66,555 infosets     187 MB  eta   16.0 min
+     656,000/4,100,000   0.277 ms/it     67,052 infosets     188 MB  eta   15.9 min
+     738,000/4,100,000   0.273 ms/it     67,388 infosets     188 MB  eta   15.3 min
+     820,000/4,100,000   0.269 ms/it     67,666 infosets     188 MB  eta   14.7 min
+     902,000/4,100,000   0.267 ms/it     67,815 infosets     188 MB  eta   14.2 min
+     984,000/4,100,000   0.272 ms/it     68,005 infosets     188 MB  eta   14.1 min
+   1,066,000/4,100,000   0.275 ms/it     68,151 infosets     188 MB  eta   13.9 min
+   1,148,000/4,100,000   0.272 ms/it     68,319 infosets     188 MB  eta   13.4 min
+   1,230,000/4,100,000   0.270 ms/it     68,463 infosets     188 MB  eta   12.9 min
+   1,312,000/4,100,000   0.269 ms/it     68,549 infosets     188 MB  eta   12.5 min
+   1,394,000/4,100,000   0.271 ms/it     68,633 infosets     188 MB  eta   12.2 min
+   1,476,000/4,100,000   0.274 ms/it     68,714 infosets     188 MB  eta   12.0 min
+   1,558,000/4,100,000   0.273 ms/it     68,796 infosets     188 MB  eta   11.6 min
+   1,640,000/4,100,000   0.272 ms/it     68,873 infosets     188 MB  eta   11.2 min
+   1,722,000/4,100,000   0.270 ms/it     68,946 infosets     188 MB  eta   10.7 min
+   1,804,000/4,100,000   0.269 ms/it     69,007 infosets     188 MB  eta   10.3 min
+   1,886,000/4,100,000   0.271 ms/it     69,060 infosets     188 MB  eta   10.0 min
+   1,968,000/4,100,000   0.271 ms/it     69,115 infosets     188 MB  eta    9.6 min
+   2,050,000/4,100,000   0.269 ms/it     69,153 infosets     188 MB  eta    9.2 min
+  visit snapshot at 2,000,000: results/cfr/visit_counter_demo/12bb_t421_4m.visits.2000000.npz
+   2,100,000/4,100,000   0.269 ms/it     69,173 infosets     191 MB  eta    9.0 min
+   2,182,000/4,100,000   0.268 ms/it     69,218 infosets     191 MB  eta    8.6 min
+   2,264,000/4,100,000   0.268 ms/it     69,248 infosets     191 MB  eta    8.2 min
+   2,346,000/4,100,000   0.267 ms/it     69,270 infosets     191 MB  eta    7.8 min
+   2,428,000/4,100,000   0.266 ms/it     69,298 infosets     191 MB  eta    7.4 min
+   2,510,000/4,100,000   0.266 ms/it     69,326 infosets     191 MB  eta    7.0 min
+   2,592,000/4,100,000   0.266 ms/it     69,359 infosets     191 MB  eta    6.7 min
+   2,674,000/4,100,000   0.265 ms/it     69,381 infosets     191 MB  eta    6.3 min
+   2,756,000/4,100,000   0.264 ms/it     69,389 infosets     191 MB  eta    5.9 min
+   2,838,000/4,100,000   0.263 ms/it     69,414 infosets     191 MB  eta    5.5 min
+   2,920,000/4,100,000   0.262 ms/it     69,434 infosets     191 MB  eta    5.2 min
+   3,002,000/4,100,000   0.261 ms/it     69,467 infosets     191 MB  eta    4.8 min
+   3,084,000/4,100,000   0.261 ms/it     69,480 infosets     191 MB  eta    4.4 min
+   3,166,000/4,100,000   0.260 ms/it     69,497 infosets     191 MB  eta    4.1 min
+   3,248,000/4,100,000   0.260 ms/it     69,505 infosets     191 MB  eta    3.7 min
+   3,330,000/4,100,000   0.260 ms/it     69,530 infosets     191 MB  eta    3.3 min
+   3,412,000/4,100,000   0.259 ms/it     69,546 infosets     191 MB  eta    3.0 min
+   3,494,000/4,100,000   0.258 ms/it     69,578 infosets     191 MB  eta    2.6 min
+   3,576,000/4,100,000   0.258 ms/it     69,606 infosets     191 MB  eta    2.3 min
+   3,658,000/4,100,000   0.257 ms/it     69,620 infosets     191 MB  eta    1.9 min
+   3,740,000/4,100,000   0.257 ms/it     69,632 infosets     191 MB  eta    1.5 min
+   3,822,000/4,100,000   0.256 ms/it     69,637 infosets     191 MB  eta    1.2 min
+   3,904,000/4,100,000   0.255 ms/it     69,640 infosets     191 MB  eta    0.8 min
+   3,986,000/4,100,000   0.255 ms/it     69,651 infosets     191 MB  eta    0.5 min
+   4,068,000/4,100,000   0.255 ms/it     69,656 infosets     191 MB  eta    0.1 min
+   4,100,000/4,100,000   0.256 ms/it     69,659 infosets     191 MB  eta    0.0 min
+  1048.6s (0.256 ms/iteration)
+  information sets reached: 69,659 of 3,438,484 in the abstraction
+  warm start: 50,598 of 51,107 entries landed on a node that was reached
+  pruning: 30,982,074 action visits skipped
+  visits: median 155 average-strategy samples a node, 10th percentile 1; 44.5% of nodes under 100 (scripts/cfr/visit_report.py results/cfr/visit_counter_demo/12bb_t421_4m.visits.npz)
+
+Head-to-head over 2,000 hands, seats alternating.
+Positive means the trained strategy is winning.
+
+  vs uniform random  +1.254 +/- 0.168 chips/hand  95% CI [+0.926, +1.583]
+                     = +62.7 BB/100
+  vs always call     +1.676 +/- 0.142 chips/hand  95% CI [+1.397, +1.954]
+                     = +83.8 BB/100
+
+Note: head-to-head chips is a weaker claim than exploitability.
+Beating a passive baseline shows the strategy is not broken; it does
+not show it is near equilibrium. LBR is the next piece of work.
+
+Wrote results/cfr/visit_counter_demo/12bb_t421_4m.pkl

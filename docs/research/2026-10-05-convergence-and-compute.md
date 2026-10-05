@@ -68,6 +68,10 @@ has fooled us; (b) and (c) disagree in exactly the cases (d) catches.
 - Cost: half a day. Memory: 4 bytes a node, under 2 percent.
 - Confirm: on 70bb the 10th percentile should move between 20M and 60M (where head to head read
   48.9); on a mid rung it should already clear the bar at 20M.
+- **Built the same day (branch `visit-counter`), see `2026-10-05-visit-counter.md`.** Two counters,
+  not one, and no memory at all: both fit in the node's existing padding. The stopping rule as
+  implemented is (a) to (c) above, checked by `scripts/cfr/visit_report.py`; (d) stays a manual
+  read.
 
 ### 2. A compact, variable-width training table
 

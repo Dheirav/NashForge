@@ -1,0 +1,73 @@
+{
+  "args": {
+    "iterations": 4100000,
+    "buckets": 6,
+    "preflop_buckets": 169,
+    "raise_cap": [
+      4,
+      2,
+      1
+    ],
+    "street_raise_cap": null,
+    "stack": 24,
+    "big_blind": 2,
+    "abstraction_samples": 800,
+    "equity_samples": 200,
+    "update_rule": "linear",
+    "common_random_numbers": false,
+    "exact_terminals": false,
+    "current_when_empty": false,
+    "average_from": 0.0,
+    "strength": "equity",
+    "hist_bins": 20,
+    "hist_runouts": 100,
+    "hist_opponents": 50,
+    "fit_samples": null,
+    "abstraction_from": null,
+    "opponent_archetype": null,
+    "opponent_share": 0.5,
+    "opponent_mix": null,
+    "table_threads": null,
+    "no_hist_tables": false,
+    "texture": true,
+    "eval_hands": 2000,
+    "seed": 0,
+    "output": "results/cfr/visit_counter_demo/12bb_t421_4m.pkl",
+    "native": true,
+    "threads": 2,
+    "warm_start": "/home/dheirav/Code/PokerBot/results/cfr/ladder169l/nolimit_12bb.pkl",
+    "warm_weight": 100000,
+    "warm_scale": null,
+    "prune_after": 0.1,
+    "prune_stacks": 300.0,
+    "warm_mode": "frozen",
+    "count_visits": true,
+    "visit_snapshots": [
+      2000000
+    ]
+  },
+  "results": {
+    "uniform random": {
+      "chips_per_hand": 1.2545,
+      "stderr": 0.1676582670859422,
+      "ci95": [
+        0.9258897965115532,
+        1.5831102034884466
+      ],
+      "bb_per_100": 62.724999999999994,
+      "separated_from_zero": true
+    },
+    "always call": {
+      "chips_per_hand": 1.67575,
+      "stderr": 0.1420715863097484,
+      "ci95": [
+        1.3972896908328933,
+        1.9542103091671068
+      ],
+      "bb_per_100": 83.78750000000001,
+      "separated_from_zero": true
+    }
+  },
+  "information_sets_reached": 69659,
+  "seconds": 1048.6398829280079
+}
