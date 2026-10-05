@@ -165,17 +165,20 @@ def test_every_start_counts_the_live_hands_once_not_once_more(tmp_path):
     _match_log(logs, hands=3)
     path = tmp_path / "opponents.json"
     base = {"bets_faced": 500, "folds": 100, "calls": 350, "raises": 50, "hands": 600, "net": 0,
-            "by_history": {"preflop:Ur": {"call": 350}}, "scouted": True}
-    path.write_text(json.dumps({"stranger": dict(base, scout_base=dict(base))}))
+            "by_history": {"preflop:Ur": {"call": 350}}, "by_size": {"pre:pot": {"call": 350}}, "scouted": True}
+    path.write_text(json.dumps({"stranger": dict(base, scout_base=json.loads(json.dumps(base)))}))
     seen = []
     for _ in range(3):
         p = Profiles(str(path)).rebuild(str(logs))
         p.save()
         row = p.rows["stranger"]
-        seen.append((row["hands"], row["bets_faced"], row["calls"], row["net"], row["by_history"]["preflop:Ur"]["call"]))
-    assert seen[0] == (603, 503, 353, 300, 353)               # the scout's counts plus the three live hands, once
+        seen.append((row["hands"], row["bets_faced"], row["calls"], row["net"], row["by_history"]["preflop:Ur"]["call"],
+                     row["by_size"]["pre:pot"]["call"]))
+    # The scout's counts plus the three live hands, once; the open to 300 raises 200 over the 200 a call makes.
+    assert seen[0] == (603, 503, 353, 300, 353, 353)
     assert seen[1] == seen[0] and seen[2] == seen[0]
-    assert Profiles(str(path)).rows["stranger"]["scout_base"]["hands"] == 600
+    saved = Profiles(str(path)).rows["stranger"]["scout_base"]
+    assert saved["hands"] == 600 and saved["by_size"] == {"pre:pot": {"call": 350}}
 
 
 def test_a_row_from_before_the_fix_stops_growing(tmp_path):
