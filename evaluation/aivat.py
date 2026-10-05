@@ -149,9 +149,15 @@ def trace_hand(result: dict, before: Sequence[int], decisions: List[dict], seat:
     chance = [{"street": "preflop", "board": [], "pot": None, "eff": float(min(before))}]
     ours = []
     boards = {}
+    # Rows are paired with our actions street by street, so a row the log lost costs only its own term. With one
+    # queue for the hand, every later row would shift onto the wrong street's action and be dropped by the phase
+    # check, and those lost terms would not be counted anywhere.
+    by_street: Dict[str, List[dict]] = {}
     for d in decisions:
         boards.setdefault(d["phase"], [card_index(c) for c in (d.get("board") or [])])
-    by_us = iter(decisions)
+        by_street.setdefault(d["phase"], []).append(d)
+    queues = {p: iter(rows) for p, rows in by_street.items()}
+    unlogged = 0
     for a in history:
         if a["phase"] != street:
             if street is not None:
@@ -160,8 +166,10 @@ def trace_hand(result: dict, before: Sequence[int], decisions: List[dict], seat:
             street, street_total = a["phase"], [0, 0]
         s = a["seat"]
         if s == seat and not a["action"].startswith("post"):
-            d = next(by_us, None)
-            if d is not None and d["phase"] == a["phase"]:
+            d = next(queues.get(a["phase"], iter(())), None)
+            if d is None:
+                unlogged += 1
+            else:
                 ours.append({"row": d, "street": a["phase"], "board": boards.get(a["phase"]),
                              "our": total[s], "opp": total[1 - s],
                              "our_stack": before[s] - total[s], "opp_stack": before[1 - s] - total[1 - s]})
@@ -178,7 +186,7 @@ def trace_hand(result: dict, before: Sequence[int], decisions: List[dict], seat:
             chance[0]["pot"] = sum(total)
     if chance[0]["pot"] is None:
         chance[0]["pot"] = 0
-    return {"hole": [card_index(c) for c in hole], "chance": chance, "ours": ours}
+    return {"hole": [card_index(c) for c in hole], "chance": chance, "ours": ours, "unlogged": unlogged}
 
 
 def action_values(vf: ValueFunction, street: str, eq: float, node: dict) -> np.ndarray:
@@ -232,12 +240,13 @@ def hand_terms(vf: ValueFunction, trace: dict, last_street: Optional[str] = None
 
     `last_street` stops the chance terms after that street, for a called all-in whose later cards the caller has
     already taken the exact expectation over. Returns the terms by kind, the chance features (for fitting g) and
-    counts of what was left out.
+    counts of what was left out. `decisions_without` counts logged rows that get no term, while
+    `decisions_unlogged` counts our actions the log has no row for, which cannot get one either.
     """
     hole = trace["hole"]
     stop = _phase_order(last_street) if last_street else 3
     out = {"chance": {}, "features": {}, "decision": 0.0, "decisions_with_term": 0, "decisions_without": 0,
-           "board_missing": 0}
+           "decisions_unlogged": trace.get("unlogged", 0), "board_missing": 0}
     previous = 0.5
     for node in trace["chance"]:
         street = node["street"]

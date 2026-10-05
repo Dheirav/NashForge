@@ -279,10 +279,6 @@ def test_a_decision_term_stays_unbiased_when_the_logged_probs_put_mass_on_an_ill
     assert total == pytest.approx(0.0, abs=1e-9)
 
 
-@pytest.mark.xfail(strict=True, reason="REVIEW BUG (minor, latent): trace_hand pairs our history actions with our "
-                                       "decision rows by an iterator and drops a row whose phase does not match, so "
-                                       "one missing preflop row silently loses every later row's term without "
-                                       "counting it in decisions_without. No real log has a missing row today.")
 def test_a_missing_decision_row_does_not_swallow_the_next_streets_term(frozen):
     sigma = [0.1, 0.5, 0.1, 0.2, 0.05, 0.05]
     hist = [act(0, "post_small_blind", 50, "preflop"), act(1, "post_big_blind", 100, "preflop"),
@@ -337,9 +333,6 @@ def test_between_reads_a_naive_time_as_ist():
     assert _ist("2026-10-05T00:09") == datetime.datetime(2026, 10, 4, 18, 39, tzinfo=datetime.timezone.utc).timestamp()
 
 
-@pytest.mark.xfail(strict=True, reason="REVIEW BUG (minor): _ist replaces any explicit offset with +05:30, so "
-                                       "--between 2026-10-03T07:00+04:00 is silently read as 07:00 IST, 90 minutes "
-                                       "off, the exact confusion the machine's old +04 clock invites.")
 def test_between_respects_an_explicit_offset():
     assert _ist("2026-10-03T07:00+04:00") == datetime.datetime(2026, 10, 3, 3, 0,
                                                                tzinfo=datetime.timezone.utc).timestamp()
@@ -384,10 +377,6 @@ def test_only_the_all_deep_and_short_rows_go_unmarked(tmp_path, monkeypatch, cap
     assert "5e8aa4ce68af" in out
 
 
-@pytest.mark.xfail(strict=True, reason="REVIEW BUG (minor, latent): a round_start without your_hole_cards is left "
-                                       "out of aivat_hands but main still indexes scored[hand], so --aivat dies with "
-                                       "a KeyError instead of skipping or counting the hand. Every current log has "
-                                       "the field.")
 def test_aivat_survives_a_hand_without_hole_cards(tmp_path, monkeypatch, capsys):
     _match_file(tmp_path / "a.jsonl", 0.0, hole=False)
     _run_main(monkeypatch, capsys, ["--label", "t", "--matches-dir", str(tmp_path), "--aivat"])
