@@ -2,8 +2,8 @@
 
 5 October 2026, branch `visit-counter`. Item 1 of the ranked changes in
 `2026-10-05-convergence-and-compute.md`. Built, tested, and shown on one small run; the bar
-in leg (a) of the rule is still provisional, and nothing here has been checked against a
-duel or LBR.
+in leg (a) of the rule is still provisional. The same night it was calibrated on two rungs and
+one rung was checked at 10M against 20M on the gate and LBR (the last section).
 
 ## Why
 
@@ -87,7 +87,8 @@ agreed on about a point. Head to head alone cannot see a rare bad node that neit
 in 5,000 matches, such as v5f's 98 percent pocket-jacks shove. The visit count is the one that
 sees that tail directly, while it says nothing about whether those visits have converged; that is
 what (b) and (c) are for. The convergence doc's fourth leg, (d) adjacent-hand fold jumps at shove
-nodes, stays a manual read, because no script measures it yet.
+nodes, has its own script since the same night, `scripts/fold_jumps.py` on branch `fold-jumps`
+(see `2026-10-05-fold-jumps.md` there).
 
 **The bar is provisional at 100 samples.** An average of n regret-matching draws has a
 per-action standard error of at most 0.5 / sqrt(n), which is 0.05 at 100, about the smallest
@@ -199,11 +200,83 @@ would have overwritten.
 
 ## What is not done
 
-- The bar in (a) is a reasoned guess, not a calibration, and on this rung it did not discriminate.
-  The next step is a counted 20M on a deep rung (70bb, where the 60M polish bought about a point)
-  and on a mid rung, and the bar goes between their worst lines.
+- The bar in (a) is still a reasoned guess. The calibration below puts the converged level near
+  1,700 on the worst line for the (4,2,1) six-class trees, but that is one rung's evidence and
+  an upper bound, not the bar.
+- Legs (b) and (c) have been measured on one rung only (the 70bb self-play rung below), and (c) on
+  one LBR menu, where the rule asks for both.
 - `--visit-snapshots` writes counts only, not a strategy, so (b) and (c) at T still need the
   T-iteration pickle from its own run.
 - The reach-weighted view is a proxy, off by the chance probability of the owner's bucket, and
   only for self-play (see the caveats above).
-- Nothing here was run against a duel or LBR.
+
+## Calibration and the 10M check, 5 October night
+
+**The calibration.** Two counted 20M runs with snapshots at 5M and 10M, on the visit-counter
+module, outputs in `results/cfr/visit_calibration/` of the `visit-counter` worktree, logs in
+`~/pokerbot-scratch/night5oct/`. Both are self-play, so the reach proxy holds. The 25bb run is the
+real `cap2_25bb_t421_20m_warm` recipe (frozen warm start of 100,000, 3 threads, 155,101 nodes
+reached) and the 70bb run is a cold (4,2,1) six-class rung (2 threads, 387,958 reached).
+Reach-weighted 10th percentile of `avg_visits` on the worst line, from `visit_report.py` on each
+file alone:
+
+| rung | 5M | 10M | 20M | worst line |
+|---|---|---|---|---|
+| 25bb (4,2,1), warm | 735 | 1,735 | 3,863 | river after two raises |
+| 70bb (4,2,1), cold | 657 | 1,758 | 3,484 | river after two raises (three at 20M) |
+
+Visits roughly double with iterations on both, which means reach has settled on the rare lines
+by 5M. The counts alone cannot say when the strategy has settled, which is why the two other legs
+exist.
+
+**The 10M check** (`~/pokerbot-scratch/check10m/`). The 70bb recipe trained again to 10M on its
+own run (`selfplay_70bb_t421_10m.pkl`, 386,554 nodes reached against 387,958 at 20M) and played
+against the 20M solve:
+
+- Cross-tree gate (`tools/xtree-gate.sh`, 40,000 hands, seeds 0 1 2, check/call on a miss, no miss
+  in either direction): **+0.3 ± 2.5 BB/100** for 10M against 20M (seeds +5.0, -0.7, -3.5).
+- LBR at 70bb, four chunks of 8,000 hands on paired seeds (1000k+7), default menu, no bridge
+  translation: 10M +30.3, 20M +27.4. Paired difference **+2.8 ± 16.5** (chunk differences -41.3,
+  +0.7, +36.6, +15.4).
+
+- Arena head to head (`scripts/chipzen_duel.py --arena-matches 5000 --workers 4`, seed 0, both
+  seats v5f's ladder under `--deep-primary` with only the 70bb rung swapped,
+  `~/pokerbot-scratch/h2h10m/`): **10M wins 50.1% ± 0.7**, 546,525 decisions against 547,047,
+  no companion calls. This is leg (b) as the rule defines it, and it passes: a delta of 0.1 at
+  the rule's ±0.7. One caveat on its reach: only the 70bb rung differs, and it plays only where the
+  effective depth is nearest 70bb in ratio (about 59 to 84bb), so part of each match is the same
+  bot on both sides. The 27 September head to head swapped three deep rungs.
+
+So 10M and 20M are level on this rung on all three instruments. The gate and LBR alone would not
+have been enough, because of their width. The gate
+cannot see a 1-point match-win difference: on 21 September v5m against v5h read 51.1 ± 0.7 in
+matches while reading -1.2 ± 2.5 chips a hand at 70bb. The LBR difference is too wide to see
+anything under about 30 BB/100. And these are the two instruments that saw nothing between 20M and
+60M on 27 September, when two head to heads agreed 60M was about a point stronger.
+
+**What earlier results agree and disagree with it.**
+
+- Agree, on the same kind of tree: node coverage stops growing by 20M on six-class trees (389,086
+  entries against 390,110 at 60M), a warm 10M played level with a cold 20M (-0.7 ± 0.7 head to
+  head), the mid rungs polished to 60M tied (50.3), v5s60 was level with v5s, and the 40-class gain
+  at 20M was gone at 60M.
+- Disagree, on bigger trees: lane Y (19 September) found the deep cap-2 rungs at 20M warm beat their
+  10M solves on the same tree by +6.1 ± 2.2, +2.8 ± 0.9 and +4.7 ± 1.3 at 50, 70 and 100bb, and the
+  cap-2 18bb and 12bb rungs at 100M beat their 20M by +7.5 ± 3.0 and +12.2 ± 7.0. The 20-class
+  histogram rungs reached 1.48M of 11.45M information sets at 20M and were under-trained.
+
+**What follows.**
+
+- On six-class (4,2,1) trees, trials and experiments can stop at 10M, which halves their cost.
+- The two head to heads that found the 60M polish worth about a point were both on 20-class
+  histogram rungs (v5iP's `hist20_70bb_t421_60m` against 20M, and v5m against v5h, both `hist20`).
+  The one six-class polish, v5x60 (`br25_station_70bb_t421_60m`), read 49.4 head to head against
+  v5x on 29 September, no gain. So on six-class trees no instrument has shown a gain past 10M.
+  The 60M polish is a rule for histogram sets, and a six-class set can play at 10M on this
+  evidence. The one open part is the exploiter rungs (station share), which train against a
+  scripted opponent: v5x60 says 60M does not help them, but 10M has not been checked on one.
+- Cap-2, histogram and (4,3,2,1) trees are not covered. They need their own counts, and the
+  history says they need more than 20M.
+- A candidate bar for leg (a) is about 1,700 on the worst line, which is what both rungs had at the
+  budget where the 70bb one was level. It comes from one checked rung and it may be higher than
+  necessary, because 10M was not shown to be the smallest budget that ties.
