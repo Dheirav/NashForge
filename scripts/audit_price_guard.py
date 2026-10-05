@@ -6,9 +6,10 @@ Where the misread-price guard (`ArenaPlayer.price_misread`) would have fired, an
 
 Read-only over the per-match JSONL. Each logged fold is put through the guard's conditions as far as the record
 allows: the strategy folded (no rule answered and no read changed it), there was a bet to call, the history it
-answered was misread (a `collapsed:` re-read, or a history ending in all-in while the bettor kept chips), the real
-price was at or under the threshold and the hand beat a random one often enough. The opponent's remaining stack is
-not in the decision row, so it is rebuilt from the hand's starting stacks and the action history up to our action.
+answered was misread (a `collapsed:` re-read, or a history ending in all-in while the bettor kept chips beyond what
+we can call), the answer was not the river solve's, the real price was at or under the threshold and the hand beat a
+random one often enough. Neither stack is in the decision row, so both are rebuilt from the hand's starting stacks
+and the action history up to our action.
 
 The value of a call is estimated only when the arena showed their cards, which it does at a showdown and, in these
 logs, on hands we folded too. It is our exact equity against their hand over the cards still to come, times the pot
@@ -101,7 +102,14 @@ def spots(match, price_cap, equity_floor, checks):
                 # A companion answered on its own translation, which the record does not keep.
                 checks["companion answered (history not logged)"] += 1
                 continue
-            if not ArenaPlayer._misread(companion, d.get("history"), opponent_stack):
+            river = d.get("river")
+            if river and "error" not in river:
+                # The river solve priced the arena's own pot; the guard leaves its folds alone.
+                checks["river-solve folds"] += 1
+                continue
+            if not ArenaPlayer._misread(companion, d.get("history"), opponent_stack, to_call, mine):
+                checks["all-in read that covers our stack (a real all-in)"] += int(
+                    ArenaPlayer._misread(companion, d.get("history"), opponent_stack))
                 continue
             checks["misread folds"] += 1
             called = min(to_call, mine) if mine > 0 else to_call
