@@ -151,7 +151,7 @@ measurements are in [`docs/solver-work-2026-09.md`](docs/solver-work-2026-09.md)
 python3.12 -m venv venv
 venv/bin/pip install numpy numba torch pygame websockets requests
 native/build.sh                                   # needs cmake, ninja, nanobind; installs by rename
-venv/bin/python -m pytest -q                      # 523 tests, about 7½ minutes
+venv/bin/python -m pytest -q                      # 550 tests, about 9 minutes
 ```
 
 Numba is on the hot path of every Python-side evaluation; the native module is what trains.
@@ -190,7 +190,7 @@ the scouted profiles of other bots are not.
 | `scripts/`, `tools/` | Entry points (training, gates, duel, replay, decomposition, scouting) and the shell wrappers for the arena. |
 | `training/`, `rl/` | Evolutionary search and PPO, both measured in the comparison above. Retained; not the current line of work. |
 | `results/` | Every measurement as JSON, one file per question; the arena ledger under `results/chipzen/`. |
-| `tests/` | 523 tests. Was an empty directory before the audit. |
+| `tests/` | 550 tests. Was an empty directory before the audit. |
 | `docs/` | The arena (`chipzen.md`, `season6/`, `season8-summary.md`), the training plan, the research notes (`research/`). |
 
 ## Reading the repository
