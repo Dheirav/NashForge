@@ -797,7 +797,7 @@ _PROGRESS_CACHE: dict = {}
 _SAMPLES: dict = {}
 ANSI = re.compile(r"\x1b\[[0-9;]*[A-Za-z]")
 # Not runs: the panel itself, fixture timers (shown as fixtures), and Claude's own shell wrappers.
-NOT_RUNS = re.compile(r"tools/panel/server\.py|fixture2\.sh|arm_fixture\.sh|shell-snapshots|botcheck\.sh|claude")
+NOT_RUNS = re.compile(r"tools/panel/server\.py|fixture2\.sh|arm_fixture\.sh|shell-snapshots|botcheck\.sh|claude|progress\.sh")
 
 
 def _ours(pid: int, args: str) -> bool:
@@ -841,7 +841,31 @@ def _tail(path, lines: int = 4) -> list:
     return [r for r in rows if r.strip()][-lines:]
 
 
-def _progress_reader(args: str, log):
+def _progress_reader(args: str, log, pid: int = 0):
+    # A lane in ~/pokerbot-scratch keeps its own progress.sh beside it (1 Oct: rrtrain, fourbet, queue1oct, ...),
+    # written for that lane and deriving its ETA from the lane's measured rate: it is the best reader there is.
+    # The lane's own folder: where its script lives, read from the command line and resolved against the folder
+    # it was started in (PWD at exec), since the lanes cd into the repo as they start.
+    here = ""
+    try:
+        start = environ(pid).get("PWD", "") if pid else ""
+        script = next((a for a in cmdline(pid)[1:] if a.endswith(".sh")), "") if pid else ""
+        if script:
+            here = os.path.dirname(os.path.normpath(os.path.join(start, os.path.expanduser(script))))
+    except OSError:
+        here = ""
+    own = os.path.join(here, "progress.sh") if here.startswith(SCRATCH) else ""
+    if own and os.path.isfile(own):
+        hit = _PROGRESS_CACHE.get((own, None))
+        if hit and time.time() - hit[0] < 60:
+            return os.path.relpath(own, HOME), hit[1]
+        try:
+            out = subprocess.run(["bash", own], cwd=here, capture_output=True, text=True, timeout=15).stdout
+        except subprocess.TimeoutExpired:
+            out = "(the progress reader took over 15 s)"
+        lines = [ANSI.sub("", l).rstrip() for l in out.splitlines() if l.strip() and not l.startswith("===")]
+        _PROGRESS_CACHE[(own, None)] = (time.time(), lines[-8:])
+        return os.path.relpath(own, HOME), lines[-8:]
     for pattern, script, kind in PROGRESS_RULES:
         found = re.search(pattern, args)
         if not found:
@@ -917,7 +941,7 @@ def runs() -> dict:
         log = _log_of(pid)
         tail = _tail(log)
         key = f"{pid}:{proc_ticks(pid)}"
-        script, reader = _progress_reader(args, log)
+        script, reader = _progress_reader(args, log, pid)
         title = re.sub(rf"{re.escape(HOME)}/", "~/", args)
         title = re.sub(r"\S*/venv/bin/python\d*(\.\d+)?", "python", title)[:160]
         live.append({"key": key, "pid": pid, "title": title, "elapsed_s": secs,

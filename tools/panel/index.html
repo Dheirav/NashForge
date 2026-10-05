@@ -403,7 +403,7 @@ async function refreshRuns() {
   let r; try { r = await get("/api/runs", 20000); } catch (e) { return; }
   $("runs").innerHTML = r.live.map(x => {
     const c = x.counter;
-    const prog = x.progress ? `<pre>${esc(x.progress.join("\n"))}</pre><div class="small">from tools/${esc(x.reader)}</div>` :
+    const prog = x.progress ? `<pre>${esc(x.progress.join("\n"))}</pre><div class="small">from ${esc(x.reader.includes("/") ? "~/" + x.reader : "tools/" + x.reader)}</div>` :
       c ? `<div><progress max="${c.total}" value="${c.done}" aria-label="progress"></progress> ${c.done.toLocaleString()} of ${c.total.toLocaleString()}
            · ${c.eta ? `ETA ${esc(c.eta.ist)} IST (rate measured over ${dur(c.measured_over_s)})` : "no rate yet: the counter has not moved while the panel watched"}</div>` :
       `<div class="small">no progress counter in its log</div>`;
