@@ -23,12 +23,23 @@ line per decision and one per hand result); nothing here judges a play.
 the river scored at its expectation over the runouts. Both estimate the same
 thing, while the adjusted one drops the luck of a few large coin flips, which
 is most of a burst's spread.
+
+    venv/bin/python scripts/chipzen_decompose.py --label "v5xRR3 purified" --aivat \
+        --between 2026-10-03T07:00 2026-10-03T09:00 --matches-dir ~/Code/PokerBot/results/chipzen/matches
+
+`--aivat` prints three columns: raw, all-in adjusted and AIVAT (evaluation/aivat.py), which also takes out the
+luck of our hole cards and of every board card the all-in adjustment cannot reach, against a value function frozen
+in evaluation/aivat_value.json before these bursts were played. Only the all, deep and short rows are unbiased
+under AIVAT; the rows chosen by what we did after the cards fell are marked, because selecting on our own later
+actions is selecting on the very cards the terms correct for.
 """
 import argparse
+import datetime
 import glob
 import json
 import os
 import sys
+import time
 from collections import defaultdict
 
 import numpy as np
@@ -190,6 +201,40 @@ def allin_nets(rows, seat, decisions):
     return out
 
 
+def aivat_hands(rows, seat, decisions, allins, vf):
+    """
+    {hand: (AIVAT value, terms)} for every hand with a result: the base value (the realised net, or a called
+    all-in's expectation over the runouts) less the control terms of evaluation.aivat.hand_terms.
+
+    For an all-in the chance terms stop at the all-in street, because the cards after it are already in the base.
+    """
+    from evaluation.aivat import hand_terms, trace_hand
+    nets = hand_nets(rows, seat)
+    out, before, hole = {}, None, None
+    for r in rows:
+        if r.get("frame") == "round_start":
+            before = (r.get("state") or {}).get("stacks")
+            hole = (r.get("state") or {}).get("your_hole_cards")
+        elif r.get("frame") == "round_result":
+            res = r["result"]
+            hand = res["hand_number"]
+            if before and hole and hand in nets:
+                base, last = nets[hand], None
+                if hand in allins:
+                    base, last = allins[hand][0], allins[hand][1]["street"]
+                trace = trace_hand(res, before, decisions.get(hand, []), seat, hole)
+                terms = hand_terms(vf, trace, last)
+                out[hand] = (base - terms["total"], terms)
+            before, hole = None, None
+    return out
+
+
+def _ist(text):
+    """'2026-10-03T07:00' read as IST, to a Unix time: the ledger and the fixture list both keep IST."""
+    moment = datetime.datetime.fromisoformat(text).replace(tzinfo=datetime.timezone(datetime.timedelta(hours=5, minutes=30)))
+    return moment.timestamp()
+
+
 def classify(decisions):
     """The categories one hand falls into, from its decision records."""
     cats = {"all"}
@@ -218,14 +263,40 @@ def main():
     parser.add_argument("--allin-adjust", action="store_true",
                         help="also report each row with every called all-in before the river replaced by its "
                              "expected net over the runouts, side by side with the raw row")
+    parser.add_argument("--aivat", action="store_true",
+                        help="raw, all-in adjusted and AIVAT side by side (evaluation/aivat.py); implies the all-in "
+                             "adjustment, whose exact runout expectation AIVAT keeps")
+    parser.add_argument("--aivat-value", default=None,
+                        help="the frozen value function (default evaluation/aivat_value.json), or 'checkdown' for "
+                             "the unfitted g = pot")
+    parser.add_argument("--between", nargs=2, metavar=("FROM", "TO"),
+                        help="only matches that started in this window, IST, e.g. 2026-10-03T07:00 2026-10-03T09:00: "
+                             "a label can also hold single fixtures that are not the burst")
+    parser.add_argument("--progress", help="a file rewritten after every match file read: done of total, elapsed and "
+                                           "an ETA from the measured rate (AIVAT costs about 0.1 s a hand)")
     args = parser.parse_args()
+    if args.aivat:
+        args.allin_adjust = True
+        from evaluation.aivat import VALUE_FILE, ValueFunction
+        vf = ValueFunction.load(args.aivat_value if args.aivat_value not in (None, "checkdown") else VALUE_FILE)
+        if args.aivat_value == "checkdown":
+            vf = ValueFunction.checkdown(vf.preflop)
+    window = (_ist(args.between[0]), _ist(args.between[1])) if args.between else None
 
+    aivat = defaultdict(lambda: defaultdict(list))        # the same rows under AIVAT
+    terms_by = defaultdict(lambda: defaultdict(list))     # per label: each kind of term, per hand
     per_label = defaultdict(lambda: defaultdict(list))
     adjusted = defaultdict(lambda: defaultdict(list))     # the same rows, all-ins at their expectation
     touched = defaultdict(lambda: defaultdict(int))       # adjusted hands per row
     checks = defaultdict(lambda: defaultdict(int))        # per label: streets adjusted, validation outcomes
     paths = sorted(p for d in args.matches_dir for p in glob.glob(os.path.join(d, "*.jsonl")))
-    for path in paths:
+    started = time.time()
+    for done, path in enumerate(paths):
+        if args.progress:
+            elapsed = time.time() - started
+            eta = f"{elapsed / done * (len(paths) - done) / 60:.1f} min" if done else "not yet measured"
+            with open(args.progress, "w") as handle:
+                handle.write(f"{done} of {len(paths)} match files read, elapsed {elapsed / 60:.1f} min, ETA {eta}\n")
         with open(path) as handle:
             rows = [json.loads(line) for line in handle]
         if not rows or rows[0].get("frame") != "match_start" or "version" not in rows[0]:
@@ -233,6 +304,8 @@ def main():
         label = rows[0]["version"]["label"]
         tag = next((l for l in args.label if label.startswith(l + ":") or label == l), None)
         if tag is None:
+            continue
+        if window and not window[0] <= rows[0].get("at", 0) < window[1]:
             continue
         seat = rows[0]["seat"]
         decisions = defaultdict(list)
@@ -245,6 +318,7 @@ def main():
             continue
         nets = hand_nets(rows, seat)
         allins = allin_nets(rows, seat, decisions) if args.allin_adjust else {}
+        scored = aivat_hands(rows, seat, decisions, allins, vf) if args.aivat else {}
         for hand, ds in decisions.items():
             if hand not in nets:
                 continue
@@ -260,16 +334,28 @@ def main():
                     checks[tag]["realised net NOT reachable"] += 1
                 checks[tag]["raw chips"] += nets[hand]
                 checks[tag]["expected chips"] += value
+            if args.aivat:
+                terms = scored[hand][1]
+                for street in ("preflop", "flop", "turn", "river"):
+                    terms_by[tag][street].append(terms["chance"].get(street, 0.0))
+                terms_by[tag]["decisions"].append(terms["decision"])
+                for k in ("decisions_with_term", "decisions_without", "board_missing"):
+                    checks[tag][k] += terms[k]
             for cat in classify(ds):
                 per_label[tag][cat].append(nets[hand])
                 adjusted[tag][cat].append(value)
                 touched[tag][cat] += hand in allins
+                if args.aivat:
+                    aivat[tag][cat].append(scored[hand][0])
 
     order = ["all", "deep", "short", "companion decided", "rule decided", "we jammed preflop",
              "called a preflop jam", "called a river shove", "a read fired"]
     labels = [l for l in args.label if l in per_label]
     print(f"chips per hand ± standard error (hands), on decision hands"
           + (f" against {args.opponent}" if args.opponent else "") + "\n")
+    if args.aivat:
+        print_aivat(order, labels, per_label, adjusted, aivat, terms_by, checks, vf)
+        return
     if args.allin_adjust:
         print_adjusted(order, labels, per_label, adjusted, touched, checks)
         return
@@ -286,6 +372,11 @@ def _cell(values, note=""):
         return "—"
     se = x.std() / np.sqrt(x.size) if x.size > 1 else float("nan")
     return f"{x.mean():+.0f} ± {se:.0f} ({x.size}{note})"
+
+
+def _mean_se(values):
+    x = np.asarray(values, dtype=float)
+    return f"{x.mean():+.1f} ± {x.std() / np.sqrt(x.size):.1f}"
 
 
 def print_adjusted(order, labels, per_label, adjusted, touched, checks):
@@ -307,6 +398,41 @@ def print_adjusted(order, labels, per_label, adjusted, touched, checks):
               f"expected {c['expected chips']:+,.0f}. Realised net reachable on the revealed board: "
               f"{c['realised net reachable']} of {n}, not reachable {c['realised net NOT reachable']}, "
               f"revealed cards inconsistent {c['revealed cards do not fit the board']}.")
+
+
+#: The rows a hand enters by its stack depth alone, which is fixed before any card is dealt; every other row is
+#: entered by what we or the opponent did after seeing cards, and conditioning on that makes the chance terms'
+#: mean nonzero inside the row.
+UNBIASED_ROWS = {"all", "deep", "short"}
+
+
+def print_aivat(order, labels, per_label, adjusted, aivat, terms_by, checks, vf):
+    """Raw, all-in adjusted and AIVAT side by side, then what each kind of term did per label."""
+    print(f"value function {vf.name} ({vf.digest})\n")
+    print("| category | " + " | ".join(f"{l} raw | {l} all-in | {l} AIVAT" for l in labels) + " |")
+    print("|---|" + "---|---|---|" * len(labels))
+    for cat in order:
+        cells = []
+        for l in labels:
+            cells.append(_cell(per_label[l].get(cat, [])))
+            cells.append(_cell(adjusted[l].get(cat, [])))
+            cells.append(_cell(aivat[l].get(cat, [])) + ("" if cat in UNBIASED_ROWS else " †"))
+        print(f"| {cat} | " + " | ".join(cells) + " |")
+    print("\n† selected after the cards were seen, so the AIVAT cell is the row's result relative to its cards, "
+          "not an estimate of the raw cell.\n")
+    for l in labels:
+        raw = np.array(per_label[l]["all"], dtype=float)
+        adj = np.array(adjusted[l]["all"], dtype=float)
+        av = np.array(aivat[l]["all"], dtype=float)
+        kinds = ", ".join(f"{k} {_mean_se(v)} (sd {np.std(v):.0f})" for k, v in terms_by[l].items())
+        c = checks[l]
+        # The paired difference is the bias check: it is minus the sum of the terms, whose mean must be zero.
+        print(f"{l}: sd per hand raw {raw.std():.0f}, all-in {adj.std():.0f}, AIVAT {av.std():.0f}; "
+              f"AIVAT is worth {(raw.var() / av.var()):.2f}x the hands of raw and {(adj.var() / av.var()):.2f}x "
+              f"the all-in adjusted. AIVAT minus all-in, paired: {_mean_se(av - adj)}. "
+              f"Terms, mean ± se per hand: {kinds}. Decisions with a term {c['decisions_with_term']}, "
+              f"without (purified or distribution unknown) {c['decisions_without']}; streets without a logged "
+              f"board {c['board_missing']}.")
 
 
 if __name__ == "__main__":
