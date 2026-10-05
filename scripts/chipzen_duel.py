@@ -94,7 +94,8 @@ def build(ladder_dir: str, flags: str, label: str, rng: np.random.Generator,
                          river="--river-solve" in flags)
     if profiles_path:
         player.profiles = Profiles(profiles_path, sequential="--sequential-triggers" in flags,
-                                   scout_reads="--scout-reads" in flags)
+                                   scout_reads="--scout-reads" in flags,
+                                   posteriors="--posterior-reads" in flags)
     player.aggro_reads = "--aggro-reads" in flags
     player.reraise_defence = "--reraise-defence" in flags
     player.withhold_preflop = "--no-preflop-withhold" not in flags

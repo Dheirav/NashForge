@@ -49,6 +49,7 @@ from cfr.river import decide_river
 from chipzen.opponents import Profiles
 from chipzen.pushfold import ShortStackRanges
 from evaluation.benchmark import cfr_agent
+from slumbot.bridge import RAISE_FRACTIONS
 
 
 @dataclass
@@ -545,14 +546,18 @@ class ArenaPlayer:
                 (FOLD if arena[FOLD] else CHECK_CALL)
             adjusted = "their re-raise is value"
             self.stats.reraises_believed += 1
+        withheld = None
         if choice in RAISE_ACTIONS and arena[CHECK_CALL] and self.profiles is not None \
                 and (self.withhold_preflop or board) \
                 and self.profiles.never_folds(self.opponent) \
-                and strength(solver) <= self.BLUFF_STRENGTH:
+                and strength(solver) <= self.BLUFF_STRENGTH \
+                and (not self.profiles.posteriors or self._bluff_folds_too_rarely(choice, state)):
             # A measured station: bluffing it only builds a pot we are behind
             # in. Facing a bet, the alternative to the bluff-raise is the fold,
             # not a call with the bottom class: 114 of 286 firings had turned a
-            # bluff into a call before 15 September.
+            # bluff into a call before 15 September. With posteriors on, only a
+            # bluff that needs more folds than the station gives is withheld.
+            withheld = int(choice)
             choice = FOLD if to_call > 0 and arena[FOLD] else CHECK_CALL
             adjusted = "bluff withheld"
             self.stats.bluffs_withheld += 1
@@ -668,6 +673,10 @@ class ArenaPlayer:
             "legal": [int(m) for m in mask], "choice": int(choice),
             "sent": outgoing, "ms": round(elapsed, 2),
         }
+        if withheld is not None:
+            # The raise taken back. Without it, which bluffs a size-aware rule would have let through
+            # could be answered only by reloading the rung that played (5 Oct audit).
+            record["withheld"] = withheld
         return {"action": outgoing["action"], "params": outgoing["params"],
                 "record": record}
 
@@ -696,6 +705,33 @@ class ArenaPlayer:
             memo.clear()
         memo[key] = found
         return found
+
+    @staticmethod
+    def bluff_break_even(choice: int, state: dict) -> float:
+        """
+        The fold share at which a raise of `choice` with no equity breaks even: it puts in b chips
+        to win the pot P already there (their bet in it), so it needs b / (P + b). Half the pot
+        checked to is a third, the pot a half. b is the call plus the fraction of the pot after the
+        call, as `to_chipzen` sizes it, and never more than the chips either of us has behind.
+        Zero equity is the pessimistic case: a bluff that sometimes wins called breaks even lower.
+        """
+        pot = int(state.get("pot") or 0)
+        to_call = int(state.get("to_call") or 0)
+        mine = int(state.get("your_stack") or 0)
+        theirs = int((state.get("opponent_stacks") or [0])[0])
+        behind = min(mine, to_call + theirs) if mine > 0 else to_call + theirs
+        b = behind if choice == ALL_IN else to_call + (pot + to_call) * RAISE_FRACTIONS[choice - 2]
+        b = min(b, behind) if behind > 0 else b
+        return b / float(pot + b) if pot + b > 0 else 1.0
+
+    def _bluff_folds_too_rarely(self, choice: int, state: dict) -> bool:
+        """
+        Withhold this bluff: the posterior upper bound of their fold rate is below what this size
+        needs. hoops folds 36 percent (upper bound 0.38 over 6,132 bets), so its half-pot bluffs
+        are profitable and its pot bluffs are not; the old rule withheld both.
+        """
+        upper = self.profiles.fold_floor_upper(self.opponent)
+        return upper is not None and upper < self.bluff_break_even(choice, state)
 
     @staticmethod
     def _misread(companion_used, answered_history: str, opponent_stack: int) -> bool:

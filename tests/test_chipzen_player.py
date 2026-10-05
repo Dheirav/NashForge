@@ -216,6 +216,27 @@ def test_a_bluff_is_withheld_against_a_station_but_a_value_bet_is_not(player):
         player.opponent = None
 
 
+def test_under_posteriors_a_station_s_bluffs_are_still_withheld_and_the_log_says_which(player):
+    from chipzen.opponents import Profiles
+    player.profiles = Profiles("/nonexistent/opp.json", posteriors=True)
+    player.profiles.rows["station"] = {"bets_faced": 500, "folds": 10, "calls": 490, "raises": 0, "hands": 300}
+    player.opponent = "station"
+    try:
+        weak = {"hand_number": 1, "phase": "flop", "board": ["Qc", "9s", "Kd"], "your_hole_cards": ["3h", "2c"],
+                "pot": 400, "your_stack": 9800, "opponent_stacks": [9800], "to_call": 0,
+                "min_raise": 100, "max_raise": 9800,
+                "action_history": blinds() + [entry(0, "raise", 200), entry(1, "call", 200),
+                                              entry(1, "check", 0, "flop")]}
+        outs = [player.decide(weak, ["check", "raise"], 0) for _ in range(60)]
+        assert all(o["action"] == "check" for o in outs)
+        withheld = [o["record"] for o in outs if o["record"]["adjusted"] == "bluff withheld"]
+        assert withheld and all(r["withheld"] >= 2 for r in withheld)   # a raise index, logged
+        assert all("withheld" not in o["record"] for o in outs if o["record"]["adjusted"] != "bluff withheld")
+    finally:
+        player.profiles = None
+        player.opponent = None
+
+
 def test_a_fold_or_raise_bot_s_shove_is_called_only_by_the_top_class(player_with_companion):
     from chipzen.opponents import Profiles
     player = player_with_companion
