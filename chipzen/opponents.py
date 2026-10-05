@@ -146,6 +146,56 @@ MATCH_CORRELATION: Dict[str, float] = {
 }
 DEFAULT_CORRELATION = 0.05
 
+#: Folds by the size of our bet (docs/research/2026-10-05-fold-by-size.md). The size is what the bet raises by, as a
+#: share of the pot after the call: the engine's definition and `to_chipzen`'s, so the tree's half, pot and 2x land
+#: in their own bins whatever bet they face (a half-pot raise over a half-pot bet puts in the pot's worth of chips,
+#: and measured against the pot before it would be binned as a pot bet). Into a check it is the plain bet over the
+#: pot. The edges sit between the tree's sizes (0.5, 1, 2) with room for the arena's clamps, since min_raise pushes a
+#: small half-pot bet up and other bots bet anywhere. "small" is min-bets and probes; "jam" is over 2.5 pots, which
+#: at our depths is nearly always an all-in. A shove over a short stack is binned by what the opponent can be made to
+#: call, not its nominal size, as its break-even is priced.
+SIZE_BINS: Tuple[Tuple[str, float], ...] = (("small", 0.4), ("half", 0.75), ("pot", 1.25), ("2x", 2.5),
+                                            ("jam", float("inf")))
+#: Preflop and postflop are kept apart: a bot can call opens and fold after the flop (Fold-ver-3 folds 36.6
+#: percent overall and 55 to 88 percent after the flop), and an open is a half-pot raise, so pooling the two would
+#: let the open's calls set the half-pot bluff's price on the river.
+SIZE_PHASES = ("pre", "post")
+SIZE_KEYS = tuple(f"{phase}:{name}" for phase in SIZE_PHASES for name, _ in SIZE_BINS)
+#: Below this many answers in a bin the bluff rule uses the overall fold rate instead. Under posteriors the bin's
+#: prior is the field's rate at that size, not this bot's, so a station with five pot-sized bets on file would be
+#: read near the field's half-pot-or-better and have its bluffs released on the prior alone. The same floor as the
+#: overall read's (SEQ_MIN_OBSERVED), because a bin is asked the same question.
+SIZE_MIN = 40
+#: Within-match correlation per bin, measured as MATCH_CORRELATION was (`scripts/fold_by_size_eval.py`, 5 Oct, scout
+#: cache since each bot's cut-off, our matches left out). Kept where at least 20 bots carry the bin and the estimate
+#: is positive; the rest (thin bins, and post:small's -0.006, which is noise around zero) take fold-to-bet's 0.035.
+#: That widens the bounds of the bins measured near zero but narrows pre:jam's, measured at 0.22 on 13 bots, which
+#: the 20-bot floor leaves out. pre:2x is the outlier of the kept bins at 0.088, the same shape as the three-bet node's.
+MATCH_CORRELATION.update({"fold_at:pre:half": 0.034, "fold_at:pre:pot": 0.034, "fold_at:pre:2x": 0.088,
+                          "fold_at:post:half": 0.017, "fold_at:post:pot": 0.044})
+for _key in SIZE_KEYS:
+    MATCH_CORRELATION.setdefault(f"fold_at:{_key}", MATCH_CORRELATION["fold_to_bet"])
+
+
+def size_bin(fraction: float) -> str:
+    for name, edge in SIZE_BINS:
+        if fraction < edge:
+            return name
+    return SIZE_BINS[-1][0]
+
+
+def size_key(fraction: float, preflop: bool) -> str:
+    return f"{'pre' if preflop else 'post'}:{size_bin(fraction)}"
+
+
+def size_fraction(raise_by: float, pot_after_call: float) -> float:
+    return raise_by / pot_after_call if pot_after_call > 0 else 0.0
+
+
+def _sized(row: Dict, key: str) -> Tuple[int, int]:
+    node = (row.get("by_size") or {}).get(key) or {}
+    return node.get("fold", 0), sum(node.values())
+
 
 def _node(row: Dict, key: str) -> Dict:
     return (row.get("by_history") or {}).get(key, {}) or {}
@@ -185,6 +235,8 @@ RATES = {
     "first_bet_fold": lambda r: _first_bets(r),
     "postflop_raise": lambda r: _postflop(r, "raise"),
 }
+for _key in SIZE_KEYS:
+    RATES[f"fold_at:{_key}"] = (lambda key: lambda r: _sized(r, key))(_key)
 
 
 def matches_of(row: Dict) -> float:
@@ -330,6 +382,7 @@ class Profiles:
                                           "raises": 0, "hands": 0})
         row.setdefault("net", 0)
         row.setdefault("by_history", {})
+        row.setdefault("by_size", {})
         return row
 
     def observe(self, result: dict, our_seat: int, opponent: str, net: int = 0) -> None:
@@ -352,20 +405,87 @@ class Profiles:
         previous = None
         street = None
         letters = ""
-        for action in result.get("action_history") or []:
-            if action["action"].startswith("post"):
-                continue
+        # Chips in, for sizing our bets: the pot from earlier streets, and each seat's total on this one. In these
+        # logs a raise's amount is the seat's street total and a call's the increment (chipzen_decompose
+        # `contributions`), so a re-raise is sized off what both seats already have in, not off its own amount.
+        pot = 0
+        street_in: Dict[int, int] = {}
+        sized = None
+        history = result.get("action_history") or []
+        start = self._starting_stacks(result, history)
+        spent: Dict[int, int] = {}          # each seat's chips in on earlier streets
+        for action in history:
             if action["phase"] != street:
                 street, previous, letters = action["phase"], None, ""
+                pot += sum(street_in.values())
+                for s_, v in street_in.items():
+                    spent[s_] = spent.get(s_, 0) + v
+                street_in = {}
             kind = action["action"]
-            if action["seat"] != our_seat:
+            seat = action["seat"]
+            amount = int(action.get("amount") or 0)
+            if kind.startswith("post"):
+                street_in[seat] = street_in.get(seat, 0) + amount
+                continue
+            if seat != our_seat:
                 node = row["by_history"].setdefault(f"{street}:{letters}", {})
                 node[kind] = node.get(kind, 0) + 1
                 if previous == "raise":
                     row["bets_faced"] += 1
                     row["folds" if kind == "fold" else ("raises" if kind == "raise" else "calls")] += 1
-            letters += ("U" if action["seat"] == our_seat else "T") + kind[0]
-            previous = kind if action["seat"] == our_seat else None
+                    if sized is not None:
+                        bucket = row["by_size"].setdefault(sized, {})
+                        bucket[kind] = bucket.get(kind, 0) + 1
+            elif kind == "raise":
+                theirs = max((v for s, v in street_in.items() if s != our_seat), default=0)
+                to_call = max(0, theirs - street_in.get(our_seat, 0))
+                # A shove over a short stack is sent as our whole stack, but it can make them call only their
+                # last chips, and the rest comes back. The player's bluff_fraction caps it the same way, so the
+                # bin the read asks is the bin the answer was counted in.
+                # Uncapped unless every other seat's start is known, since one unknown stack could be the deep one.
+                others = [s_ for s_ in range(len(result.get("stacks") or [])) if s_ != our_seat]
+                bet_to = amount
+                if others and all(s_ in start for s_ in others):
+                    bet_to = min(amount, max(start[s_] - spent.get(s_, 0) for s_ in others))
+                fraction = size_fraction(bet_to - theirs, pot + sum(street_in.values()) + to_call)
+                sized = size_key(fraction, street == "preflop")
+            if kind == "raise":
+                street_in[seat] = amount
+            elif kind == "call":
+                street_in[seat] = street_in.get(seat, 0) + amount
+            letters += ("U" if seat == our_seat else "T") + kind[0]
+            previous = kind if seat == our_seat else None
+
+    @staticmethod
+    def _starting_stacks(result: dict, history) -> Dict[int, int]:
+        """
+        Each seat's chips at the start of the hand, rebuilt from the result's closing stacks: what it ended with,
+        less what it was paid, plus what it put in. A seat whose payout is not on record but which won is left out
+        rather than guessed, and so is every seat when the result carries no stacks, which leaves its bets uncapped.
+        """
+        stacks = result.get("stacks")
+        if not stacks:
+            return {}
+        paid: Dict[int, int] = {}
+        for payout in result.get("payouts") or []:
+            paid[payout["seat"]] = paid.get(payout["seat"], 0) + int(payout.get("amount") or 0)
+        put: Dict[int, int] = {}
+        street, street_in = None, {}
+        for action in history:
+            if action["phase"] != street:
+                for s_, v in street_in.items():
+                    put[s_] = put.get(s_, 0) + v
+                street, street_in = action["phase"], {}
+            seat, amount = action["seat"], int(action.get("amount") or 0)
+            if action["action"] == "raise":
+                street_in[seat] = amount            # a raise's amount is the seat's street total in these logs
+            elif action["action"] == "call" or action["action"].startswith("post"):
+                street_in[seat] = street_in.get(seat, 0) + amount
+        for s_, v in street_in.items():
+            put[s_] = put.get(s_, 0) + v
+        winners = set(result.get("winner_seats") or [])
+        return {seat: int(chips) - paid.get(seat, 0) + put.get(seat, 0) for seat, chips in enumerate(stacks)
+                if seat in paid or seat not in winners}
 
     # ------------------------------------------------------------------ posteriors
 
@@ -411,11 +531,37 @@ class Profiles:
         bets (hoops 44 percent to half-pot postflop bets and 57 to pot-sized ones), and the rate at
         the decision's own spot (`first_bet_fold`) was tried and dropped: pooled over sizes, it
         overstates folds to small bets, and it released PoetAndCoder's half-pot bluffs although that
-        bot folds 30 percent to them. The fix is fold counts by our bet size, which no row keeps yet.
+        bot folds 30 percent to them. `fold_upper_at` is the fix: folds counted by our bet's size.
         """
         if not self.exploits_allowed(name) or self._trials(name, "fold_to_bet") < SEQ_MIN_OBSERVED:
             return None
         return self.upper(name, "fold_to_bet")
+
+    def fold_at(self, name: Optional[str], fraction: float, preflop: bool = False) -> Optional[float]:
+        """
+        The bot's fold rate to a bet of this size (a share of the pot after the call, see SIZE_BINS), or its
+        overall fold rate when the bin has fewer than SIZE_MIN answers; None with no bets on file at all.
+        """
+        row = self.rows.get(name or "") or {}
+        folds, n = _sized(row, size_key(fraction, preflop))
+        if n >= SIZE_MIN:
+            return folds / n
+        return row["folds"] / row["bets_faced"] if row.get("bets_faced") else None
+
+    def fold_upper_at(self, name: Optional[str], fraction: float, preflop: bool = False) -> Optional[float]:
+        """
+        `fold_floor_upper` for one bet size: the posterior upper bound of the bin's fold rate, its prior fitted per
+        bin across the file like every other rate. A bin under SIZE_MIN answers falls back to the overall bound,
+        because a thin bin's posterior is mostly the field's rate at that size and says little about this bot.
+        None where `fold_floor_upper` is None, so the bin never fires a read the overall count would not.
+        """
+        overall = self.fold_floor_upper(name)
+        if overall is None:
+            return None
+        rate = f"fold_at:{size_key(fraction, preflop)}"
+        if self._trials(name, rate) < SIZE_MIN:
+            return overall
+        return self.upper(name, rate)
 
     # ------------------------------------------------------------------ reads
 
@@ -444,7 +590,11 @@ class Profiles:
         row = self.rows.get(name or "") or {}
         bets = row.get("river_bets", 0)
         if self.posteriors:
-            return bets >= NEVER_BLUFF_MIN and self.upper(name, "river_bluff") < NEVER_BLUFF_BOUND
+            # The exact zero `river_never_bluffs` keeps stands here too. The player asks that read only after
+            # this one, and a strong prior lifts a zero's bound over 0.10 (thirty bots bluffing 40 percent put 0 of
+            # 150 above it), so without this the pair would be stricter than main, which fires both on that zero.
+            zero = bets >= HONEST_RIVER_MIN and row.get("river_bluffs", 0) == 0
+            return bets >= NEVER_BLUFF_MIN and (zero or self.upper(name, "river_bluff") < NEVER_BLUFF_BOUND)
         return bets >= NEVER_BLUFF_MIN and row.get("river_bluffs", 0) / bets < NEVER_BLUFF_RATE
 
     def never_three_bets(self, name: Optional[str]) -> bool:

@@ -1,9 +1,13 @@
 """
-Pool paired third-raise LBR chunks: probes off, probes on, and the difference.
+Pool paired LBR chunks: the arm off, the arm on, and the difference.
+
+The arm is whichever option the chunks were paired on, --offtree-third-raise or
+--bridge-translation, so the columns name the arm rather than the probes.
 
     venv/bin/python scripts/lbr_paired_report.py results/cfr/lbr_thirdraise_2026-10-06/*.json
 
-Each chunk comes from `scripts/lbr_ladder.py --offtree-third-raise ... --paired`
+Each chunk comes from `scripts/lbr_ladder.py --offtree-third-raise ... --paired` (or
+`--bridge-translation --paired`)
 and holds both arms over the same per-hand seeds. The difference is pooled from
 its per-hand sums, not by averaging chunk means, so the standard error is the
 paired one: hands where no probe was taken differ by exactly zero and add no
@@ -47,7 +51,7 @@ def main():
                 condition = re.sub(r"_\d+\.json$", "", os.path.basename(path))
                 by_rung[(condition, rung, row.get("resolved", row["path"]))].append(row)
 
-    print("| condition | rung | solve | chunks | hands | probes off, BB/100 | probes on, BB/100 | on minus off, BB/100 "
+    print("| condition | rung | solve | chunks | hands | arm off, BB/100 | arm on, BB/100 | on minus off, BB/100 "
           "| hands changed | probes | bot folds to a probe | re-read lookups hit / missed |")
     print("|---|---|---|---|---|---|---|---|---|---|---|---|")
     for (condition, rung, solve), chunks in sorted(by_rung.items()):

@@ -34,6 +34,7 @@ from collections import Counter, defaultdict
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
 import chipzen.client as client  # noqa: E402
+import chipzen.opponents as opponents  # noqa: E402
 import scripts.chipzen_run as run  # noqa: E402
 from engine.cards import Card  # noqa: E402
 from engine.features import chen_formula  # noqa: E402
@@ -169,10 +170,18 @@ def profile(name, matches, hands_by_match):
            # and up) and small (0.6 and under), and how many of each held under
            # 0.4 equity against a random hand. PoetAndCoder's tell, 15 Sept:
            # 0 of 429 big bets were air, 39 percent of 1,080 small ones were.
-           "big_bets": 0, "big_bets_air": 0, "small_bets": 0, "small_bets_air": 0}
+           "big_bets": 0, "big_bets_air": 0, "small_bets": 0, "small_bets_air": 0,
+           # Its answers to bets by their size, keyed as chipzen.opponents.size_key: the bets are its
+           # opponents', so a scouted row says how it answers a half-pot bet before we have made one.
+           "by_size": {}}
     for m in matches:
         hands = hands_by_match.get(m["id"])
         if hands is None:
+            continue
+        # Multi-table tournament starts seat three or more, and every count here is heads-up shaped: the size of a
+        # re-raise, the U/T letters, three-bet chances and showdowns all assume one other seat. The whole match is
+        # left out, as copy_validate.load_matches does, rather than sized over the wrong bet.
+        if any(a.get("seat") not in (0, 1) for h in hands for a in h.get("actions") or []):
             continue
         row["matches"] += 1
         for o in m["vs"]:
@@ -187,6 +196,11 @@ def profile(name, matches, hands_by_match):
                 continue
             row["hands"] += 1
             pot = 0
+            # Each seat's chips on this street, for sizing a bet against the call it makes. Unlike our own
+            # logs, the platform's hand records give a raise's amount as the chips it adds, so a running sum
+            # is the street total and `pot` is already right.
+            street_in = Counter()
+            sized = None
             previous = None
             street = None
             letters = ""
@@ -197,8 +211,10 @@ def profile(name, matches, hands_by_match):
                 amount = int(a.get("amount") or 0)
                 if a["phase"] != street:
                     street, previous, letters = a["phase"], None, ""
+                    street_in = Counter()
                 if kind.startswith("post"):
                     pot += amount
+                    street_in[a["seat"]] += amount
                     continue
                 mine = a["seat"] == seat
                 if mine:
@@ -207,6 +223,9 @@ def profile(name, matches, hands_by_match):
                     if previous == "raise":
                         row["bets_faced"] += 1
                         row["folds" if kind == "fold" else ("raises" if kind == "raise" else "calls")] += 1
+                        if sized is not None:
+                            bucket = row["by_size"].setdefault(sized, {})
+                            bucket[kind] = bucket.get(kind, 0) + 1
                     if street == "preflop":
                         if kind in ("call", "raise"):
                             entered = True
@@ -252,9 +271,14 @@ def profile(name, matches, hands_by_match):
                         fraction = amount / pot
                         band = "<½" if fraction < 0.5 else ("½-1" if fraction < 1 else ("1-2" if fraction < 2 else ("2-4" if fraction < 4 else "4+")))
                         row["raise_sizes"][band] += 1
+                if kind == "raise" and not mine:
+                    to_call = max(0, street_in[seat] - street_in[a["seat"]])
+                    sized = opponents.size_key(opponents.size_fraction(amount - to_call, pot + to_call),
+                                               street == "preflop")
                 if kind == "raise" and street == "preflop":
                     preflop_raises += 1
                 pot += amount
+                street_in[a["seat"]] += amount
                 letters += ("T" if mine else "U") + kind[0]
                 previous = kind if not mine else None
             row["vpip"] += int(entered)
@@ -269,6 +293,24 @@ def profile(name, matches, hands_by_match):
                     row["shown_chen"].append(chen_formula([Card(cards[0][0].upper(), cards[0][1].lower()),
                                                            Card(cards[1][0].upper(), cards[1][1].lower())]))
     return row
+
+
+def seed_row(row):
+    """
+    A `profile()` row as `opponents.json` holds it: the counts the reads use, marked scouted, with the same counts
+    again as its `scout_base`, which `Profiles.rebuild` starts from so live hands are added once. Anything else that
+    seeds rows from the scout (the clean-profile rebuild) should go through here, so a new count is not left out
+    of one of them.
+    """
+    seeded = {"bets_faced": row["bets_faced"], "folds": row["folds"], "calls": row["calls"],
+              "raises": row["raises"], "hands": row["hands"], "matches": row["matches"], "net": 0,
+              "by_history": row["by_history"], "by_size": row["by_size"], "scouted": True,
+              "river_bets": row["river_bets"], "river_bluffs": row["river_bluffs"],
+              "big_bets": row["big_bets"], "big_bets_air": row["big_bets_air"],
+              "small_bets": row["small_bets"], "small_bets_air": row["small_bets_air"]}
+    seeded = json.loads(json.dumps(seeded))         # its own copy, so the base and the live counts never share a dict
+    seeded["scout_base"] = json.loads(json.dumps(seeded))
+    return seeded
 
 
 def summarise(row, stats):
@@ -297,6 +339,7 @@ def summarise(row, stats):
         "station": row["bets_faced"] >= 100 and row["folds"] / bf < 0.25,
         "fold_or_raise": answered >= 40 and row["calls"] / answered < 0.5,
         "top_opponents": row["opponents"].most_common(5),
+        "fold_by_size": {k: [v.get("fold", 0), sum(v.values())] for k, v in sorted(row["by_size"].items())},
     }
 
 
@@ -370,13 +413,7 @@ def main():
             elif not existing or existing.get("scouted"):
                 # `matches` lets the posterior reads count clustering from the real match count rather
                 # than hands over a typical match length (chipzen.opponents.matches_of).
-                rows[name] = {"bets_faced": row["bets_faced"], "folds": row["folds"], "calls": row["calls"],
-                              "raises": row["raises"], "hands": row["hands"], "matches": row["matches"], "net": 0,
-                              "by_history": row["by_history"], "scouted": True,
-                              "river_bets": row["river_bets"], "river_bluffs": row["river_bluffs"],
-                              "big_bets": row["big_bets"], "big_bets_air": row["big_bets_air"],
-                              "small_bets": row["small_bets"], "small_bets_air": row["small_bets_air"]}
-                rows[name]["scout_base"] = {k: v for k, v in rows[name].items()}
+                rows[name] = seed_row(row)
                 tmp = PROFILES + ".tmp"
                 with open(tmp, "w") as handle:
                     json.dump(rows, handle, indent=1, sort_keys=True)
@@ -398,6 +435,8 @@ def main():
                      f"{s['shown_chen_mean']:.1f} | {reads} |" if s["shown_chen_mean"] is not None else
                      f"| {s['name']} | {s['matches']} / {s['hands']} | {p.get('rating') or 0:.0f} | {p.get('bb_per_100')} | {s['vpip']:.0%} | {s['pfr']:.0%} | {s['three_bet']:.0%} | {s['fold_to_three_bet']:.0%} | {s['fold_to_bet']:.0%} ({s['bets_faced']}) | {s['call_share_of_answers']:.0%} | {s['showdown_rate']:.0%} | {s['showdown_win']:.0%} | ? | {reads} |")
         lines.append(f"|  | raise sizes vs pot: {s['raise_sizes']} | | | | | | | | | | | | |")
+        sized = ", ".join(f"{k} {f / n:.0%} ({n})" for k, (f, n) in s["fold_by_size"].items() if k.startswith("post:"))
+        lines.append(f"|  | folds to bets by size, postflop: {sized or 'none'} | | | | | | | | | | | | |")
     text = "\n".join(lines)
     with open(os.path.join(OUT, "scout.md"), "w") as handle:
         handle.write(text + "\n")

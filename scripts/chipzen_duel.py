@@ -100,6 +100,8 @@ def build(ladder_dir: str, flags: str, label: str, rng: np.random.Generator,
     player.reraise_defence = "--reraise-defence" in flags
     player.withhold_preflop = "--no-preflop-withhold" not in flags
     player.price_misread = "--price-misread" in flags
+    player.capped_price = "--capped-price" in flags
+    player.offtree_preflop = "--offtree-preflop" in flags
     player.size_aware_bluffs = "--size-aware-bluffs" in flags
     if "--river-blend" in tokens:
         player.river_blend = float(tokens[tokens.index("--river-blend") + 1])
@@ -322,6 +324,35 @@ _PLAYERS = None
 _PROGRESS = None
 
 
+def prebuild_tables(*players):
+    """
+    Build every histogram rung's native bucket tables in the parent, before the fork.
+
+    `native_tables()` builds them lazily, on a worker's first postflop decision,
+    so each forked worker used to build its own copy: about 450 MB a worker for
+    v5iT2p60m, 3.5 GB at six workers (5 October). Built here, the children
+    inherit one copy copy-on-write and never write to it, which measured 1.5 GB
+    at six workers with every decision identical. Scripted players and rungs
+    without tables have nothing to build.
+    """
+    built = 0
+    for player in players:
+        for strategy in list(getattr(player, "ladder", None) or []) + list(getattr(player, "companions", None) or []):
+            abstraction = getattr(strategy, "abstraction", None)
+            if abstraction is not None and getattr(abstraction, "_hist_tables", None):
+                abstraction.native_tables()
+                built += 1
+    return built
+
+
+def _fork_pool(players, workers: int):
+    """Hand the players to the workers the only way they can be handed over, and share their tables."""
+    import multiprocessing as mp
+    globals()["_PLAYERS"] = tuple(players)
+    prebuild_tables(*players)
+    return mp.get_context("fork").Pool(workers)
+
+
 def _run_matches(args_tuple):
     """A worker's share of arena matches: (wins, hands, nets, a_stats, b_stats)."""
     a_label, b_label, first, count, seed = args_tuple
@@ -421,12 +452,10 @@ def main():
     print(f"{args.a_label} ({args.a} {args.a_flags!r}) vs {args.b_label} ({args.b} {args.b_flags!r}): {what}", flush=True)
 
     if args.arena_matches and args.workers > 1:
-        import multiprocessing as mp
         started = time.perf_counter()
         shares = [(args.arena_matches * w // args.workers, args.arena_matches * (w + 1) // args.workers) for w in range(args.workers)]
         jobs = [(args.a_label, args.b_label, lo, hi - lo, args.seed + 100 * (w + 1)) for w, (lo, hi) in enumerate(shares)]
-        globals()["_PLAYERS"] = (a, b)
-        with mp.get_context("fork").Pool(args.workers) as pool:
+        with _fork_pool((a, b), args.workers) as pool:
             parts = pool.map(_run_matches, jobs)
         wins = np.concatenate([p[0] for p in parts]); hands = np.concatenate([p[1] for p in parts]); nets = np.concatenate([p[2] for p in parts])
         _merge_stats(a.stats, [p[3] for p in parts]); _merge_stats(b.stats, [p[4] for p in parts])
@@ -482,13 +511,11 @@ def main():
         return
 
     if args.workers > 1:
-        import multiprocessing as mp
         started = time.perf_counter()
         shares = [(args.hands * w // args.workers, args.hands * (w + 1) // args.workers) for w in range(args.workers)]
         jobs = [(args.a_label, args.b_label, lo, hi - lo, args.seed + 100 * (w + 1), stack, sb, args.big_blind)
                 for w, (lo, hi) in enumerate(shares)]
-        globals()["_PLAYERS"] = (a, b)
-        with mp.get_context("fork").Pool(args.workers) as pool:
+        with _fork_pool((a, b), args.workers) as pool:
             parts = pool.map(_run_deals, jobs)
         diffs = np.concatenate([p[0] for p in parts])
         _merge_stats(a.stats, [p[1] for p in parts]); _merge_stats(b.stats, [p[2] for p in parts])

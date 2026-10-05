@@ -29,6 +29,14 @@ off then on, with every hand's cards and decisions drawn from generators seeded
 by the hand's index, so the two differ only on hands where a probe was taken.
 The difference is reported hand by hand, which is far tighter than two
 independent means; `scripts/lbr_paired_report.py` pools it over chunks.
+
+    venv/bin/python scripts/lbr_ladder.py --rungs 70bb --between-sizes --bridge-translation --paired
+
+`--bridge-translation` reads LBR's own off-tree sizes the way chipzen/bridge.py
+reads them, so an overbet at 1.5 times the largest tree size or more is heard as
+the pseudo all-in the live bot hears, not as 2x pot. With `--paired` the off arm
+drops every option that changes what the bot hears (this one and the probes), so
+the difference is what those options are worth together.
 """
 import argparse
 import glob
@@ -78,14 +86,24 @@ def main():
                         metavar="FRACTION",
                         help="pot fractions LBR may raise where the tree's menu is all-in only, "
                              "translated as chipzen/bridge.py translates them")
+    parser.add_argument("--bridge-translation", action="store_true",
+                        help="translate LBR's off-tree sizes as chipzen/bridge.py does, pseudo all-in included "
+                             "(see cfr/lbr.py); off reproduces every earlier number")
     parser.add_argument("--paired", action="store_true",
-                        help="with --offtree-third-raise: run probes off and on over the same per-hand "
-                             "seeds and report the paired difference")
+                        help="with --offtree-third-raise or --bridge-translation: run without and with them "
+                             "over the same per-hand seeds and report the paired difference")
     parser.add_argument("--trace", help="write one record per sized bet LBR makes to this .jsonl (see cfr/lbr.py)")
     parser.add_argument("--out", default=os.path.join(ROOT, "results", "cfr", "lbr_ladder.json"))
     args = parser.parse_args()
-    if args.paired and not args.offtree_third_raise:
-        parser.error("--paired compares probes off and on, so it needs --offtree-third-raise")
+    treated = bool(args.offtree_third_raise) or args.bridge_translation
+    if args.paired and not treated:
+        parser.error("--paired compares an option off and on, so it needs --offtree-third-raise "
+                     "or --bridge-translation")
+    options = {}
+    if args.offtree_third_raise:
+        options["offtree_third_raise"] = args.offtree_third_raise
+    if args.bridge_translation:
+        options["bridge_translation"] = True
 
     rows = {}
     for rung in args.rungs:
@@ -125,16 +143,16 @@ def main():
             kwargs["trace"] = trace
         paired = None
         if args.paired:
-            # The trace is the probe arm's: its records are the ones that say
-            # what each probe won.
+            # The trace is the treated arm's: its records are the ones that
+            # say what each probe or bridge-read overbet won.
             off_kwargs = {k: v for k, v in kwargs.items() if k != "trace"}
             off = LocalBestResponse(game, saved["strategy"], args.rollout_samples, args.candidates,
                                     **off_kwargs).play(args.hands, paired_seed=args.seed)
-            print(f"{rung} probes off: {off.summary()}")
+            print(f"{rung} options off: {off.summary()}")
             probing = LocalBestResponse(game, saved["strategy"], args.rollout_samples, args.candidates,
-                                        offtree_third_raise=args.offtree_third_raise, **kwargs)
+                                        **options, **kwargs)
             result = probing.play(args.hands, paired_seed=args.seed)
-            print(f"{rung} probes on:  {result.summary()}")
+            print(f"{rung} options on:  {result.summary()}")
             difference = result.values - off.values
             paired = {"off": summary(off, args.hands, int(saved_args["big_blind"])),
                       "difference": {"n": int(difference.size), "sum": float(difference.sum()),
@@ -143,9 +161,9 @@ def main():
                                      "stderr": float(difference.std(ddof=1) / np.sqrt(difference.size)),
                                      "hands_changed": int((difference != 0).sum())},
                       "probe_stats": probing.probe_stats}
-        elif args.offtree_third_raise:
+        elif treated:
             probing = LocalBestResponse(game, saved["strategy"], args.rollout_samples, args.candidates,
-                                        offtree_third_raise=args.offtree_third_raise, **kwargs)
+                                        **options, **kwargs)
             result = probing.play(args.hands, np.random.default_rng(args.seed))
             paired = {"probe_stats": probing.probe_stats}
         else:
@@ -164,15 +182,16 @@ def main():
                       "hands": args.hands, "bb_per_100": 100.0 * result.mean / big_blind,
                       "between_sizes": bool(args.between_sizes), "sizes": kwargs.get("bet_sizes"), "seconds": round(elapsed, 1),
                       "information_sets": len(saved["strategy"])}
-        if args.offtree_third_raise:
+        if treated:
             rows[rung]["offtree_third_raise"] = list(args.offtree_third_raise)
+            rows[rung]["bridge_translation"] = bool(args.bridge_translation)
             rows[rung]["paired"] = bool(args.paired)
             rows[rung]["big_blind"] = big_blind
             rows[rung]["resolved"] = os.path.basename(os.path.realpath(path))
             rows[rung].update(paired)
             if args.paired:
                 d = paired["difference"]
-                print(f"   probes on minus off: {100 * d['mean'] / big_blind:+.1f} +/- "
+                print(f"   on minus off: {100 * d['mean'] / big_blind:+.1f} +/- "
                       f"{100 * d['stderr'] / big_blind:.1f} BB/100, {d['hands_changed']:,} of "
                       f"{d['n']:,} hands changed; {paired['probe_stats']}")
         print(f"{rung}: {result.summary()}")
