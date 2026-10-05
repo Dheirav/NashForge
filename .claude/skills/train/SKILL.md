@@ -68,8 +68,9 @@ PPO run at the same standard means building the comparison, not reusing it.
   same two hands every hand; an untrained random network scored +451 BB/100
   under it. Do not quote the superseded reports back — they are deleted from the
   tree and live only in git history and the `_superseded_` tarball.
-- **Budget for the test suite.** `pytest --collect-only` alone takes ~5 minutes
-  (207 tests). Run one file while iterating.
+- **Budget for the test suite.** About 550 tests and several minutes; collection takes about 5
+  seconds since `pytest.ini` stopped pytest importing `scripts/endpoint_test.py`. Run one file
+  while iterating.
 - **`scripts/train_evolution.py` is the pattern to copy** for any new trainer:
   it records self-play reward *and* an independent panel score, and writes a
   resumable history. Do both.
