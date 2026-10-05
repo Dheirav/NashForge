@@ -230,8 +230,15 @@ def aivat_hands(rows, seat, decisions, allins, vf):
 
 
 def _ist(text):
-    """'2026-10-03T07:00' read as IST, to a Unix time: the ledger and the fixture list both keep IST."""
-    moment = datetime.datetime.fromisoformat(text).replace(tzinfo=datetime.timezone(datetime.timedelta(hours=5, minutes=30)))
+    """
+    '2026-10-03T07:00' read as IST, to a Unix time: the ledger and the fixture list both keep IST.
+
+    An explicit offset wins, because a time copied from a log written under the machine's old +04 clock would
+    otherwise be read 90 minutes off with nothing to say so.
+    """
+    moment = datetime.datetime.fromisoformat(text)
+    if moment.tzinfo is None:
+        moment = moment.replace(tzinfo=datetime.timezone(datetime.timedelta(hours=5, minutes=30)))
     return moment.timestamp()
 
 
@@ -322,6 +329,11 @@ def main():
         for hand, ds in decisions.items():
             if hand not in nets:
                 continue
+            if args.aivat and hand not in scored:
+                # No hole cards logged, so no AIVAT value. The hand leaves all three columns, not only the AIVAT
+                # one, because the paired AIVAT minus all-in check is only a bias check on the same hands.
+                checks[tag]["hands without hole cards"] += 1
+                continue
             value = nets[hand]
             if hand in allins:
                 value, spot, reachable = allins[hand]
@@ -339,7 +351,7 @@ def main():
                 for street in ("preflop", "flop", "turn", "river"):
                     terms_by[tag][street].append(terms["chance"].get(street, 0.0))
                 terms_by[tag]["decisions"].append(terms["decision"])
-                for k in ("decisions_with_term", "decisions_without", "board_missing"):
+                for k in ("decisions_with_term", "decisions_without", "decisions_unlogged", "board_missing"):
                     checks[tag][k] += terms[k]
             for cat in classify(ds):
                 per_label[tag][cat].append(nets[hand])
@@ -431,8 +443,12 @@ def print_aivat(order, labels, per_label, adjusted, aivat, terms_by, checks, vf)
               f"AIVAT is worth {(raw.var() / av.var()):.2f}x the hands of raw and {(adj.var() / av.var()):.2f}x "
               f"the all-in adjusted. AIVAT minus all-in, paired: {_mean_se(av - adj)}. "
               f"Terms, mean ± se per hand: {kinds}. Decisions with a term {c['decisions_with_term']}, "
-              f"without (purified or distribution unknown) {c['decisions_without']}; streets without a logged "
-              f"board {c['board_missing']}.")
+              f"without (purified or distribution unknown) {c['decisions_without']}, our actions with no logged "
+              f"row {c['decisions_unlogged']}; streets without a logged board {c['board_missing']}; hands left "
+              f"out of every column for want of our hole cards {c['hands without hole cards']}.")
+    for l, c in checks.items():
+        if l not in labels and c["hands without hole cards"]:
+            print(f"{l}: every hand left out, {c['hands without hole cards']} without our hole cards in the log.")
 
 
 if __name__ == "__main__":
