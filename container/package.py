@@ -87,6 +87,19 @@ def audit(path: str):
     return top, inner
 
 
+def copy_ladder(source: str, target: str):
+    """
+    The compact ladder into the upload, without the builder's runner links (nolimit_<d>bb.pkl and its
+    flat pair). Those are for the runner in this repository, which needs them to see a cap2 rung's depth.
+    The image lists *.rung.json only, and copytree follows links, so a link copied here would put the
+    source's full pickle or flat table in the upload (the limit is 250 MB). Every file the builder writes
+    itself is a real file, so any link, and any pickle, is left out.
+    """
+    def ignore(folder, names):
+        return {n for n in names if n.endswith(".pkl") or os.path.islink(os.path.join(folder, n))}
+    shutil.copytree(source, target, ignore=ignore)
+
+
 def main():
     files = loaded_modules()
     shutil.rmtree(OUT, ignore_errors=True)
@@ -117,7 +130,7 @@ def main():
     shutil.copy(os.path.join(ROOT, "container", "dockerignore"), os.path.join(OUT, ".dockerignore"))
     with open(os.path.join(OUT, "requirements.txt"), "w") as handle:
         handle.write("numpy\nchipzen-bot\n")
-    shutil.copytree(os.path.join(ROOT, "container", "ladder"), os.path.join(OUT, "ladder"))
+    copy_ladder(os.path.join(ROOT, "container", "ladder"), os.path.join(OUT, "ladder"))
     # Data the shipped modules open by a path relative to themselves. The push/fold ranges answer short
     # stacks (nfarena/pushfold.py); without them the loader returns None and the bot quietly plays a
     # rule instead, which an end-to-end run caught (one decision in 4,978, a call played as a fold).
