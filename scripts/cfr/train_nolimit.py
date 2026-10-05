@@ -177,6 +177,17 @@ def parse_args():
     parser.add_argument("--warm-mode", default="proportional", choices=["proportional", "frozen"],
                         help="proportional: regrets set to the prior; frozen: play the prior for "
                              "--warm-weight iterations while regrets accumulate (substitute regrets)")
+    #: Per-node visit counts (native only), written as `<name>.visits.npz`
+    #: beside the flat pair; read with scripts/cfr/visit_report.py. Off by
+    #: default: off, the counters are never written and the golden path is
+    #: unchanged. The counters live in the node's padding, so on costs no memory.
+    parser.add_argument("--count-visits", action="store_true",
+                        help="count visits per information set and write <name>.visits.npz")
+    #: Mid-run snapshots of the counts, so one run gives the T and 2T pair the
+    #: stopping rule compares instead of two runs. Counted in --iterations'
+    #: units, after any frozen warm phase.
+    parser.add_argument("--visit-snapshots", type=int, nargs="+", default=[],
+                        help="also write <name>.visits.<N>.npz after N iterations (needs --count-visits)")
     return parser.parse_args()
 
 
@@ -275,6 +286,12 @@ def _train_native(args, abstraction, projected):
         texture=bool(getattr(abstraction, "texture", False)),
         rule=args.update_rule, raise_sizes=raise_sizes, street_raise_sizes=street_raise_sizes, **hist)
     solver.set_average_from(int(args.average_from * args.iterations))
+    averaged_from = int(args.average_from * args.iterations)
+    if args.visit_snapshots and not args.count_visits:
+        raise SystemExit("--visit-snapshots needs --count-visits")
+    if args.count_visits and not args.output:
+        raise SystemExit("--count-visits writes beside --output; give one")
+    solver.set_count_visits(bool(args.count_visits))
     if args.opponent_mix and args.opponent_archetype:
         raise SystemExit("--opponent-mix and --opponent-archetype are alternatives; give one")
     if args.opponent_mix:
@@ -315,6 +332,7 @@ def _train_native(args, abstraction, projected):
             # The frozen iterations are measurement, not play: keep them out of
             # the average, and out of the run's own count of iterations.
             solver.set_average_from(args.warm_weight + int(args.average_from * args.iterations))
+            averaged_from = args.warm_weight + int(args.average_from * args.iterations)
             args.iterations += args.warm_weight
         print(f"warm start ({args.warm_mode}): {len(entries):,} entries from {args.warm_start}, "
               f"weight {args.warm_weight:,} iterations at {scale:g} chips", flush=True)
@@ -334,10 +352,30 @@ def _train_native(args, abstraction, projected):
     # killed at six hours for the same reason.
     step = max(1, args.iterations // 50)
     done = 0
+    # The proportional warm start begins the solver's counter at the prior's
+    # weight; those iterations were never played, so they fed no average.
+    averaged_from = max(averaged_from, solver.iterations())
+    frozen = args.warm_weight if (args.warm_start and args.warm_mode == "frozen") else 0
+    snapshots = sorted(n + frozen for n in args.visit_snapshots if 0 < n + frozen < args.iterations)
+    skipped = [n for n in args.visit_snapshots if not 0 < n + frozen < args.iterations]
+    if skipped:
+        # Said aloud because the T and 2T pair is the point of asking: a typo here would otherwise surface
+        # only when visit_report.py is handed a file that was never written.
+        print(f"  warning: visit snapshots {skipped} skipped: a snapshot must fall inside the run's "
+              f"{args.iterations - frozen:,} iterations, and the end of the run is written anyway", flush=True)
     while done < args.iterations:
         chunk = min(step, args.iterations - done)
+        if snapshots:
+            chunk = min(chunk, snapshots[0] - done)   # land exactly on the snapshot
         solver.train(chunk, args.threads)
         done += chunk
+        if snapshots and done == snapshots[0]:
+            from cfr.visits import from_solver, visits_path, write_visits
+            label = done - frozen
+            path = visits_path(args.output, label)
+            write_visits(path, from_solver(solver, averaged_from, {"args": vars(args), "run_iterations": label}))
+            print(f"  visit snapshot at {label:,}: {path}", flush=True)
+            snapshots.pop(0)
         taken = time.perf_counter() - start
         rss = _resident_mb()
         # ETA from the measured rate, never estimated up front.
@@ -362,6 +400,16 @@ def _train_native(args, abstraction, projected):
               f"landed on a node that was reached")
     if args.prune_after is not None:
         print(f"  pruning: {solver.pruned():,} action visits skipped")
+
+    if args.count_visits:
+        from cfr.visits import from_solver, visits_path, write_visits
+        counts = from_solver(solver, averaged_from, {"args": vars(args), "run_iterations": done - frozen})
+        write_visits(visits_path(args.output), counts)
+        reached = counts.avg
+        print(f"  visits: median {np.median(reached):,.0f} average-strategy samples a node, 10th percentile "
+              f"{np.percentile(reached, 10):,.0f}; {np.mean(reached < 100):.1%} of nodes under 100 "
+              f"(scripts/cfr/visit_report.py {visits_path(args.output)})", flush=True)
+        del counts, reached
 
     # Flat export: three arrays rather than a tree, a dict and millions of
     # small arrays. The pickle keeps its dict shape (views into the values
@@ -409,6 +457,8 @@ def main():
         args.preflop_buckets = args.buckets
     if (args.warm_start or args.prune_after is not None) and not args.native:
         raise SystemExit("--warm-start and --prune-after are native solver features; drop --no-native")
+    if args.count_visits and not args.native:
+        raise SystemExit("--count-visits is a native solver feature; drop --no-native")
 
     projected = measure({street: (args.preflop_buckets if street == "preflop" else args.buckets)
                          for street in STREETS},

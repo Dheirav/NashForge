@@ -30,6 +30,15 @@ constexpr int MAX_ACTIONS = 6;
 
 struct InfoSetNode {
     int num_actions = 0;
+    // Visit counters, written only when MCCFR::set_count_visits is on. Both sit
+    // in alignment padding (after the int, and after the lock byte), so the
+    // node is the same 120 bytes with or without them and the table's memory
+    // does not change. `avg_visits` counts the samples that went into
+    // strategy_sum, the number the exported strategy is an average of;
+    // `regret_visits` counts the regret updates, made as the traverser. The
+    // first is the one a stopping rule reads: before the counter the rare-node
+    // tail had never been measured and budgets were set by an average.
+    uint32_t avg_visits = 0;
     std::array<double, MAX_ACTIONS> regret_sum{};
     std::array<double, MAX_ACTIONS> strategy_sum{};
     int64_t last_discounted = 0;
@@ -38,12 +47,18 @@ struct InfoSetNode {
     // meeting at the same node would otherwise lose each other's regret.
     // The atomic makes the struct non-copyable, hence the constructors.
     std::atomic<uint8_t> busy{0};
+    uint32_t regret_visits = 0;
 
     InfoSetNode() = default;
     explicit InfoSetNode(int actions) : num_actions(actions) {}
     InfoSetNode(const InfoSetNode& o)
-        : num_actions(o.num_actions), regret_sum(o.regret_sum),
-          strategy_sum(o.strategy_sum), last_discounted(o.last_discounted) {}
+        : num_actions(o.num_actions), avg_visits(o.avg_visits), regret_sum(o.regret_sum),
+          strategy_sum(o.strategy_sum), last_discounted(o.last_discounted),
+          regret_visits(o.regret_visits) {}
+
+    // Saturating: a root node at 4 billion samples has stopped being the
+    // question, and wrapping to zero would put it in the rare tail.
+    static void bump(uint32_t& n) { if (n != UINT32_MAX) ++n; }
 
     void lock() { while (busy.exchange(1, std::memory_order_acquire)) { /* spin: held for nanoseconds */ } }
     void unlock() { busy.store(0, std::memory_order_release); }
@@ -79,6 +94,9 @@ struct InfoSetNode {
         return out;
     }
 };
+// The counters must stay inside the padding; a bigger node is 8 more bytes on
+// every one of tens of millions of nodes, which is the budget item 2 is about.
+static_assert(sizeof(InfoSetNode) == 15 * sizeof(double), "visit counters grew the node");
 
 /// A regret and strategy accumulation schedule; see cfr/updates.py.
 struct UpdateRule {
@@ -275,6 +293,11 @@ public:
         prune_threshold_ = threshold;
         prune_fraction_ = fraction;
     }
+    /// Count visits per node (InfoSetNode::avg_visits, regret_visits). Off by
+    /// default; off, the counters are never written and the path is the old
+    /// one, which the golden test pins.
+    void set_count_visits(bool on) { count_visits_ = on; }
+    bool count_visits() const { return count_visits_; }
     size_t pruned() const { return pruned_.load(); }
     size_t warm_entries() const { return warm_.size(); }
     size_t warm_hits() const { return warm_hits_.load(); }
@@ -527,9 +550,11 @@ private:
             strategy_at(key, node, iteration, strategy);
             discount_once(node, iteration);
             const double weight = rule_.strategy_weight(iteration);
-            if (iteration - 1 >= average_from_ && !opponent_policy_)   // with a script installed the traverser branch accumulates
+            if (iteration - 1 >= average_from_ && !opponent_policy_) {  // with a script installed the traverser branch accumulates
                 for (size_t i = 0; i < actions.size(); ++i)
                     node.strategy_sum[i] += weight * strategy[i];
+                if (count_visits_) InfoSetNode::bump(node.avg_visits);
+            }
             if (parallel_) node.unlock();
             return walk(ctx, game.next_state(state, actions[sample(*ctx.rng, strategy, actions.size())]),
                         traverser, iteration, own_reach);
@@ -548,8 +573,10 @@ private:
             // chips a hand to the station it was solved against.
             discount_once(node, iteration);
             const double weight = rule_.strategy_weight(iteration) * own_reach;
-            if (iteration - 1 >= average_from_)
+            if (iteration - 1 >= average_from_) {
                 for (size_t i = 0; i < actions.size(); ++i) node.strategy_sum[i] += weight * strategy[i];
+                if (count_visits_) InfoSetNode::bump(node.avg_visits);
+            }
         }
         if (parallel_) node.unlock();
 
@@ -577,6 +604,7 @@ private:
         if (parallel_) node.lock();
         discount_once(node, iteration);
         rule_.add_regret(node, regret);
+        if (count_visits_) InfoSetNode::bump(node.regret_visits);
         if (parallel_) node.unlock();
         return value;
     }
@@ -625,6 +653,7 @@ private:
     std::atomic<size_t> pruned_{0};
     std::atomic<size_t> warm_hits_{0};
     bool current_when_empty_ = false;
+    bool count_visits_ = false;
     bool parallel_ = false;
 };
 

@@ -191,6 +191,21 @@ NB_MODULE(pokerbot_native, m) {
        "Solve Kuhn poker. The game value to player 0 is -1/18 at equilibrium. `warm` seeds "
        "the named information sets before training, see MCCFR::warm_start.");
 
+    m.def("solve_kuhn_visits", [](int64_t iterations, uint64_t seed, int threads, int64_t average_from) {
+        // Kuhn with the visit counter on, for the counter's exact tests: the
+        // game is small enough that what each count must equal is known.
+        MCCFR<KuhnPoker> solver(KuhnPoker{}, UpdateRule::vanilla(), seed);
+        solver.set_average_from(average_from);
+        solver.set_count_visits(true);
+        solver.train(iterations, threads);
+        std::map<std::string, std::pair<uint32_t, uint32_t>> out;
+        solver.for_each_node([&](const std::string& key, const InfoSetNode& node) {
+            out[key] = {node.avg_visits, node.regret_visits};
+        });
+        return out;
+    }, nb::arg("iterations"), nb::arg("seed"), nb::arg("threads") = 1, nb::arg("average_from") = 0,
+       "Solve Kuhn with visit counting on; key -> (average-strategy samples, regret updates).");
+
     // --- the no-limit solver -----------------------------------------------
     //
     // The fitted abstraction is handed over rather than refitted here. k-means
@@ -495,6 +510,44 @@ NB_MODULE(pokerbot_native, m) {
         .def("set_pruning", &MCCFR<NoLimitGame>::set_pruning, nb::arg("after"), nb::arg("threshold"), nb::arg("fraction") = 0.95,
              "Regret-based pruning from iteration `after`: on `fraction` of iterations skip actions with "
              "regret below `threshold` chips (never on the river, never an action that ends the hand).")
+        .def("set_count_visits", &MCCFR<NoLimitGame>::set_count_visits, nb::arg("on"),
+             "Count per-node visits (average-strategy samples and regret updates); off by default.")
+        .def("count_visits", &MCCFR<NoLimitGame>::count_visits)
+        .def("visits_flat", [](const MCCFR<NoLimitGame>& solver, int key_width) {
+            // Keys in the same padded, sorted form as average_strategy_flat, so
+            // row i here is row i there and the counts line up with the
+            // strategy without a join.
+            std::vector<std::pair<std::string, const InfoSetNode*>> keys;
+            keys.reserve(solver.size());
+            solver.for_each_node([&](uint64_t key, const InfoSetNode& node) {
+                keys.emplace_back(solver.key_string(key), &node);
+            });
+            std::sort(keys.begin(), keys.end(),
+                      [](const auto& a, const auto& b) { return a.first < b.first; });
+            const size_t n = keys.size();
+            uint8_t* key_bytes = new uint8_t[n * static_cast<size_t>(key_width)]();
+            uint32_t* avg = new uint32_t[n];
+            uint32_t* reg = new uint32_t[n];
+            for (size_t i = 0; i < n; ++i) {
+                const std::string& k = keys[i].first;
+                if (static_cast<int>(k.size()) > key_width) {
+                    delete[] key_bytes; delete[] avg; delete[] reg;
+                    throw std::invalid_argument("information-set key longer than key_width: " + k);
+                }
+                std::memcpy(key_bytes + i * static_cast<size_t>(key_width), k.data(), k.size());
+                avg[i] = keys[i].second->avg_visits;
+                reg[i] = keys[i].second->regret_visits;
+            }
+            nb::capsule own_keys(key_bytes, [](void* p) noexcept { delete[] static_cast<uint8_t*>(p); });
+            nb::capsule own_avg(avg, [](void* p) noexcept { delete[] static_cast<uint32_t*>(p); });
+            nb::capsule own_reg(reg, [](void* p) noexcept { delete[] static_cast<uint32_t*>(p); });
+            return nb::make_tuple(
+                nb::ndarray<nb::numpy, uint8_t, nb::ndim<2>>(key_bytes, {n, static_cast<size_t>(key_width)}, own_keys),
+                nb::ndarray<nb::numpy, uint32_t, nb::ndim<1>>(avg, {n}, own_avg),
+                nb::ndarray<nb::numpy, uint32_t, nb::ndim<1>>(reg, {n}, own_reg));
+        }, nb::arg("key_width") = 32,
+           "Per-node visit counts as (keys (n, key_width) uint8, sorted; uint32 average-strategy samples; "
+           "uint32 regret updates). Zeros unless set_count_visits(True) was on while training.")
         .def("pruned", &MCCFR<NoLimitGame>::pruned, "Action visits skipped so far.")
         .def("warm_entries", &MCCFR<NoLimitGame>::warm_entries)
         .def("warm_hits", &MCCFR<NoLimitGame>::warm_hits, "Nodes created so far that took a warm entry.")
