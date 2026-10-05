@@ -139,7 +139,8 @@ class LocalBestResponse:
                  rollout_samples: int = 60, candidates: int = 32,
                  bet_sizes: Sequence[float] = DEFAULT_BET_SIZES,
                  trace: Optional[list] = None,
-                 offtree_third_raise: Sequence[float] = ()):
+                 offtree_third_raise: Sequence[float] = (),
+                 bridge_translation: bool = False):
         self.game = game
         self.strategy = strategy
         self.rollout_samples = rollout_samples
@@ -161,14 +162,29 @@ class LocalBestResponse:
         #: raises, and at that depth there are none. Empty leaves every hand
         #: exactly as it was.
         self.offtree_third_raise = tuple(float(f) for f in offtree_third_raise)
+        #: Read LBR's own off-tree sizes the way ``chipzen.bridge._as_abstract``
+        #: reads them, instead of through :func:`translate` onto the legal sized
+        #: raises. The two disagree above the largest size: translation clamps a
+        #: 3.5 pot bet to 2x pot, while the bridge reads anything at 1.5 times the
+        #: largest size or more (and anything that costs the bettor's stack) as
+        #: all-in, and re-reads the street if the hand goes on. So without this
+        #: LBR scores the 2x-pot node's answer to an overbet the bot in fact
+        #: answers at the all-in node. Off by default so every earlier LBR number
+        #: reproduces.
+        self.bridge_translation = bool(bridge_translation)
         #: The bridge's view of the hand in progress (a ``chipzen.bridge.Hand``)
         #: while probes are on, so its pseudo all-in record and street re-reads
         #: are the bridge's own and not a copy of them.
         self._bridge = None
         #: Counts for the report: how often a probe was made and answered, and
         #: how the strategy was asked after a collapsed street.
+        #: ``folded`` and ``called`` count answers to any pseudo all-in, a probe
+        #: or an overbet read as one. ``overbet_allins`` counts LBR's own sizes the
+        #: bridge read as a pseudo all-in (chips kept), ``capped_allins`` those
+        #: that cost the whole stack and so are a real one.
         self.probe_stats = {"probes": 0, "folded": 0, "called": 0,
-                            "collapsed_streets": 0, "alt_hits": 0, "alt_misses": 0}
+                            "collapsed_streets": 0, "alt_hits": 0, "alt_misses": 0,
+                            "overbet_allins": 0, "capped_allins": 0}
 
     # ------------------------------------------------------------------
     # The live bridge's reading of a probe, through its own functions.
@@ -198,28 +214,53 @@ class LocalBestResponse:
         return Hand(node=Node(), seat=1 - me, big_blind=self.game.big_blind,
                     start_stacks=start)
 
-    def _bridge_perceive(self, state, me: int, fraction: float, hand,
-                         rng: np.random.Generator) -> int:
+    def _bridge_view(self, state, me: int, fraction: float) -> Tuple[float, int, int]:
         """
-        What the live bridge reads this raise as, from ``chipzen.bridge._as_abstract``.
+        The (fraction, level, ceiling) the bridge would compute for this raise.
 
         The bridge sees chips, not a fraction, so the fraction it is handed is
         recomputed from the real cost the way ``replay`` computes it from the
         arena's levels; the ceiling is the stack the bettor had when the street
         began, which is what the bridge's ``start - prior`` comes to.
         """
-        from chipzen.bridge import _as_abstract
         opponent = 1 - me
         cost = self.game._raise_cost(state, me, fraction)
         to_call = max(state.committed[opponent] - state.committed[me], 0)
         pot_after_call = sum(state.contributions) + to_call
         seen = (cost - to_call) / pot_after_call if pot_after_call else 0.0
-        level = state.committed[me] + cost
-        ceiling = state.committed[me] + state.stacks[me]
+        return seen, state.committed[me] + cost, state.committed[me] + state.stacks[me]
+
+    def _bridge_perceive(self, state, me: int, fraction: float, hand,
+                         rng: np.random.Generator) -> int:
+        """What the live bridge reads this raise as, from ``chipzen.bridge._as_abstract``."""
+        from chipzen.bridge import _as_abstract
+        seen, level, ceiling = self._bridge_view(state, me, fraction)
         node = hand.node
         node.history = state.history
         node.raises_this_street = sum(1 for a in state.history.split("/")[-1] if a in "2345")
         return _as_abstract(seen, level, ceiling, node, self.game.raise_cap, hand, rng)
+
+    def _bridge_distribution(self, state, me: int,
+                             fraction: float) -> Tuple[List[int], np.ndarray]:
+        """
+        Every action the bridge may read this raise as, with its probability.
+
+        Pricing wants the expectation, while ``_as_abstract`` draws one reading.
+        Its all-in readings are deterministic, so they are taken from it directly
+        on a scratch hand; otherwise it draws from the pseudo-harmonic pair over
+        the schedule's sized raises at this depth, and that pair is laid out here
+        with the same inputs. A test samples ``_as_abstract`` against this.
+        """
+        from chipzen.bridge import RAISE_FRACTIONS
+        read = self._bridge_perceive(state, me, fraction, self._bridge_hand(me),
+                                     np.random.default_rng(0))
+        if read == ALL_IN:
+            return [ALL_IN], np.ones(1)
+        depth = sum(1 for a in state.history.split("/")[-1] if a in "2345")
+        sized = [a for a in raise_sizes_at(self.game.raise_cap, depth, state.street) if a != ALL_IN]
+        fractions = [RAISE_FRACTIONS[a - 2] for a in sized]
+        seen, _, _ = self._bridge_view(state, me, fraction)
+        return sized, translation_distribution(fractions, max(seen, fractions[0]))
 
     def _street_closes(self, state) -> None:
         """A street is about to be dealt: let the bridge re-read it (``_close_street``)."""
@@ -561,7 +602,18 @@ class LocalBestResponse:
                     after, candidate_range)))
 
         perceived, sizes = self._abstract_raises(actions)
-        if perceived:
+        if perceived and self.bridge_translation:
+            for fraction in self.bet_sizes:
+                readings, weights = self._bridge_distribution(state, me, fraction)
+                after = self.game.raise_by_fraction(state, fraction, readings[0])
+                folds_each = np.zeros(len(candidate_range.hands))
+                for weight, reading in zip(weights, readings):
+                    if weight > 0.0:
+                        folds_each += weight * self._fold_probabilities(
+                            self.game.raise_by_fraction(state, fraction, reading), candidate_range)
+                moves.append(Move(None, fraction))
+                values.append(priced(after, folds_each))
+        elif perceived:
             for fraction in self.bet_sizes:
                 after = self.game.raise_by_fraction(state, fraction, perceived[0])
                 folds_each = self._fold_probabilities_off_tree(
@@ -601,6 +653,20 @@ class LocalBestResponse:
                 self._bridge = self._bridge_hand(me)
             perceived = self._bridge_perceive(state, me, move.fraction, self._bridge, rng)
             self.probe_stats["probes"] += 1
+            return self.game.raise_by_fraction(state, move.fraction, perceived)
+
+        if self.bridge_translation:
+            # The hand's own bridge record, so a pseudo all-in that is called
+            # is re-read by ``_close_street`` when the next street is dealt.
+            me = self.game.current_player(state)
+            if self._bridge is None:
+                self._bridge = self._bridge_hand(me)
+            before = len(self._bridge.pseudo_allins)
+            perceived = self._bridge_perceive(state, me, move.fraction, self._bridge, rng)
+            if len(self._bridge.pseudo_allins) > before:
+                self.probe_stats["overbet_allins"] += 1
+            elif perceived == ALL_IN:
+                self.probe_stats["capped_allins"] += 1
             return self.game.raise_by_fraction(state, move.fraction, perceived)
 
         perceived, sizes = self._abstract_raises(self.game.legal_actions(state))
@@ -724,7 +790,8 @@ def lbr_value(game, strategy: Dict[Hashable, np.ndarray], hands: int = 2000,
               bet_sizes: Sequence[float] = DEFAULT_BET_SIZES,
               trace: Optional[list] = None,
               offtree_third_raise: Sequence[float] = (),
-              paired_seed: Optional[int] = None) -> LBRResult:
+              paired_seed: Optional[int] = None,
+              bridge_translation: bool = False) -> LBRResult:
     """
     Lower bound on the exploitability of ``strategy``, in chips per hand.
 
@@ -735,5 +802,6 @@ def lbr_value(game, strategy: Dict[Hashable, np.ndarray], hands: int = 2000,
     exploiter lost money, so the bound is slack and says nothing at all.
     """
     return LocalBestResponse(game, strategy, rollout_samples, candidates,
-                             bet_sizes, trace, offtree_third_raise).play(
+                             bet_sizes, trace, offtree_third_raise,
+                             bridge_translation).play(
                                  hands, rng, paired_seed=paired_seed)

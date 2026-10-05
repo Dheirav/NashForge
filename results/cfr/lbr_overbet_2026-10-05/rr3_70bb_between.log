@@ -1,0 +1,16 @@
+70bb: using cap2_70bb.pkl (also present: nolimit_70bb.pkl)
+70bb options off: +2.660 +/- 0.351 chips/hand [+1.972, +3.348] — exploitable by at least this much
+70bb options on:  +2.066 +/- 0.304 chips/hand [+1.471, +2.662] — exploitable by at least this much
+   on minus off: -29.7 +/- 13.1 BB/100, 3,273 of 8,000 hands changed; {'probes': 0, 'folded': 4657, 'called': 775, 'collapsed_streets': 773, 'alt_hits': 1769, 'alt_misses': 12, 'overbet_allins': 5432, 'capped_allins': 0}
+70bb: +2.066 +/- 0.304 chips/hand [+1.471, +2.662] — exploitable by at least this much
+   +103.3 BB/100, 390,376 information sets, 4.5 min
+
+wrote /home/dheirav/Code/PokerBot-lbr-overbet/results/cfr/lbr_overbet_2026-10-05/rr3_70bb_between_01.json
+70bb: using cap2_70bb.pkl (also present: nolimit_70bb.pkl)
+70bb options off: +2.611 +/- 0.359 chips/hand [+1.908, +3.315] — exploitable by at least this much
+70bb options on:  +1.760 +/- 0.313 chips/hand [+1.146, +2.373] — exploitable by at least this much
+   on minus off: -42.6 +/- 13.0 BB/100, 3,295 of 8,000 hands changed; {'probes': 0, 'folded': 4560, 'called': 758, 'collapsed_streets': 755, 'alt_hits': 1724, 'alt_misses': 16, 'overbet_allins': 5318, 'capped_allins': 0}
+70bb: +1.760 +/- 0.313 chips/hand [+1.146, +2.373] — exploitable by at least this much
+   +88.0 BB/100, 390,376 information sets, 4.4 min
+
+wrote /home/dheirav/Code/PokerBot-lbr-overbet/results/cfr/lbr_overbet_2026-10-05/rr3_70bb_between_02.json

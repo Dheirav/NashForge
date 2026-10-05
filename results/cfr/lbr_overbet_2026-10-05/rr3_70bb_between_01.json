@@ -1,0 +1,58 @@
+{
+ "70bb": {
+  "path": "cap2_70bb.pkl",
+  "mean": 2.066375,
+  "stderr": 0.30365420047581293,
+  "ci95": [
+   1.4712127670674064,
+   2.6615372329325933
+  ],
+  "proves_exploitable": true,
+  "hands": 8000,
+  "bb_per_100": 103.31875,
+  "between_sizes": true,
+  "sizes": [
+   0.33,
+   0.66,
+   1.33,
+   2.66,
+   5.33
+  ],
+  "seconds": 269.9,
+  "information_sets": 390376,
+  "offtree_third_raise": [],
+  "bridge_translation": true,
+  "paired": true,
+  "big_blind": 2,
+  "resolved": "br25_station_70bb_t421_20m.pkl",
+  "off": {
+   "mean": 2.66,
+   "stderr": 0.35089993111670337,
+   "ci95": [
+    1.9722361350112616,
+    3.347763864988739
+   ],
+   "proves_exploitable": true,
+   "hands": 8000,
+   "bb_per_100": 133.0
+  },
+  "difference": {
+   "n": 8000,
+   "sum": -4749.0,
+   "sumsq": 4391206.0,
+   "mean": -0.593625,
+   "stderr": 0.2618723296943652,
+   "hands_changed": 3273
+  },
+  "probe_stats": {
+   "probes": 0,
+   "folded": 4657,
+   "called": 775,
+   "collapsed_streets": 773,
+   "alt_hits": 1769,
+   "alt_misses": 12,
+   "overbet_allins": 5432,
+   "capped_allins": 0
+  }
+ }
+}
