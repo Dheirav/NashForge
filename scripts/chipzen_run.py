@@ -130,6 +130,7 @@ async def _main(args, config):
                          short_solution=not args.no_short_solution)
     player.withhold_preflop = not args.no_preflop_withhold
     player.price_misread = args.price_misread
+    player.size_aware_bluffs = args.size_aware_bluffs
     player.profiles = Profiles(os.path.join(ROOT, "results", "chipzen", "opponents.json"),
                                sequential=args.sequential_triggers, bankroll=args.exploit_bankroll,
                                scout_reads=args.scout_reads, posteriors=args.posterior_reads) \
@@ -157,6 +158,7 @@ async def _main(args, config):
         "exploit_bankroll": bool(args.exploit_bankroll),
         "withhold_preflop": player.withhold_preflop,
         "price_misread": player.price_misread,
+        "size_aware_bluffs": player.size_aware_bluffs,
         "ladder": [os.path.basename(p) for p in ladder],
         "companions": [os.path.basename(p) for p in companions],
     }
@@ -321,6 +323,9 @@ def main():
     parser.add_argument("--scout-reads", action="store_true",
                         help="use the two reads that need scouted counts: open into a blind that folds "
                              "to 70%% of opens, and believe the river bets of a bot that never bluffs")
+    parser.add_argument("--size-aware-bluffs", action="store_true",
+                        help="with --posterior-reads, withhold a bluff from a station only when its fold bound is under "
+                             "that bet's break-even (cost 1.2 points on the hoops copy, 5 Oct); off by default")
     parser.add_argument("--posterior-reads", action="store_true",
                         help="decide every read on a Beta posterior bound (population prior, within-match "
                              "correlation) and withhold only bluffs whose size needs more folds than the "

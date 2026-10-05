@@ -237,6 +237,36 @@ def test_under_posteriors_a_station_s_bluffs_are_still_withheld_and_the_log_says
         player.opponent = None
 
 
+def test_the_size_aware_bluff_rule_has_its_own_switch(player):
+    # 5 Oct: under --posterior-reads the size rule released a third of the bluffs withheld from the hoops copy and
+    # cost 1.2 points, so it is off unless --size-aware-bluffs asks for it; posteriors alone withhold as main does.
+    from abstraction.betting import RAISE_HALF
+    from chipzen.opponents import Profiles
+    player.profiles = Profiles("/nonexistent/opp.json", posteriors=True)
+    player.profiles.rows["hoops"] = {"bets_faced": 6132, "folds": 2228, "calls": 3474, "raises": 430, "hands": 12399}
+    player.opponent = "hoops"
+    weak = {"hand_number": 1, "phase": "flop", "board": ["Qc", "9s", "Kd"], "your_hole_cards": ["3h", "2c"],
+            "pot": 400, "your_stack": 9800, "opponent_stacks": [9800], "to_call": 0,
+            "min_raise": 100, "max_raise": 9800,
+            "action_history": blinds() + [entry(0, "raise", 200), entry(1, "call", 200),
+                                          entry(1, "check", 0, "flop")]}
+    try:
+        assert player.profiles.never_folds("hoops")
+        player.size_aware_bluffs = False
+        off = [player.decide(weak, ["check", "raise"], 0) for _ in range(60)]
+        assert all(o["action"] == "check" for o in off)
+        withheld_off = [o["record"]["withheld"] for o in off if o["record"]["adjusted"] == "bluff withheld"]
+        assert withheld_off                                   # the solver does bluff this hand, and it is withheld
+        player.size_aware_bluffs = True
+        on = [player.decide(weak, ["check", "raise"], 0) for _ in range(60)]
+        # A half-pot bluff needs a third of folds and hoops gives 36%, so with the rule on it is not withheld.
+        assert all(o["record"]["withheld"] != RAISE_HALF for o in on if o["record"]["adjusted"] == "bluff withheld")
+    finally:
+        player.size_aware_bluffs = False
+        player.profiles = None
+        player.opponent = None
+
+
 def test_a_fold_or_raise_bot_s_shove_is_called_only_by_the_top_class(player_with_companion):
     from chipzen.opponents import Profiles
     player = player_with_companion

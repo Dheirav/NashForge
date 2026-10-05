@@ -252,6 +252,10 @@ class ArenaPlayer:
         self.reraise_defence = False
         #: Call a fold the strategy made on a misread all-in when the real price is small (5 Oct). Off unless asked for.
         self.price_misread = False
+        #: Under --posterior-reads, withhold a bluff only when the station's fold bound is under that bet's break-even.
+        #: Off on its own: on 5 Oct it cost 1.2 points on the hoops copy (52,181 withheld bluffs down to 35,121) while
+        #: one overall fold rate stands in for the fold rate at each size, which no profile counts yet.
+        self.size_aware_bluffs = False
         #: "Bluff withheld" before the flop. Against a station it turns the small blind's open into a fold, which
         #: gives up the blind a station would often have folded to: turning it off gained 1.6 (hoops) and 0.8
         #: (PoetAndCoder copy) points at 20,000 matches, 30 Sept, and lost nowhere. On until gated and burst.
@@ -551,12 +555,14 @@ class ArenaPlayer:
                 and (self.withhold_preflop or board) \
                 and self.profiles.never_folds(self.opponent) \
                 and strength(solver) <= self.BLUFF_STRENGTH \
-                and (not self.profiles.posteriors or self._bluff_folds_too_rarely(choice, state)):
+                and (not (self.profiles.posteriors and self.size_aware_bluffs)
+                     or self._bluff_folds_too_rarely(choice, state)):
             # A measured station: bluffing it only builds a pot we are behind
             # in. Facing a bet, the alternative to the bluff-raise is the fold,
             # not a call with the bottom class: 114 of 286 firings had turned a
-            # bluff into a call before 15 September. With posteriors on, only a
-            # bluff that needs more folds than the station gives is withheld.
+            # bluff into a call before 15 September. With posteriors and
+            # --size-aware-bluffs on, only a bluff that needs more folds than the
+            # station gives is withheld.
             withheld = int(choice)
             choice = FOLD if to_call > 0 and arena[FOLD] else CHECK_CALL
             adjusted = "bluff withheld"
