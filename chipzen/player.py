@@ -89,6 +89,7 @@ class Stats:
     river_bluffs_caught: int = 0   # a river fold turned into a call against an over-bluffer
     overfolders_bet: int = 0       # a flop or turn check turned into a half-pot bet
     reraises_defended: int = 0     # a fold of our open to a re-raise turned into a call
+    misread_prices_called: int = 0  # a fold on a misread all-in turned into a call at the real price
     miss_depths: Dict[int, int] = field(default_factory=dict)
     depths_used: Dict[str, int] = field(default_factory=dict)
     actions_sent: Dict[str, int] = field(default_factory=dict)
@@ -248,6 +249,8 @@ class ArenaPlayer:
         self.aggro_reads = False
         #: Defend our opens against a frequent re-raiser (27 Sept). Off unless asked for.
         self.reraise_defence = False
+        #: Call a fold the strategy made on a misread all-in when the real price is small (5 Oct). Off unless asked for.
+        self.price_misread = False
         #: "Bluff withheld" before the flop. Against a station it turns the small blind's open into a fold, which
         #: gives up the blind a station would often have folded to: turning it off gained 1.6 (hoops) and 0.8
         #: (PoetAndCoder copy) points at 20,000 matches, 30 Sept, and lost nowhere. On until gated and burst.
@@ -306,6 +309,16 @@ class ArenaPlayer:
     #: Equity against the re-raising range needed beyond the price, for the
     #: equity a call does not realise after the flop.
     RERAISE_MARGIN = 0.03
+    #: The misread-price guard calls at this price or better, the call over the
+    #: pot after it. 5 October, mr_hide: a third raise on the turn was read as
+    #: all-in although they kept 2,174, so the river shove of those 2,174 into
+    #: 16,080 was answered on the collapsed history, where the tree prices a
+    #: shove of a full stack, and the jack-high flush folded at 11%. A quarter
+    #: is far above that and still below the third where a pot-sized bet sits.
+    MISREAD_PRICE = 0.25
+    #: And only with a hand that beats a random hand this often, the same line
+    #: the river bluff-catch uses: a misread is no reason to call with air.
+    MISREAD_EQUITY = 0.5
 
     def solver_for(self, effective_bb: float) -> Solver:
         """Nearest rung in ratio, so 70bb goes to 100 rather than to 50 by a hair."""
@@ -367,6 +380,9 @@ class ArenaPlayer:
         short_stack = None
         companion_used = None
         river_shove = None
+        #: The history the strategy that chose was actually asked about; the
+        #: misread-price guard reads its last action.
+        answered_history = node.history
         if self.river_shove_companion and not missed and len(board) == 5 and to_call > 0 \
                 and node.history.endswith("5"):
             deep = self.companion_for(hand.effective_bb)
@@ -380,6 +396,7 @@ class ArenaPlayer:
                     river_shove += f"{ACTION_NAMES.get(answer, answer)}"
                     choice = answer
                     companion_used = f"{deep.depth_bb:g}bb{deep.schedule}"
+                    answered_history = deep_hand.node.history
                     self.stats.river_shoves_to_companion += 1
         if missed:
             deep = self.companion_for(hand.effective_bb)
@@ -391,6 +408,7 @@ class ArenaPlayer:
                                     deep_hand.node.history)
                 if deep.misses[0] == deep_before:
                     companion_used = f"{deep.depth_bb:g}bb{deep.schedule}"
+                    answered_history = deep_hand.node.history
                     self.stats.companion_hits += 1
                     # The (4, 2) taper keeps only two-times-pot and all-in for
                     # a re-raise, so whenever it wants to raise it shoves. On
@@ -418,10 +436,14 @@ class ArenaPlayer:
                     if candidate.misses[0] == c_before:
                         choice = answer
                         companion_used = f"collapsed:{c_hand.alt_history}"
+                        answered_history = c_hand.alt_history
                         self.stats.collapsed_hits += 1
                         break
             if companion_used is None:
                 fell_back = True
+                # The rule and the short-stack table price the arena's own pot,
+                # so no history of theirs can be misread.
+                answered_history = None
                 answer = self._short_stack_answer(hole, board, hand.effective_bb, arena, state, seat)
                 if answer is None:
                     choice = self._fallback(solver, hole, board, arena, state)
@@ -446,6 +468,7 @@ class ArenaPlayer:
                     opponent_range=opponent_range, blend=self.river_blend,
                     **({"iterations": self.river_iterations} if self.river_iterations else {}))
                 choice, missed, fell_back, companion_used = decision.choice, False, False, None
+                answered_history = node.history
                 river = {"iterations": decision.iterations, "ms": round(decision.ms, 1),
                          "hands": decision.hands, "range": decision.range_source,
                          "strategy": {str(a): round(p, 3) for a, p in decision.distribution.items()}}
@@ -597,6 +620,25 @@ class ArenaPlayer:
             # 14 September. Any two cards call at these odds.
             choice = CHECK_CALL
             adjusted = "called for pot odds"
+        if self.price_misread and choice == FOLD and to_call > 0 and arena[CHECK_CALL] \
+                and adjusted == (river_shove or short_stack) \
+                and self._misread(companion_used, answered_history, opponent_stack):
+            # The strategy folded on a history that is not the hand: either a
+            # street re-read after a pseudo all-in (the tree's pot is then far
+            # smaller than the arena's, so any bet reads as a big one) or a
+            # raise read as all-in although the bettor kept chips. Its price is
+            # not the real one, so the real one decides with a strong hand. A
+            # read that folded on purpose is left alone; it priced the real bet.
+            import pokerbot_native as native    # loaded lazily, as cfr/river.py does
+            mine = int(state.get("your_stack") or 0)
+            called = min(to_call, mine) if mine > 0 else to_call
+            # Their chips beyond our stack come back uncalled, so they are not in the pot we win.
+            price = called / float(int(state.get("pot") or 0) - (to_call - called) + called)
+            if price <= self.MISREAD_PRICE and float(native.equity_vs_random(
+                    [c.index for c in hole], [c.index for c in board], 200, 17)) >= self.MISREAD_EQUITY:
+                choice = CHECK_CALL
+                adjusted = "priced a misread all-in"
+                self.stats.misread_prices_called += 1
         if not arena[choice]:
             # The last-resort legality guard keeps the passive action, not the
             # fold that happens to sit at index 0.
@@ -654,6 +696,21 @@ class ArenaPlayer:
             memo.clear()
         memo[key] = found
         return found
+
+    @staticmethod
+    def _misread(companion_used, answered_history: str, opponent_stack: int) -> bool:
+        """
+        Whether the answer came from a history whose price is not the arena's.
+
+        A collapsed re-read always is, even facing a real all-in: on 5 October
+        the river shove was a real one, but the turn under it had been
+        collapsed, so the tree priced it as a whole stack into a small pot. A
+        history ending in all-in is a misread only while the bettor still has
+        chips; a real all-in on a true history is the pot-odds rule's job.
+        """
+        if str(companion_used or "").startswith("collapsed:"):
+            return True
+        return opponent_stack > 0 and str(answered_history or "").endswith(str(ALL_IN))
 
     @staticmethod
     def _top(solver: Solver) -> int:

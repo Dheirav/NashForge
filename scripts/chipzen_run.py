@@ -129,6 +129,7 @@ async def _main(args, config):
                          stack_cap=args.stack_cap,
                          short_solution=not args.no_short_solution)
     player.withhold_preflop = not args.no_preflop_withhold
+    player.price_misread = args.price_misread
     player.profiles = Profiles(os.path.join(ROOT, "results", "chipzen", "opponents.json"),
                                sequential=args.sequential_triggers, bankroll=args.exploit_bankroll,
                                scout_reads=args.scout_reads) \
@@ -152,6 +153,7 @@ async def _main(args, config):
         "sequential_triggers": bool(args.sequential_triggers), "scout_reads": bool(args.scout_reads),
         "exploit_bankroll": bool(args.exploit_bankroll),
         "withhold_preflop": player.withhold_preflop,
+        "price_misread": player.price_misread,
         "ladder": [os.path.basename(p) for p in ladder],
         "companions": [os.path.basename(p) for p in companions],
     }
@@ -322,6 +324,10 @@ def main():
     parser.add_argument("--exploit-bankroll", action="store_true",
                         help="fire the opponent rules only while our net against that opponent is "
                              "not negative (risk what you have won); off by default")
+    parser.add_argument("--price-misread", action="store_true",
+                        help="call a fold the strategy made on a misread all-in (a collapsed re-read, or a raise "
+                             "read as all-in while the bettor kept chips) at a real price of 25%% or better with "
+                             "a hand that beats a random one; off by default (5 Oct, mr_hide)")
     parser.add_argument("--stack-cap", action="store_true",
                         help="honour the trees' fold/call-only nodes in every lookup instead of "
                              "rebuilding the full action list and falling to the rule (19 Sept)")
