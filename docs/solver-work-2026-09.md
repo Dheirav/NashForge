@@ -93,7 +93,10 @@ for v5m against v5h), and it removes rare bad nodes. Trials run at 20M; sets tha
 the cross-tree gate (+0.3 ± 2.5 BB/100) and on paired LBR (+2.8 ± 16.5), so trials on trees of this
 size can stop at 10M, and an arena head to head with only that rung swapped agrees (50.1 ± 0.7 of 5,000
 matches). The one point the 60M polish bought was on 20-class histogram rungs, while the six-class v5x60
-read 49.4, so the polish is a rule for histogram sets. Bigger trees are different: the cap-2 deep rungs at 20M beat their 10M solves
+read 49.4, so the polish is a rule for histogram sets. The same night v5xRR3's own 70bb exploiter rung
+(station share 0.25) at 10M read 49.3 ± 0.5 against its 20M, purified over 10,000 matches, and level
+against the station: trials on exploiter rungs can run at 10M, while a set that plays keeps 20M there
+until a sub-point purified gap is ruled out. Bigger trees are different: the cap-2 deep rungs at 20M beat their 10M solves
 on the same tree by 3 to 6 BB/100, and cap-2 rungs kept improving to 100M. Details in
 `docs/research/2026-10-05-visit-counter.md`.
 

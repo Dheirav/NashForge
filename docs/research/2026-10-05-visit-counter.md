@@ -265,6 +265,27 @@ anything under about 30 BB/100. And these are the two instruments that saw nothi
   cap-2 18bb and 12bb rungs at 100M beat their 20M by +7.5 ± 3.0 and +12.2 ± 7.0. The 20-class
   histogram rungs reached 1.48M of 11.45M information sets at 20M and were under-trained.
 
+**The exploiter rung and purified play (same night, `~/pokerbot-scratch/xrung10m/`).** Two gaps in
+the check above: it played the rungs mixed while the live sets play `--purify all`, and it was a
+self-play rung while the live sets' deep rungs train against a scripted station share. So the
+self-play pair was played again purified, and v5xRR3's own 70bb rung (`br25_station_70bb_t421_20m`,
+station share 0.25) was retrained at 10M with every other argument the same (1,957 s, 389,643
+information sets against 390,376) and measured inside v5xRR3's ladder:
+
+| comparison, 10M against 20M | result |
+|---|---|
+| self-play rung, arena, purified | 50.6% ± 0.7 of 5,000 |
+| exploiter rung, arena, purified, seeds 0 and 1 | 48.7 and 49.9, pooled **49.3% ± 0.5** of 10,000 |
+| exploiter rung, arena, mixed | 50.0% ± 0.7 of 5,000 |
+| exploiter rung against the station archetype | 73.4% against 73.9%, ± 0.6 each |
+| exploiter rung, cross-tree gate (mixed, 70bb only) | **+2.8 ± 0.8 BB/100 to 10M** (seeds +2.5, +4.3, +1.6) |
+
+The self-play result holds purified. On the exploiter rung nothing separates the two: the purified
+head to head leans 0.7 ± 0.5 points to 20M, which is under the rule's 1-point bar but cannot rule out
+a sub-point gap, and its job, beating the station, is level. The gate favours 10M at 3.5 standard
+errors, which the arena does not repeat, mixed or purified; it is a single rung at a fixed 70bb
+with check/call on a miss, and I have no explanation for it, so it is not read as 10M being better.
+
 **What follows.**
 
 - On six-class (4,2,1) trees, trials and experiments can stop at 10M, which halves their cost.
@@ -272,9 +293,10 @@ anything under about 30 BB/100. And these are the two instruments that saw nothi
   histogram rungs (v5iP's `hist20_70bb_t421_60m` against 20M, and v5m against v5h, both `hist20`).
   The one six-class polish, v5x60 (`br25_station_70bb_t421_60m`), read 49.4 head to head against
   v5x on 29 September, no gain. So on six-class trees no instrument has shown a gain past 10M.
-  The 60M polish is a rule for histogram sets, and a six-class set can play at 10M on this
-  evidence. The one open part is the exploiter rungs (station share), which train against a
-  scripted opponent: v5x60 says 60M does not help them, but 10M has not been checked on one.
+  The 60M polish is a rule for histogram sets. Six-class self-play rungs can play at 10M, measured
+  mixed and purified. Six-class exploiter rungs can be trialled at 10M; a set that will play keeps
+  20M for now, because the purified head to head leans 0.7 ± 0.5 to 20M and the extra 10M costs
+  about half an hour a rung.
 - Cap-2, histogram and (4,3,2,1) trees are not covered. They need their own counts, and the
   history says they need more than 20M.
 - A candidate bar for leg (a) is about 1,700 on the worst line, which is what both rungs had at the
