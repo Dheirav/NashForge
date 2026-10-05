@@ -83,6 +83,38 @@ class ShortStackRanges:
             return None
         return 0.5 * (1.0 + float(self.edge[klass] @ (w / total)))
 
+    def combos_left(self, hole: Sequence) -> np.ndarray:
+        """
+        Each class's combos that do not share a card with `hole`. Against a narrow range the
+        blockers move the answer: ace-king leaves three combos of aces and nine of ace-king, not
+        six and sixteen, and the range a four-bet is priced against is exactly that narrow.
+        """
+        held = {int(c.index) for c in hole}
+        left = np.zeros(len(self.labels))
+        for first in range(52):
+            for second in range(first + 1, 52):
+                if first in held or second in held:
+                    continue
+                high, low = sorted((first % 13, second % 13), reverse=True)
+                key = f"{RANKS[high]}{RANKS[low]}" if high == low else \
+                    f"{RANKS[high]}{RANKS[low]}{'s' if first // 13 == second // 13 else 'o'}"
+                left[self.index[key]] += 1
+        return left
+
+    def equity_against(self, hole: Sequence, reach: np.ndarray) -> Optional[float]:
+        """
+        Our all-in share against a range given as each class's reach (a probability per class,
+        not yet weighted by combos), with our own cards removed from it. None for an empty range.
+        """
+        klass = self.class_of(hole)
+        if klass is None:
+            return None
+        w = self.combos_left(hole) * np.asarray(reach, dtype=float)
+        total = float(w.sum())
+        if total <= 0:
+            return None
+        return 0.5 * (1.0 + float(self.edge[klass] @ (w / total)))
+
     def calls(self, hole: Sequence, depth_bb: float, to_call: int, pot: int,
               reraise: bool) -> Optional[bool]:
         """

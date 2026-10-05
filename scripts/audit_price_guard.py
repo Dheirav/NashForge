@@ -6,8 +6,9 @@ Where the misread-price guard (`ArenaPlayer.price_misread`) would have fired, an
 
 Read-only over the per-match JSONL. Each logged fold is put through the guard's conditions as far as the record
 allows: the strategy folded (no rule answered and no read changed it), there was a bet to call, the history it
-answered was misread (a `collapsed:` re-read, or a history ending in all-in while the bettor kept chips), the real
-price was at or under the threshold and the hand beat a random one often enough. The opponent's remaining stack is
+answered (logged since 5 Oct, rebuilt for a companion before that: see `answered_history`) was misread (a
+`collapsed:` re-read, or a history ending in all-in while the bettor kept chips), the real price was at or under
+the threshold and the hand beat a random one often enough. The opponent's remaining stack is
 not in the decision row, so it is rebuilt from the hand's starting stacks and the action history up to our action.
 
 The value of a call is estimated only when the arena showed their cards, which it does at a showdown and, in these
@@ -42,6 +43,41 @@ def contributions(history):
     """Chips each seat has put in, all streets, as chipzen.bridge._contributions counts them."""
     from chipzen.bridge import _contributions
     return _contributions(history)
+
+
+def companion_schedule(companion):
+    """'100bb(4, 2)' to (4, 2), '50bb2' to 2: the schedule the `companion` field names, or None."""
+    import re
+    found = re.fullmatch(r"[\d.]+bb(\(\d+(, \d+)*,?\)|\d+)", str(companion or ""))
+    if not found:
+        return None
+    text = found.group(1)
+    return tuple(int(x) for x in text.strip("()").split(",") if x.strip()) if text.startswith("(") else int(text)
+
+
+def answered_history(d, before, mine, theirs, seat):
+    """
+    The history the logged answer came from, and where it came from. Records from 5 Oct carry it
+    (`answered_history`). Before that a companion's own translation was not logged, so it is rebuilt here
+    with `chipzen.bridge.replay` on the schedule the `companion` field names, from the arena's actions
+    before ours and the stacks they leave. A size between two of the companion's is translated at random
+    and the live draw is not logged, so a rebuilt history can differ there; whether its last action is a
+    pseudo all-in is decided by a deterministic test, so the reading this audit makes is exact.
+    """
+    if "answered_history" in d:
+        return d["answered_history"], "logged"
+    companion = str(d.get("companion") or "")
+    if not companion:
+        return d.get("history"), "primary"
+    if companion.startswith("collapsed:"):
+        return companion[len("collapsed:"):], "collapsed"
+    schedule = companion_schedule(companion)
+    if schedule is None:
+        return None, "other"
+    import numpy as np
+    from chipzen.bridge import replay
+    state = {"action_history": before, "your_stack": mine, "opponent_stacks": [theirs], "phase": d.get("phase")}
+    return replay(state, seat, np.random.default_rng(0), schedule=schedule).node.history, "companion, rebuilt"
 
 
 def matches(path):
@@ -97,11 +133,12 @@ def spots(match, price_cap, equity_floor, checks):
             opponent_stack = int(stacks[1 - seat]) - put[1 - seat]
             mine = int(stacks[seat]) - put[seat]
             companion = d.get("companion")
-            if companion and not str(companion).startswith("collapsed:"):
-                # A companion answered on its own translation, which the record does not keep.
-                checks["companion answered (history not logged)"] += 1
+            answered, source = answered_history(d, before, mine, opponent_stack, seat)
+            if source != "primary":
+                checks[f"answered on {source}"] += 1
+            if source == "other":
                 continue
-            if not ArenaPlayer._misread(companion, d.get("history"), opponent_stack):
+            if not ArenaPlayer._misread(companion, answered, opponent_stack):
                 continue
             checks["misread folds"] += 1
             called = min(to_call, mine) if mine > 0 else to_call
@@ -126,7 +163,8 @@ def spots(match, price_cap, equity_floor, checks):
                    "theirs": "".join(theirs) if theirs else None, "pot": pot, "call": called, "price": price,
                    "equity_random": equity_random, "equity": equity, "value": value,
                    "kind": "collapsed" if str(companion or "").startswith("collapsed:") else "all-in read, chips behind",
-                   "opponent_stack": opponent_stack, "history": d.get("history"), "companion": companion}
+                   "opponent_stack": opponent_stack, "history": d.get("history"), "answered": answered,
+                   "source": source, "companion": companion}
 
 
 def main():

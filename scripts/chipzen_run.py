@@ -130,6 +130,7 @@ async def _main(args, config):
                          short_solution=not args.no_short_solution)
     player.withhold_preflop = not args.no_preflop_withhold
     player.price_misread = args.price_misread
+    player.offtree_preflop = args.offtree_preflop
     player.size_aware_bluffs = args.size_aware_bluffs
     player.profiles = Profiles(os.path.join(ROOT, "results", "chipzen", "opponents.json"),
                                sequential=args.sequential_triggers, bankroll=args.exploit_bankroll,
@@ -158,6 +159,7 @@ async def _main(args, config):
         "exploit_bankroll": bool(args.exploit_bankroll),
         "withhold_preflop": player.withhold_preflop,
         "price_misread": player.price_misread,
+        "offtree_preflop": player.offtree_preflop,
         "size_aware_bluffs": player.size_aware_bluffs,
         "ladder": [os.path.basename(p) for p in ladder],
         "companions": [os.path.basename(p) for p in companions],
@@ -340,6 +342,10 @@ def main():
                         help="call a fold the strategy made on a misread all-in (a collapsed re-read, or a raise "
                              "read as all-in while the bettor kept chips) at a real price of 25%% or better with "
                              "a hand that beats a random one; off by default (5 Oct, mr_hide)")
+    parser.add_argument("--offtree-preflop", action="store_true",
+                        help="answer a fold to a preflop raise read as all-in while the bettor kept chips (the small "
+                             "four-bet at a cap-2 rung's third raise) at the real price, against the answering "
+                             "solution's own range for that line; off by default (5 Oct)")
     parser.add_argument("--stack-cap", action="store_true",
                         help="honour the trees' fold/call-only nodes in every lookup instead of "
                              "rebuilding the full action list and falling to the rule (19 Sept)")
