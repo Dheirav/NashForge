@@ -6,10 +6,21 @@ instrument it was measured on against evolutionary search and PPO.**
 [![Python 3.12](https://img.shields.io/badge/python-3.12-blue.svg)](https://www.python.org/downloads/)
 [![License: PolyForm Noncommercial](https://img.shields.io/badge/License-PolyForm%20Noncommercial-blue.svg)](https://polyformproject.org/licenses/noncommercial/1.0.0)
 
-NashForge is a two-time champion of the [Chipzen](https://chipzen.ai) arena, a weekly
+NashForge is a three-time champion of the [Chipzen](https://chipzen.ai) arena, a weekly
 heads-up no-limit Hold'em tournament for bots with blinds rising every twenty hands. It won
-season 6 (15 to 20 September 2026) and then season 7 (knockouts 26 to 28 September), both
-times played remotely from a laptop.
+season 6 (15 to 20 September 2026), season 7 (knockouts 26 to 28 September) and season 8
+(29 September to 5 October), every time played remotely from a laptop.
+
+Playing remotely gives it no edge over a bot running on the platform's own machines. The
+remote bot plays under the same 30-second clock and through the same API as every entrant,
+and it does no search at play time. Each decision is a lookup in tables solved beforehand:
+in the season 8 final the median took 0.57 milliseconds and the slowest 2.9. Once a match
+starts, no person is involved. The same strategy family also runs as an uploaded bot,
+OptimumPoker, inside Chipzen's sandbox, which allows numpy only, no compiled code, and
+250 MB. There it is 26 MB zipped and 86 MB at peak, and on 12,753 test decisions it chose
+the same action as the remote bot every time. The uploaded build carries v5x purified, the
+set that played the season 8 round robin, without the opponent reads. The set that won the
+final, v5xRR3 purified, is the same thing with three of its stack depths retrained.
 
 In season 6 it went 4-1 in the round-robin as the top seed and 3-0 through the playoffs, and
 won every match it played. The one loss was a walkover from a timer bug of my own, which
@@ -22,6 +33,14 @@ won all three: v003 in the
 quarter-final (84 hands), wsp in the semi-final (60 hands) and melly in the final (4 hands).
 The same solver set played every knockout match, chosen beforehand from its results against
 fitted copies of each opponent rather than changed on match day.
+
+In season 8 it went 7-1 in the round-robin, level on top with Blueprint, and again won all
+three knockouts: melly (50 hands), PoetAndCoder (6) and Blueprint in the final (51). Every
+match it played, it won; the one loss was again a walkover, the bot not connected. The final
+was not a clean win. We were down to a fifth of the chips by hand 36, came back on one called
+shove that hit from about a third of the equity, and won when Blueprint called its last chips
+with a pair of fives. The record and what the season taught is in
+[`docs/season8-summary.md`](docs/season8-summary.md).
 
 The project started as a comparison. Three families of agent, CFR, evolutionary search and
 PPO, were trained on the same abstracted game and measured on the same panel, and the
@@ -65,6 +84,15 @@ arena's blind schedule), a replay against the logged match record, and a burst o
 matches read by its decomposition (by depth, by which solver decided each hand) rather than
 its win rate. Every instrument is pinned to read zero on a mirror, because three of them
 had defects that told confident wrong stories about the solver before that test existed.
+
+Four instruments came out of the season 8 post-mortem, because most of our tests turned out
+unable to see what we had changed (`docs/research/2026-10-05-synthesis.md`). The burst
+decomposition takes the luck out of called all-ins (`--allin-adjust`, exact over every
+runout). `scripts/burst_verdict.py` gives a verdict that stays valid however often it is
+read, where a fixed test read after every burst picks a false winner one time in five.
+`scripts/copy_validate.py` scores a fitted copy at its bot's own later decisions, and showed
+that the copies used to pick sets did not behave like their bots. And local best response can
+probe the tree's all-in-only raise level with real small raises (`--offtree-third-raise`).
 
 ---
 
@@ -123,7 +151,7 @@ measurements are in [`docs/solver-work-2026-09.md`](docs/solver-work-2026-09.md)
 python3.12 -m venv venv
 venv/bin/pip install numpy numba torch pygame websockets requests
 native/build.sh                                   # needs cmake, ninja, nanobind; installs by rename
-venv/bin/python -m pytest -q                      # 410 tests, about 6½ minutes
+venv/bin/python -m pytest -q                      # 523 tests, about 7½ minutes
 ```
 
 Numba is on the hot path of every Python-side evaluation; the native module is what trains.
@@ -136,7 +164,8 @@ venv/bin/python scripts/cfr/train_nolimit.py --iterations 20000000 --raise-cap 4
     --threads 2 --output results/cfr/experiments/cap2_100bb.pkl
 tools/xtree-gate.sh results/cfr/experiments/cap2_100bb.pkl      # the cross-tree gate
 venv/bin/python scripts/chipzen_duel.py --a <ladder A> --b <ladder B> --arena-matches 600
-venv/bin/python scripts/chipzen_decompose.py --label v7b        # read a burst
+venv/bin/python scripts/chipzen_decompose.py --label v7b --allin-adjust   # read a burst
+venv/bin/python scripts/burst_verdict.py --label v7b                      # is it decided yet
 venv/bin/python -m gui.main                                     # play the solver yourself
 ```
 
@@ -161,8 +190,8 @@ the scouted profiles of other bots are not.
 | `scripts/`, `tools/` | Entry points (training, gates, duel, replay, decomposition, scouting) and the shell wrappers for the arena. |
 | `training/`, `rl/` | Evolutionary search and PPO, both measured in the comparison above. Retained; not the current line of work. |
 | `results/` | Every measurement as JSON, one file per question; the arena ledger under `results/chipzen/`. |
-| `tests/` | 410 tests. Was an empty directory before the audit. |
-| `docs/` | The arena (`chipzen.md`, `season6/`), the training plan, the research notes. |
+| `tests/` | 523 tests. Was an empty directory before the audit. |
+| `docs/` | The arena (`chipzen.md`, `season6/`, `season8-summary.md`), the training plan, the research notes (`research/`). |
 
 ## Reading the repository
 

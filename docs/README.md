@@ -14,6 +14,15 @@ Start from the [project README](../README.md).
 - **[chipzen.md](chipzen.md)** and **[season6/](season6/README.md)**: the arena, and the
   record of the seasons played in it.
 
+- **[season8-summary.md](season8-summary.md)**: season 8, won 7-1 and 3-0. The record, the
+  sets that played and why, the final against Blueprint, and what the season taught.
+
+- **[research/2026-10-05-synthesis.md](research/2026-10-05-synthesis.md)**: the season 8
+  post-mortem. Six research notes beside it (search at play time, robust exploitation, bet
+  sizes and translation, convergence, opponent modelling, measurement), the order to act on
+  them, and the reports of what was then built: the all-in adjustment, the anytime-valid burst
+  verdict, copy validation, LBR third-raise probes and the misread-price guard.
+
 - **[abstraction-crossover.html](abstraction-crossover.html)** — the project report.
   What was withdrawn and why, how the CFR solver was validated, the training-budget
   crossover between the two card abstractions, and the exploitability investigation

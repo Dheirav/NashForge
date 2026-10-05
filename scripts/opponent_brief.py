@@ -203,6 +203,12 @@ READS: List[dict] = [
          acts="preflop, our open re-raised, the solver folding: call when equity against its top share beats the price (--reraise-defence)",
          premises=[measured_at_node("preflop:Ur", "raise"),
                    assumed("it re-raises the top of its range, the tightest the rate allows")]),
+    # Behind --price-misread, off by default. Not a read of the opponent: it corrects our own tree's price after a
+    # raise was misread as all-in, so no profile premise applies.
+    dict(name="priced a misread all-in", predicate=None,
+         acts="facing a bet on a collapsed or misread all-in history, the solver folding: call at a real price of 25% "
+              "or less with a hand that beats a random one half the time (--price-misread)",
+         premises=[]),
 ]
 
 

@@ -76,3 +76,32 @@ Some numbers are estimates: the "worth about 45 bets" for Dronev4, "about 40 BB/
 and the AIVAT error shrinkage. Some references were written from memory rather than fetched; the measurement note
 names which. Two process slips were reported by the agents themselves. One agent used system `python3` to trim its
 own report, and another used it to read a JSON file. Neither touched the venv or any other file.
+
+## What was measured the same morning
+
+The four measurement tools, the misread-price guard and the exploiter share sweep were built and run by 11:00
+IST. Their notes sit beside this file.
+
+**The third-raise hole is small, though LBR underestimates it.** Probes gain +1.5 ± 0.5 BB/100 at 100bb and
++0.2 at 70bb on v5xRR3, and nothing on the (4,3,2,1) tree. That is a floor, though, because a collapsed history
+also misreads the bets that follow. That is what made balanced-next fold the best flush to a 9% price on 5 Oct.
+The misread-price guard (`--price-misread`, off by default, merged) calls those folds. In the log audit it fired
+8 times in 50,544 decisions, all with the opponent's cards shown, for about +23,400 chips. A sized third raise
+is not worth 5 hours of training for this.
+
+**v5xRR3's deep rungs are very exploitable, and the training share is the lever.** The rungs were retrained at
+station shares 0.20 and 0.10 with nothing else changed. Copy duels are on the replay-refitted copies, 13 of
+them, 10,000 matches each.
+
+| Set | LBR 70 / 100bb, BB/100 | Head to head vs v5iT2p60m purified | Copies, mean vs v5xRR3 |
+|---|---|---|---|
+| v5xRR3 (share 0.25) | +99 / +105 | about 42.3% | 0 |
+| share 0.20 | +87 / +97 | 43.8% | -0.5 |
+| share 0.10 | +66 / +56 | 45.0% | -1.9 |
+| v5iT2p60m purified (share 0, the i series) | about +6 on a balanced rung | n/a | -5.6 |
+
+Share 0.10 gives up about 2 points on the copies to be much harder to exploit and better against a balanced
+opponent. It is still 3.7 points ahead of the i series on the copies. The copies reward exploitation most,
+being scripts like the ones the exploiter trains against, so the real gap is probably smaller. But it is larger
+than the 2 points that would have made the i series the better set outright. So share 0.10 is the middle ground
+to put through a replay and a burst, with share 0.25 kept for weak calling bots (mr_hide: 81.5 against 76.2).
