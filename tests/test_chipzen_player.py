@@ -191,7 +191,8 @@ def test_only_the_opponent_s_answers_to_our_bets_are_counted():
                                           entry(0, "raise", 600, "flop"), entry(1, "fold", 0, "flop")]}
     profiles.observe(hand, 0, "x")
     counted = {k: v for k, v in profiles.rows["x"].items() if k not in ("net", "by_history")}
-    assert counted == {"bets_faced": 1, "folds": 1, "calls": 0, "raises": 0, "hands": 1}
+    assert counted == {"bets_faced": 1, "folds": 1, "calls": 0, "raises": 0, "hands": 1,
+                       "by_size": {"post:pot": {"fold": 1}}}
 
 
 def test_a_bluff_is_withheld_against_a_station_but_a_value_bet_is_not(player):

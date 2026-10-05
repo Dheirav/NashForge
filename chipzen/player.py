@@ -46,7 +46,7 @@ ACTION_NAMES = {FOLD: "fold", CHECK_CALL: "check/call", RAISE_HALF: "raise ½", 
 from cfr.flat import load_strategy
 from chipzen.bridge import Hand, cards, legal_mask, replay, to_chipzen
 from cfr.river import decide_river
-from chipzen.opponents import Profiles
+from chipzen.opponents import Profiles, size_fraction
 from chipzen.pushfold import ShortStackRanges
 from evaluation.benchmark import cfr_agent
 from slumbot.bridge import RAISE_FRACTIONS
@@ -254,7 +254,8 @@ class ArenaPlayer:
         self.price_misread = False
         #: Under --posterior-reads, withhold a bluff only when the station's fold bound is under that bet's break-even.
         #: Off on its own: on 5 Oct it cost 1.2 points on the hoops copy (52,181 withheld bluffs down to 35,121) while
-        #: one overall fold rate stands in for the fold rate at each size, which no profile counts yet.
+        #: one overall fold rate stood in for the fold rate at each size. It now reads the bin of the bet being
+        #: considered (`Profiles.fold_upper_at`), falling back to the overall rate where a bin is thin.
         self.size_aware_bluffs = False
         #: "Bluff withheld" before the flop. Against a station it turns the small blind's open into a fold, which
         #: gives up the blind a station would often have folded to: turning it off gained 1.6 (hoops) and 0.8
@@ -713,6 +714,17 @@ class ArenaPlayer:
         return found
 
     @staticmethod
+    def _bluff_chips(choice: int, state: dict) -> int:
+        """Chips a raise of `choice` puts in: the call plus the fraction of the pot after it, capped by the chips behind."""
+        pot = int(state.get("pot") or 0)
+        to_call = int(state.get("to_call") or 0)
+        mine = int(state.get("your_stack") or 0)
+        theirs = int((state.get("opponent_stacks") or [0])[0])
+        behind = min(mine, to_call + theirs) if mine > 0 else to_call + theirs
+        b = behind if choice == ALL_IN else to_call + (pot + to_call) * RAISE_FRACTIONS[choice - 2]
+        return min(b, behind) if behind > 0 else b
+
+    @staticmethod
     def bluff_break_even(choice: int, state: dict) -> float:
         """
         The fold share at which a raise of `choice` with no equity breaks even: it puts in b chips
@@ -722,21 +734,24 @@ class ArenaPlayer:
         Zero equity is the pessimistic case: a bluff that sometimes wins called breaks even lower.
         """
         pot = int(state.get("pot") or 0)
-        to_call = int(state.get("to_call") or 0)
-        mine = int(state.get("your_stack") or 0)
-        theirs = int((state.get("opponent_stacks") or [0])[0])
-        behind = min(mine, to_call + theirs) if mine > 0 else to_call + theirs
-        b = behind if choice == ALL_IN else to_call + (pot + to_call) * RAISE_FRACTIONS[choice - 2]
-        b = min(b, behind) if behind > 0 else b
+        b = ArenaPlayer._bluff_chips(choice, state)
         return b / float(pot + b) if pot + b > 0 else 1.0
+
+    @staticmethod
+    def bluff_fraction(choice: int, state: dict) -> float:
+        """What the raise adds over the call, as a share of the pot after the call: the size `observe` bins by."""
+        to_call = int(state.get("to_call") or 0)
+        return size_fraction(ArenaPlayer._bluff_chips(choice, state) - to_call, int(state.get("pot") or 0) + to_call)
 
     def _bluff_folds_too_rarely(self, choice: int, state: dict) -> bool:
         """
-        Withhold this bluff: the posterior upper bound of their fold rate is below what this size
-        needs. hoops folds 36 percent (upper bound 0.38 over 6,132 bets), so its half-pot bluffs
-        are profitable and its pot bluffs are not; the old rule withheld both.
+        Withhold this bluff: the posterior upper bound of their fold rate to a bet of this size is below
+        what the size needs. hoops folds 36 percent overall but 44 to half-pot bets and 57 to pot-sized
+        ones on the scout cache, so one overall rate withheld its pot bluffs that pay; the bin's own
+        bound releases them. A bin too thin to read falls back to the overall bound (`fold_upper_at`).
         """
-        upper = self.profiles.fold_floor_upper(self.opponent)
+        upper = self.profiles.fold_upper_at(self.opponent, self.bluff_fraction(choice, state),
+                                            preflop=state.get("phase") == "preflop")
         return upper is not None and upper < self.bluff_break_even(choice, state)
 
     @staticmethod
