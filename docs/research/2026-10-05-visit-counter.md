@@ -213,7 +213,7 @@ would have overwritten.
 ## Calibration and the 10M check, 5 October night
 
 **The calibration.** Two counted 20M runs with snapshots at 5M and 10M, on the visit-counter
-module, outputs in `results/cfr/visit_calibration/` of the `visit-counter` worktree, logs in
+module, outputs in `results/cfr/visit_calibration/` (untracked; moved from the visit-counter worktree on 6 Oct), logs in
 `~/pokerbot-scratch/night5oct/`. Both are self-play, so the reach proxy holds. The 25bb run is the
 real `cap2_25bb_t421_20m_warm` recipe (frozen warm start of 100,000, 3 threads, 155,101 nodes
 reached) and the 70bb run is a cold (4,2,1) six-class rung (2 threads, 387,958 reached).
