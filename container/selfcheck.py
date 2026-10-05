@@ -15,6 +15,9 @@ import sys
 import time
 
 T0 = time.time()
+# --no-native: the compiled module is refused, as in the image, so card classes are computed in Python.
+if "--no-native" in sys.argv:
+    sys.modules["pokerbot_native"] = None
 ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 sys.path.insert(0, ROOT)
 
@@ -31,9 +34,10 @@ from scripts.chipzen_duel import build, play_match  # noqa: E402
 
 # The dealer's showdown is this harness's, not the bot's: on the arena the server scores hands.
 # Without numba the Python evaluator's fallback overflows an int8, so score with the native one.
-import pokerbot_native as native  # noqa: E402
-duel.score7 = lambda hole, board: int(native.score_hand_7([c % 13 for c in list(hole) + list(board)],
-                                                          [c // 13 for c in list(hole) + list(board)]))
+if sys.modules.get("pokerbot_native", 0) is not None:
+    import pokerbot_native as native  # noqa: E402
+    duel.score7 = lambda hole, board: int(native.score_hand_7([c % 13 for c in list(hole) + list(board)],
+                                                              [c // 13 for c in list(hole) + list(board)]))
 
 
 def peak_mb() -> float:
@@ -46,6 +50,7 @@ def main():
     parser.add_argument("--matches", type=int, default=200)
     parser.add_argument("--opponent", default="station")
     parser.add_argument("--seed", type=int, default=41)
+    parser.add_argument("--no-native", action="store_true", help="refuse the compiled module (read before imports)")
     parser.add_argument("--shadow", help="a full ladder directory (flat tables) that sees every state the bot "
                                          "sees, purified at play time; its decisions are compared with the bot's")
     args = parser.parse_args()
@@ -109,7 +114,14 @@ def main():
                               r.get("adjusted"), (theirs.get("record") or {}).get("adjusted")))
             return mine
         bot.decide = shadowed
-    other = build(f"archetype:{args.opponent}", "", args.opponent, np.random.default_rng(args.seed + 1), None)
+    if args.opponent == "hammer":
+        # The overbet shover of ~/pokerbot-scratch/flush/probe.py: needs no native module, so it can play
+        # against a bot run with --no-native, and its line forces a decision on every street.
+        sys.path.insert(0, os.path.expanduser("~/pokerbot-scratch/flush"))
+        from probe import Hammer
+        other = Hammer()
+    else:
+        other = build(f"archetype:{args.opponent}", "", args.opponent, np.random.default_rng(args.seed + 1), None)
     won = hands = 0
     for m in range(args.matches):
         r = play_match([bot, other], rng, ("NashForge", args.opponent))
