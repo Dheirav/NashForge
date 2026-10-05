@@ -27,6 +27,9 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--ladder", required=True)
     parser.add_argument("--out", required=True)
+    parser.add_argument("--drop-hist-tables", action="store_true",
+                        help="leave out a histogram abstraction's precomputed bucket tables (130 MB for v5y), so the "
+                             "image computes each class instead: the tables are read only by the native module")
     args = parser.parse_args()
     sys.argv = [sys.argv[0]]
     import importlib.util
@@ -51,6 +54,8 @@ def main():
             ties += int(np.argmax(row)) != int(np.argmax(probs))
         name = os.path.basename(path)
         target = os.path.join(args.out, name)
+        if args.drop_hist_tables and getattr(saved["abstraction"], "_hist_tables", None) is not None:
+            saved["abstraction"]._hist_tables = None
         write_rung(target, {"abstraction": saved["abstraction"], "args": saved["args"]})
         out = write_compact(target, table)
         # The written pair reads back as the source: every attribute of the abstraction, and the args.
