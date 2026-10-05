@@ -42,16 +42,28 @@ weight, and the 100bb cap-2 rung has 73 carrying 0.003. Two rungs stand out:
 - **18bb, at `35` (we raise pot, they shove), a line probability of 0.08.** Q8o folds 98 against
   J8o 49.
 
-These are worth reading but are not yet shown to be leaks. A flag is a gap in probability, not in
-chips: two hands both near the calling threshold lose almost nothing by mixing the wrong way. The
-next step on them is the cost, which is each hand's equity against the shove range at that node
-against its pot odds.
+**Priced the same night, the 12bb spot is not a leak.** Each small-blind class's equity against the
+rung's own shove range (its big blind's shove share after a limp, by combinations, from
+`results/cfr/chance/nolimit_12bb_preflop_allin.npy`, card removal ignored), against the 45.8 percent a
+call needs (11bb to win a 24bb pot): the whole fold and call mix at `15` costs **0.022 bb/100** against
+the best reply to that range. Every flagged hand is within about 1.5 points of the line (equity 44.2
+to 46.8 percent), so calling or folding any of them is worth 0.4bb or less. And the order the check
+assumed is not always the order of equity there: 87s has slightly more than 97s, T7s more than J7s
+(45.6 against 45.2) and T8s more than J8s (46.8 against 46.0), likely because the shove range holds
+the AJ, KJ and QJ that dominate a jack more than a ten. Q7s folding against Q6s calling 63 percent is
+Q7s right (44.9 percent) and Q6s calling slightly wrong (44.2). So no retrain. The 18bb spot was not
+priced.
 
 ## Limits
 
 - Raising one card by a rank is nearly always worth equity against an all-in range, but not always
   by much. Connectors against one-gappers (87s and 97s) are close, so a flag there may be noise
   around a real tie.
+- **Near the calling line the rank order is not the equity order**, because a shove range dominates
+  some higher cards more than lower ones (the 12bb result above). A flag between two hands within a
+  couple of points of the line can be correct play. The better test there is the one used above, the
+  cost against the shove range from the all-in table, and a later version of this script should
+  flag by that cost rather than by rank.
 - Preflop only, because only there are the classes hands; a postflop bucket mixes strength with
   texture.
 - It reads folds facing a shove. Our own shoves, such as v5f's 27 percent T9s and 98 percent jacks,
