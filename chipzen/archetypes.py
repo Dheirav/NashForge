@@ -46,7 +46,7 @@ import numpy as np
 from chipzen.bridge import parse_cards
 
 ARCHETYPES = ("station", "nit", "maniac", "foldraise", "hoops",
-              "sticky", "nofold3bet", "folder", "wildpassive", "meek", "bully", "reraiser")
+              "sticky", "nofold3bet", "folder", "wildpassive", "meek", "bully", "reraiser", "thirdraiser")
 
 #: Each shape is a parameter row; `scripts/chipzen_calibrate.py` measures the
 #: row with the scout's own statistics beside the bot it stands for, and the
@@ -157,6 +157,14 @@ PARAMS = {
     # 10,000 matches); the maniac re-raises only above 0.53, so training against it never reached the leak.
     "reraiser": dict(open_eq=0.50, limp_eq=0.45, threebet_eq=0.38, fold_margin=0.02, raise_eq=0.52,
                      raise_p=0.6, bluff_p=0.15, call_p=0.20, defend_eq=0.45, defend3_eq=0.78),
+    # thirdraiser (6 Oct): the reraiser, except that its preflop third raise and beyond is sized (half the pot after
+    # the call) instead of all-in. Every other shape jams there, so no duel ever reached the hole the (4,3,2,1) tree
+    # and the price guard were built for: a (4,2,1) tree's third raise is all-in only, and the bridge reads a sized
+    # one as all-in. 128 sized third raises in our logs, mr_hide and Blueprint four-betting to about a third to a
+    # half of the pot with hands as wide as 33, 55, J9s and A6o.
+    "thirdraiser": dict(open_eq=0.50, limp_eq=0.45, threebet_eq=0.38, fold_margin=0.02, raise_eq=0.52,
+                        raise_p=0.6, bluff_p=0.15, call_p=0.20, defend_eq=0.45, defend3_eq=0.78,
+                        third_raise_frac=0.5),
 }
 
 
@@ -245,6 +253,9 @@ class Archetype:
                 return self._fold(valid)
             # Facing a raise (or more).
             if can_raise and e >= p["threebet_eq"] and u > p["call_p"] * 0.5:
+                if raises >= 2 and p.get("third_raise_frac") is not None and not self._short(state):
+                    # A sized third raise, the one the (4,2,1) tree cannot express; jams only once short.
+                    return self._raise_to(state, p["third_raise_frac"])
                 return self._raise_to(state, 1.0, allin=self._short(state) or raises >= 2)
             defend = p["defend3_eq"] if raises >= 2 else p["defend_eq"]
             if e >= defend and e >= price + p["fold_margin"]:
