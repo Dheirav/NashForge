@@ -123,7 +123,7 @@ def _shim(hole, board, to_call: int, stack: int = 0):
 
 
 def load_solver(path: str, rng: np.random.Generator, purify: str = "none",
-                stack_cap: bool = False) -> Solver:
+                stack_cap: bool = False, covering_call: bool = False) -> Solver:
     # The flat pair beside the pickle when it exists (cfr/flat.py): the same
     # answers, a twentieth of the memory, which is what lets the whole ladder
     # sit beside a training run.
@@ -138,7 +138,7 @@ def load_solver(path: str, rng: np.random.Generator, purify: str = "none",
                     strategy=saved["strategy"], abstraction=saved["abstraction"])
     solver.agent = cfr_agent(solver.strategy, solver.abstraction, rng,
                              misses=solver.misses, raise_cap=schedule, purify=purify,
-                             stack_cap=stack_cap)
+                             stack_cap=stack_cap, covering_call=covering_call)
     return solver
 
 
@@ -224,7 +224,7 @@ class ArenaPlayer:
                  companions: Sequence[str] = (), purify: str = "none",
                  river: bool = False, river_budget_s: float = 8.0,
                  river_shove_companion: bool = False, stack_cap: bool = False,
-                 short_solution: bool = True):
+                 short_solution: bool = True, covering_call: bool = False):
         self.rng = rng if rng is not None else np.random.default_rng()
         self.purify = purify
         #: Honour the trees' stack cap in every lookup (see `_shim`). Off by
@@ -254,11 +254,11 @@ class ArenaPlayer:
         self.river_blend = 0.0
         #: The river solve's iteration count; None keeps the solver's default (2,000 native).
         self.river_iterations = None
-        self.ladder = sorted((load_solver(p, self.rng, purify, stack_cap) for p in paths),
+        self.ladder = sorted((load_solver(p, self.rng, purify, stack_cap, covering_call) for p in paths),
                              key=lambda s: s.depth_bb)
         if not self.ladder:
             raise ValueError("an empty ladder cannot play")
-        self.companions = sorted((load_solver(p, self.rng, purify, stack_cap) for p in companions),
+        self.companions = sorted((load_solver(p, self.rng, purify, stack_cap, covering_call) for p in companions),
                                  key=lambda s: s.depth_bb)
         #: The exact shove-or-fold solution, for preflop all-ins at short
         #: depths where the rule was provably wrong (chipzen/pushfold.py).

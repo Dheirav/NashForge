@@ -101,6 +101,10 @@ def retranslated(solver, decision):
     return bridge_replay(state, decision["_seat"], np.random.default_rng(0), schedule=solver.schedule).node.history
 
 
+#: Set by --covering-call: mirror cfr_agent(covering_call=True), so a replay measures what the flag changes.
+COVERING_CALL = False
+
+
 def lookup(solver, decision, history_key=None):
     """The solver's distribution over the arena's legal actions, or None on a miss."""
     hole = parse_cards(decision["hole"])
@@ -122,6 +126,10 @@ def lookup(solver, decision, history_key=None):
     weights = np.zeros(NUM_ACTIONS)
     for action, probability in zip(actions, probabilities):
         weights[action] = float(probability) * mask[action]
+    if COVERING_CALL and decision["to_call"] > 0 and mask[CHECK_CALL] and not any(mask[a] for a in (2, 3, 4, 5)):
+        for action, probability in zip(actions, probabilities):
+            if action in (2, 3, 4, 5):
+                weights[CHECK_CALL] += float(probability)
     return weights / weights.sum() if weights.sum() > 0 else None
 
 
@@ -203,6 +211,9 @@ def main():
                              "bot would; needed when the new set's tree differs (per-street schedules). Checked by "
                              "rebuilding the baseline's keys, which must match the logged ones")
     parser.add_argument("--matches-dir", nargs="+", help="where the match logs are (default: the review's DIRS)")
+    parser.add_argument("--covering-call", action="store_true",
+                        help="the new set's lookups play a covered raise as the call (cfr_agent covering_call); "
+                             "the baseline keeps the masking it played with")
     args = parser.parse_args()
     deep = not args.no_deep_primary
 
@@ -225,6 +236,8 @@ def main():
     old = answer(args.baseline_dir, deep or args.baseline_deep_primary, decisions, retranslate=args.retranslate)
     baseline_check = dict(KEY_CHECK)
     KEY_CHECK.clear()
+    global COVERING_CALL
+    COVERING_CALL = args.covering_call                   # the new set only; the baseline played without it
     new = answer(args.ladder_dir, deep, decisions, retranslate=args.retranslate)
     primary_misses = [d for d in decisions if new[id(d)] is None]
     comp = companion_answers(args.ladder_dir, deep, primary_misses) if args.companions else {}

@@ -90,6 +90,7 @@ def build(ladder_dir: str, flags: str, label: str, rng: np.random.Generator,
     player = ArenaPlayer(ladder, rng, companions=companions, purify=purify,
                          river_shove_companion="--river-shove-companion" in flags,
                          stack_cap="--stack-cap" in flags,
+                         covering_call="--covering-call" in flags,
                          short_solution="--no-short-solution" not in flags,
                          river="--river-solve" in flags)
     if profiles_path:

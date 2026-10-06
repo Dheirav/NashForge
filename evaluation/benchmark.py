@@ -151,7 +151,7 @@ def cfr_agent(strategy: Dict[Hashable, np.ndarray], abstraction,
               rng: np.random.Generator, misses: Optional[List[int]] = None,
               raise_cap: int = 1, probe: Optional[List] = None,
               purify: str = "none", on_miss: str = "random",
-              stack_cap: bool = False) -> Agent:
+              stack_cap: bool = False, covering_call: bool = False) -> Agent:
     """
     A solved strategy, playing in the engine.
 
@@ -191,6 +191,13 @@ def cfr_agent(strategy: Dict[Hashable, np.ndarray], abstraction,
     September); a one-raise tree's two-wide nodes happen to match anyway,
     which is why only cap-2 solves suffered. Off by default because the arena
     player's chip scale is the bridge's, not this engine's; on in the gates.
+
+    ``covering_call`` (7 Oct): when a bet is faced and only fold and call are legal (the bet covers the
+    stack, or they are all in), the entry's raise and all-in mass goes to the call, which is the only way
+    left to put the chips in. Without it that mass is masked away and the rest renormalised: in the Shadow
+    fixture a made straight with fold 0.17, call 0.17 and raise or jam 0.66 became fold 0.5, call 0.5, and
+    purification's first-index tie-break folded it. 145 logged decisions turn from call to fold that way.
+    Off by default, so every earlier figure is unchanged.
 
     ``probe`` is the same idea for the viewer: it receives the distribution
     actually sampled from, or ``None`` where no entry existed and the choice
@@ -268,6 +275,12 @@ def cfr_agent(strategy: Dict[Hashable, np.ndarray], abstraction,
         weights = [0.0] * NUM_ACTIONS
         for action, probability in zip(actions, probabilities):
             weights[action] = float(probability) * float(mask[action])
+        if covering_call and to_call > 0 and mask[CHECK_CALL] \
+                and not any(mask[action] for action in RAISE_ACTIONS):
+            # Raising is gone, so a raise or a jam can only be played as the call that puts the chips in.
+            for action, probability in zip(actions, probabilities):
+                if action in RAISE_ACTIONS:
+                    weights[CHECK_CALL] += float(probability)
 
         total = 0.0
         for value in weights:

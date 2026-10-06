@@ -126,7 +126,7 @@ async def _main(args, config):
     player = ArenaPlayer(ladder, rng, companions=companions, purify=args.purify,
                          river=args.river_solve, river_budget_s=args.river_budget,
                          river_shove_companion=args.river_shove_companion,
-                         stack_cap=args.stack_cap,
+                         stack_cap=args.stack_cap, covering_call=args.covering_call,
                          short_solution=not args.no_short_solution)
     player.withhold_preflop = not args.no_preflop_withhold
     player.price_misread = args.price_misread
@@ -356,6 +356,10 @@ def main():
     parser.add_argument("--stack-cap", action="store_true",
                         help="honour the trees' fold/call-only nodes in every lookup instead of "
                              "rebuilding the full action list and falling to the rule (19 Sept)")
+    parser.add_argument("--covering-call", action="store_true",
+                        help="facing a bet with only fold and call legal (it covers our stack), play the "
+                             "tree's raise and all-in mass as the call instead of masking it away (7 Oct, "
+                             "the Shadow straight fold)")
     parser.add_argument("--river-shove-companion", action="store_true",
                         help="facing an all-in on the river, take the cap-2 companion's answer over the "
                              "one-raise primary's (its river calling range comes from a game without re-raises)")
