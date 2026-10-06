@@ -109,3 +109,42 @@ burst.
 **6. Housekeeping**
 - [ ] H1: archive the merged worktrees `fold-cost`, `river-design`, `shared-tables`, `shortstack-design` (tag `archive/*`, push the tags, remove).
 - [ ] H2: decide whether to push `archive/shortstack-postflop` (an earlier attempt, never merged).
+
+## The plan for improving the bot (6 Oct)
+
+What the week measured, and the order to act on it.
+
+**Where the bot loses now**
+
+1. **The exploiter is trained against stations, not the field.** It wins big against weak bots and leaks against
+   tight or aggressive ones: the 35bb rung jams weak aces over a three-bet, which Blueprint called 8 of 8, about -10bb
+   a jam.
+2. **It is very exploitable by design** (LBR about +100 at 70bb), the price of its station edge.
+3. **Its tree is coarse.** The (4,2,1) tree cannot express a sized third raise and its re-raise menu is thin; the
+   (4,3,2,1) tree on histogram cards was less than half as exploitable (`research/2026-10-06-cap4321.md`).
+4. **Its cards are coarse.** Six classes, where histogram cards were worth +11.7 BB/100 on the same tree, and seem to be
+   what makes a bigger menu pay off (untested in isolation).
+5. **The short-stack rungs were stale** one-raise trees: fixed, waiting for a burst.
+6. **Opponent-specific money is left on the table:** river bluffs and value bets against particular bots, and which
+   set to play against which bot.
+
+**Phase 1, this season (to 11 Oct): fix measured leaks, one burst at a time.** E1 flags-on (7 Oct), E3 mid-rung
+retrain against a field mix with a tight three-bettor (8 Oct), E2 short-stack rungs (9 Oct, if the slot is free); each
+night's opponents re-scouted and the fixtures pinned and armed.
+
+**Phase 2, after the season: rebuild both sets on the better foundations (base solver).**
+- The next exploiter: histogram cards, (4,3,2,1) deep rungs and field-mixed training, each rung trained to the visit
+  bar. It combines points 1, 3 and 4 and should keep the weak-bot edge while losing far less to good bots. That is a
+  hypothesis; E5 (a cold histogram (4,3,2,1) station exploiter) tests it first.
+- The next balanced bot: T2 plus a fourth raise level, if B1 shows the depth adds something beyond T2.
+- The instruments: the visit bar at more depths (S1), the "bigger menus need fine cards" test (S2), faster duels (S3).
+
+**Phase 3, after that: opponent-specific work.** Choose the set per opponent (a balanced or histogram set against
+strong bots, the exploiter against stations), river bluffs and value bets per opponent, and the remaining reads.
+
+**How every step is judged:** LBR, the scripted shapes (the thirdraiser included), the field copies, the gate at a
+fixed depth, and a burst read decomposed. Not a one-rung arena duel, not a solver head to head alone, and not a short
+learning curve: each of those has hidden or invented an effect this week.
+
+None of the Phase 2 combination has been built together yet; each part has to earn its place against the live set on
+those instruments.
