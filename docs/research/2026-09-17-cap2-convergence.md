@@ -1,5 +1,11 @@
 # Why the cap-2 solvers lose to the one-raise ones, and what the literature does about it
 
+> **6 October 2026:** the numbers below were measured on the gate as it was in September. On the 6 October gate (stack
+> cap, current miss handling) the lane Y 70bb pair, cold 10M against 20M warm, reads +1.9 ± 0.3 to the 10M, where this
+> week read 2.8 ± 0.9 to the 20M. Re-check a figure here on today's instrument before quoting it
+> (`2026-10-06-visit-bar.md`). No set in play uses a uniform cap-2 rung.
+
+
 17 September 2026. Written after the cross-tree gates of Thursday morning and the warm-start
 lanes of Thursday afternoon (NEXT.md, "What Thursday morning measured" and "lanes R, S and T").
 Lane U's frozen-phase result is appended at the end when it lands.

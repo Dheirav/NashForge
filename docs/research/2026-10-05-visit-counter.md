@@ -261,7 +261,8 @@ anything under about 30 BB/100. And these are the two instruments that saw nothi
   head), the mid rungs polished to 60M tied (50.3), v5s60 was level with v5s, and the 40-class gain
   at 20M was gone at 60M.
 - Disagree, on bigger trees: lane Y (19 September) found the deep cap-2 rungs at 20M warm beat their
-  10M solves on the same tree by +6.1 ± 2.2, +2.8 ± 0.9 and +4.7 ± 1.3 at 50, 70 and 100bb, and the
+  10M solves on the same tree by +6.1 ± 2.2, +2.8 ± 0.9 and +4.7 ± 1.3 at 50, 70 and 100bb (but the 70bb
+  pair does not reproduce on the 6 October gate, +1.9 ± 0.3 to the 10M; see `2026-10-06-visit-bar.md`), and the
   cap-2 18bb and 12bb rungs at 100M beat their 20M by +7.5 ± 3.0 and +12.2 ± 7.0. The 20-class
   histogram rungs reached 1.48M of 11.45M information sets at 20M and were under-trained.
 

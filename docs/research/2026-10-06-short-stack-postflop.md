@@ -154,3 +154,24 @@ It addresses the cause the logs point to (the one-raise tree decides most short-
 ends the tree), it costs under an hour of training, and the two cheaper ideas that went after the symptom have
 already been measured and did not move. `--capped-price`, in the 7 October burst, covers the rule's pricing bug on
 its own, so the two changes can be read separately.
+
+## Results of design 1 (6 October, 01:11 to 01:37)
+
+The 5bb and 8bb rungs retrained on the six-class (4,2,1) tree, self-play, 10M each, with the 70bb self-play recipe and
+only the stack changed (`results/cfr/experiments/selfplay_{5,8}bb_t421_10m`, untracked; 387 s and 616 s). Measured in
+`~/pokerbot-scratch/shortrungs/`:
+
+| test | result |
+|---|---|
+| gate, new against old, 8bb | +6.0 ± 0.5 BB/100 |
+| gate, new against old, 5bb | +0.6 ± 0.4 |
+| v5xRR3 with both rungs against v5xRR3, purified, arena, two seeds | 49.8 and 49.4, pooled 49.6 ± 0.5 |
+| against the station, the maniac, hoops (2,000 matches each) | 73.6 / 73.6, 75.6 / 76.4, 70.0 / 67.3 |
+| misses against those three | 155 to 86, 430 to 242, 430 to 352 |
+| replay on 53,053 logged decisions | 120 move onto the tree, none off |
+
+The new rungs fix what they were built for: the 8bb rung clearly beats the old one, and the bot leaves its tree far
+less often at short stacks. As a whole bot they are level, because short stacks are a small part of a match. Nothing
+measured is worse. They are a candidate for their own burst after the flags-on one. An off-tree map of the same
+replay (`~/pokerbot-scratch/offtree/map.txt`) shows the 8bb and 5bb preflop re-raise were the two largest off-tree
+holes in the live set (70 and 38 misses); with them closed, the 470 left are spread thinly over deep turns and rivers.
