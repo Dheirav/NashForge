@@ -92,7 +92,7 @@ burst.
 
 **3. Balanced set (v5iT2p60m)**
 - [x] B1, done 6 Oct 19:41, **no-go by the rule set before the run.** LBR paired, (4,3,2,1) minus T2: default menu -5.4 ± 6.2, between our sizes +9.0 ± 10.5 (neither 10 BB/100 at 2 SE). T2 is already about as hard to exploit (+27.1 against (4,3,2,1)'s +21.6, where plain (4,2,1) read +51.3): its half-pot re-raise captured most of what the extra depth buys, at a fraction of the training. Copies level (+0.2). (4,3,2,1) is better against every scripted shape at a fixed 70bb (thirdraiser +26.7, reraiser +21.3, maniac +25.8, station +10.3, bully +3.0) and +7.8 ± 3.4 head to head there, level in the arena; a lead to revisit if a real aggressive bot shows a gap, not a reason to build. `~/pokerbot-scratch/c4321_vs_t2/`.
-- [x] B2: dropped (B1 no-go).
+- [ ] B2, 7 Oct daytime beside E3 (E3 has the cores first): the merged tree, T2's menu plus a sized third raise and a fourth raise (preflop to turn `half,pot,2x,jam / half,2x,jam / 2x,jam / jam`, river `half,pot,2x,jam / 2x,jam / 2x,jam / jam`), warm from the T2 70bb rung, counted, about 120M with snapshots. Smoke test passed 6 Oct (20,000 iterations: schedule saved as written, warm start 2,811,689 entries 0 dropped, the player plays it; peak 2.9 GB). **Go rule, set before the run:** against T2, no more exploitable on either LBR menu (difference at most +3), at least 15 BB/100 better against the thirdraiser and the reraiser, and no more than 1 point worse on the copies' average. `~/pokerbot-scratch/b2merge/`.
 - [x] B3: dropped (B1 no-go).
 
 **4. Base solver and instruments (no burst needed)**
