@@ -84,9 +84,9 @@ burst.
 
 **2. Exploiter set (v5xRR3), in burst order**
 - [ ] **E1, 7 Oct:** flags-on rules (`--capped-price --price-misread --offtree-preflop --posterior-reads`). Copies: no harm (+0.3 average).
-- [ ] **E3, 8 Oct:** retrain the mid rungs (18 to 35bb) against a field mix that includes a tight three-bettor. Fixes the measured leak against Blueprint: the 35bb rung jams A2 to A9 over a three-bet, Blueprint called 8 of 8 (QQ, QQ, TT, AA, ATs, ATo, A9o, 33), worth about -10bb a jam. Train on 7 Oct after the burst (six-class, about an hour a rung), test on copies, shapes and the jam spot, gate, replay, arm by the evening.
-- [ ] **E2, 9 Oct, if the slot is free:** the new 5bb and 8bb rungs (`results/cfr/experiments/selfplay_{5,8}bb_t421_10m`). Real but small: 8bb gate +6.0, 120 off-tree spots fixed, whole bot level (49.6), so a burst mostly confirms nothing breaks. If E3 does not test well, E2 moves to 8 Oct.
-- [ ] E6, fallback for E3: a Blueprint-only read, "its three-bets are value, do not jam light" (the player already has a "their re-raise is value" rule to extend).
+- [x] **E3, no-go (6 Oct 21:41, `~/pokerbot-scratch/e3mid/`).** Mid rungs retrained with station 0.20 + reraiser 0.10 + nit 0.10 (from station 0.25 + reraiser 0.15). The 35bb rung still jams A2 to A9 over a three-bet 100% (the reraiser three-bets far more often than the nit, so the three-bets it faced in training were still mostly light); Blueprint's copy -1.3, copies' average -0.4, station at 25bb -8.1, reraiser -54 / -89 at 25 / 35bb, nit +6.7 / +13.5; gate new against old +11.2 / +9.8 / +14.2, arena 51.2 / 51.6, replay clean. One rung cannot be right against both the reraiser and Blueprint: the leak is opponent-specific.
+- [ ] **E2, 9 Oct, if the slot is free:** the new 5bb and 8bb rungs (`results/cfr/experiments/selfplay_{5,8}bb_t421_10m`). Real but small: 8bb gate +6.0, 120 off-tree spots fixed, whole bot level (49.6), so a burst mostly confirms nothing breaks. If E6 is not ready by the 7 Oct evening, E2 takes 8 Oct.
+- [ ] **E6, now the fix for the Blueprint jam leak, 7 Oct after the burst, burst 8 Oct:** a read that stops jamming light over a three-bet from a bot whose three-bets are shown to be value (Blueprint called 8 of 8 jams, QQ QQ TT AA ATs ATo A9o 33; the player already has a "their re-raise is value" rule to extend). Test: replay on the logged jam spots, the copies, and that it does not fire against light three-bettors (reraiser shape, hoops).
 - [ ] E4, after the season unless E3 shows a big gain: the deep rungs (50 to 100bb) against a field mix.
 - [ ] E5, after the season: a cold histogram (4,3,2,1) station exploiter (is the histogram exploiter's weaker exploit its recipe or its tree and cards?).
 
@@ -96,7 +96,7 @@ burst.
 - [x] B3: dropped (B1 no-go).
 
 **4. Base solver and instruments (no burst needed)**
-- [ ] S1: the visit bar at another depth (25 or 50bb, T against 2T with counts, gate on 9+ seeds).
+- [x] S1 (6 Oct 21:35, `~/pokerbot-scratch/s1bar25/`): six-class 25bb self-play, 10M (worst line 1,847, snapshot 1,920) against 20M (4,461): gate -0.4 ± 0.5 on 12 seeds, level. The "enough" side of the bar holds at a second depth; the short side was not probed there.
 - [ ] S2: the clean "bigger menus need fine cards" test: six-class (4,3,2,1) against six-class (4,2,1), both self-play past the bar, paired LBR.
 - [ ] S3: binary compact format (the JSON load peak; about 460 MB of disk and the duel's peak memory).
 - [ ] S4, low priority: re-check September's cap-2 numbers on today's gate (nothing in play depends on them).
@@ -107,7 +107,7 @@ burst.
 - [ ] O3: the hoops read, a postflop never-folds read, a false-fire budget, change-point detection.
 
 **6. Housekeeping**
-- [ ] H1: archive the merged worktrees `fold-cost`, `river-design`, `shared-tables`, `shortstack-design` (tag `archive/*`, push the tags, remove).
+- [x] H1 (6 Oct 20:05): fold-cost, river-design, shared-tables, shortstack-design archived (tags pushed), worktrees removed.
 - [ ] H2: decide whether to push `archive/shortstack-postflop` (an earlier attempt, never merged).
 
 ## The plan for improving the bot (6 Oct)
