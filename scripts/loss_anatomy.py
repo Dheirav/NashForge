@@ -108,9 +108,13 @@ def anatomy(hand, seat):
     detail = {"bb": bb, "net_bb": net / bb, "mine": mine, "theirs": theirs, "board": board,
               "line": " ".join(f"{'X' if a['seat'] == seat else 'o'}:{a['action'][0]}{a.get('amount') or ''}@{a['phase'][0]}"
                                for a in acts if not a["action"].startswith("post"))}
-    if net >= 0:
-        return net, None, detail
     m, t = _ix(mine), _ix(theirs)
+    allin = not fold and (last_phase != "river" or len(board) < 5)
+    if net >= 0:
+        # Won all-ins are kept for the equity line: counting only the lost ones makes "behind" true by construction.
+        if allin:
+            detail["allin_eq"] = equity(m, t, _ix(board[:BOARD_AT.get(last_phase, 0)]))
+        return net, None, detail
     if fold and fold[0] == seat:
         shown = board[:BOARD_AT[fold[1]]]
         eq = equity(m, t, _ix(shown))
@@ -167,6 +171,8 @@ def main():
                     continue
                 net, cat, d = got
                 hands_n[lost] += 1
+                if "allin_eq" in d:
+                    allin_eq.append(d["allin_eq"])
                 if cat:
                     split[lost][cat] += -d["net_bb"]
                     if cat == "all in behind or flipped":
@@ -185,7 +191,7 @@ def main():
             out.append(f"| {cat} | {a:.0f} | {b:.0f} |")
         if allin_eq:
             behind = sum(1 for e in allin_eq if e < 0.45)
-            out.append(f"\nAll-ins before the river: {len(allin_eq)}, behind in {behind} "
+            out.append(f"\nCalled all-ins before the river, won and lost: {len(allin_eq)}, behind in {behind} "
                        f"({100 * behind / len(allin_eq):.0f}%), mean equity {np.mean(allin_eq):.2f}.")
         out += ["", f"Its {args.top} biggest losing hands:", ""]
         for net_bb, cat, other, d in sorted(worst, key=lambda t: t[0])[:args.top]:
