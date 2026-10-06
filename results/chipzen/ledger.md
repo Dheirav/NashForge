@@ -346,3 +346,11 @@ first match 05 Oct 11:26 IST. **20 matches, 10 won (50%), 1,018 hands, net +0 ch
 |---|---|---|---|---|---|
 | Blueprint | 20 | 10 | 1018 | +0 | +0 |
 
+## b605dd7 | results/cfr/ladder169l_v5xRR3 | deep-primary | v5xRR3p-main5oct: v5xRR3 purified on main after 5 Oct (never-calls 35%, profile counts fixed, clean profiles)
+
+first match 06 Oct 07:53 IST. **20 matches, 12 won (60%), 964 hands, net +40,000 chips, +41 ± 47 chips/hand**, showdowns 97 won / 121 lost.
+
+| opponent | matches | won | hands | net | chips/hand |
+|---|---|---|---|---|---|
+| Blueprint | 20 | 12 | 964 | +40,000 | +41 |
+
