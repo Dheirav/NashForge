@@ -35,6 +35,8 @@ exploitable. Granularity is therefore something to measure, which is what
 from __future__ import annotations
 
 import bisect
+import hashlib
+import weakref
 from dataclasses import dataclass, field
 from typing import Dict, List, Optional, Sequence, Tuple
 
@@ -259,6 +261,29 @@ def board_texture(board: Sequence[Card]) -> int:
             straight = 1
             break
     return flush * 2 + straight
+
+
+class _SharedTables(dict):
+    """One native table set, street to `BucketTable`, with the arrays it was built from (`.arrays`)."""
+
+
+#: Native table sets by the digest of the arrays they were built from, shared by every abstraction
+#: whose tables are identical (see `CardAbstraction.native_tables`). Weak, so a set lives only as long
+#: as an abstraction holds it.
+_SHARED_TABLES: "weakref.WeakValueDictionary[str, _SharedTables]" = weakref.WeakValueDictionary()
+
+
+def _tables_digest(tables) -> str:
+    """A digest of every street's keys and buckets in full: shape, dtype after conversion, and every byte."""
+    digest = hashlib.blake2b(digest_size=20)
+    for street in sorted(tables):
+        keys, buckets = tables[street]
+        keys = np.ascontiguousarray(keys, dtype=np.uint64)
+        buckets = np.ascontiguousarray(buckets, dtype=np.uint8)
+        for part in (street.encode(), repr(keys.shape).encode(), keys.data, repr(buckets.shape).encode(), buckets.data):
+            digest.update(len(part).to_bytes(8, "little") if not isinstance(part, memoryview) else part.nbytes.to_bytes(8, "little"))
+            digest.update(part)
+    return digest.hexdigest()
 
 
 @dataclass
@@ -515,18 +540,39 @@ class CardAbstraction:
         return self
 
     def native_tables(self):
-        """The native `BucketTable` per street, built once from the stored arrays; {} without tables."""
+        """
+        The native `BucketTable` per street, built once from the stored arrays; {} without tables.
+
+        Rungs fitted from one abstraction carry the same tables: v5iT2p60m's 50, 70 and 100bb rungs
+        hold identical flop and turn tables, about 131 MB native and 137 MB of arrays each, so a
+        ladder held three copies of both. Abstractions whose tables are identical now share one
+        native set and one set of arrays. The key is a digest of every array in full (0.2 s a rung),
+        never a sample, because two tables that differ in one entry would put a hand in the wrong
+        bucket with no error. The shared set is held weakly, so it goes when the last rung using it
+        does, and its arrays are read-only, since a write through one rung would reach the others.
+        """
         cached = getattr(self, "_native_tables", None)
         if cached is not None:
             return cached
-        tables = {}
-        if getattr(self, "_hist_tables", None):
+        if not getattr(self, "_hist_tables", None):
+            self._native_tables = {}
+            return self._native_tables
+        digest = _tables_digest(self._hist_tables)
+        shared = _SHARED_TABLES.get(digest)
+        if shared is None:
             import pokerbot_native as native
-            for street, (keys, buckets) in self._hist_tables.items():
-                tables[street] = native.BucketTable(np.ascontiguousarray(keys, dtype=np.uint64),
-                                                    np.ascontiguousarray(buckets, dtype=np.uint8))
-        self._native_tables = tables
-        return tables
+            arrays = {street: (np.ascontiguousarray(keys, dtype=np.uint64), np.ascontiguousarray(buckets, dtype=np.uint8))
+                      for street, (keys, buckets) in self._hist_tables.items()}
+            for keys, buckets in arrays.values():
+                keys.flags.writeable = False
+                buckets.flags.writeable = False
+            shared = _SharedTables((street, native.BucketTable(keys, buckets)) for street, (keys, buckets) in arrays.items())
+            shared.arrays = arrays
+            _SHARED_TABLES[digest] = shared
+        # A dict of its own over the shared arrays, so reassigning a street here never reaches another rung.
+        self._hist_tables = dict(shared.arrays)
+        self._native_tables = shared
+        return shared
 
     # ------------------------------------------------------------------
 
