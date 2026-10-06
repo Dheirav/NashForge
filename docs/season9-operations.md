@@ -91,9 +91,9 @@ burst.
 - [ ] E5, after the season: a cold histogram (4,3,2,1) station exploiter (is the histogram exploiter's weaker exploit its recipe or its tree and cards?).
 
 **3. Balanced set (v5iT2p60m)**
-- [ ] B1, running (`~/pokerbot-scratch/c4321_vs_t2/`, about 19:55): (4,3,2,1) against T2 at 70bb. Go only if (4,3,2,1) is at least 10 BB/100 less exploitable on paired LBR (2 SE) on either menu and not worse by over 1 point on the copies or 5 BB/100 on any shape.
-- [ ] B2, if go: a "T2 plus a fourth level" 70bb rung trained to the visit bar, tested against both.
-- [ ] B3, if that wins, after the season: its 50 and 100bb rungs, two lanes at a time, then gate, replay, burst.
+- [x] B1, done 6 Oct 19:41, **no-go by the rule set before the run.** LBR paired, (4,3,2,1) minus T2: default menu -5.4 ± 6.2, between our sizes +9.0 ± 10.5 (neither 10 BB/100 at 2 SE). T2 is already about as hard to exploit (+27.1 against (4,3,2,1)'s +21.6, where plain (4,2,1) read +51.3): its half-pot re-raise captured most of what the extra depth buys, at a fraction of the training. Copies level (+0.2). (4,3,2,1) is better against every scripted shape at a fixed 70bb (thirdraiser +26.7, reraiser +21.3, maniac +25.8, station +10.3, bully +3.0) and +7.8 ± 3.4 head to head there, level in the arena; a lead to revisit if a real aggressive bot shows a gap, not a reason to build. `~/pokerbot-scratch/c4321_vs_t2/`.
+- [x] B2: dropped (B1 no-go).
+- [x] B3: dropped (B1 no-go).
 
 **4. Base solver and instruments (no burst needed)**
 - [ ] S1: the visit bar at another depth (25 or 50bb, T against 2T with counts, gate on 9+ seeds).
@@ -136,7 +136,8 @@ night's opponents re-scouted and the fixtures pinned and armed.
 - The next exploiter: histogram cards, (4,3,2,1) deep rungs and field-mixed training, each rung trained to the visit
   bar. It combines points 1, 3 and 4 and should keep the weak-bot edge while losing far less to good bots. That is a
   hypothesis; E5 (a cold histogram (4,3,2,1) station exploiter) tests it first.
-- The next balanced bot: T2 plus a fourth raise level, if B1 shows the depth adds something beyond T2.
+- The next balanced bot: B1 said no to a fourth raise level (T2 is already about as hard to exploit), so the
+  balanced set keeps T2; its next step is training and card quality rather than a bigger menu.
 - The instruments: the visit bar at more depths (S1), the "bigger menus need fine cards" test (S2), faster duels (S3).
 
 **Phase 3, after that: opponent-specific work.** Choose the set per opponent (a balanced or histogram set against
