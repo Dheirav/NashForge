@@ -39,6 +39,7 @@ from abstraction.buckets import CardAbstraction, preflop_key
 from abstraction.equity import FULL_DECK  # noqa: E402
 from cfr import ALL_RULES, MCCFRSolver  # noqa: E402
 from cfr.flat import KEY_WIDTH, FlatStrategy, flat_paths  # noqa: E402
+from cfr.provenance import provenance  # noqa: E402
 
 #: The native path's flat export, written beside the pickle by `_report_and_write`.
 _FLAT_EXPORT = None
@@ -203,6 +204,11 @@ def _resident_mb():
     return 0.0
 
 
+#: Where this run came from (cfr/provenance.py), taken once at the start of `main` so a commit made while it trains
+#: is not mistaken for the code that trained it; written into every summary this run writes.
+_PROVENANCE = None
+
+
 def _write(path, strategy, abstraction, args, results, iterations, seconds):
     """The strategy and its summary, written together so neither outlives the other."""
     with open(path, "wb") as handle:
@@ -212,7 +218,7 @@ def _write(path, strategy, abstraction, args, results, iterations, seconds):
         json.dump({"args": vars(args), "results": results,
                    "information_sets_reached": len(strategy),
                    "iterations_completed": iterations,
-                   "seconds": seconds}, handle, indent=2)
+                   "seconds": seconds, "provenance": _PROVENANCE}, handle, indent=2)
 
 
 def _native_tables(abstraction):
@@ -433,7 +439,9 @@ def _train_native(args, abstraction, projected):
 
 
 def main():
+    global _PROVENANCE
     args = parse_args()
+    _PROVENANCE = provenance(vars(args), os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..")))
     # One value is the int the rest of the codebase has always taken; more than
     # one is a taper. Normalised here so `vars(args)` in the output JSON records
     # which game produced the strategy.
@@ -590,11 +598,23 @@ def _report_and_write(args, game, abstraction, strategy, information_sets, elaps
             np.savez(npz, keys=_FLAT_EXPORT._keys, offsets=_FLAT_EXPORT._offsets, values=_FLAT_EXPORT._values)
             with open(side, "wb") as handle:
                 pickle.dump({"abstraction": abstraction, "args": vars(args)}, handle)
+        finished = dict(_PROVENANCE or {}, finished=time.strftime("%Y-%m-%dT%H:%M:%S%z"))
         with open(os.path.splitext(args.output)[0] + ".json", "w") as handle:
             json.dump({"args": vars(args), "results": results,
                        "information_sets_reached": information_sets,
-                       "seconds": elapsed}, handle, indent=2)
+                       "seconds": elapsed, "provenance": finished}, handle, indent=2)
         print(f"\nWrote {args.output}")
+        # Its manifest entry (scripts/solve_manifest.py) now, while the files are fresh. Never fatal: the solve is
+        # written either way, and a later full run of the manifest picks up anything this missed.
+        try:
+            import subprocess
+            kept = os.path.realpath(args.output).startswith(
+                os.path.realpath(os.path.join(os.path.dirname(__file__), "..", "..", "results", "cfr")) + os.sep)
+            if kept:     # a scratch or test solve is not part of the record
+                subprocess.run([sys.executable, os.path.join(os.path.dirname(__file__), "..", "solve_manifest.py"),
+                               "--only", args.output], timeout=600, check=False)
+        except Exception as error:   # noqa: BLE001
+            print(f"manifest not updated ({error}); run scripts/solve_manifest.py")
 
 
 if __name__ == "__main__":

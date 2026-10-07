@@ -75,6 +75,25 @@ PPO run at the same standard means building the comparison, not reusing it.
   it records self-play reward *and* an independent panel score, and writes a
   resumable history. Do both.
 
+## CFR solves: provenance and the manifest
+
+Every solve meant to be kept is trained by `scripts/cfr/train_nolimit.py` into `results/cfr/experiments/`.
+That run records its provenance in the solve's `.json` (`cfr/provenance.py`: commit and dirty files, the
+command, host, start and finish, and a digest of each `--warm-start` and `--abstraction-from` source) and
+adds the solve to `results/cfr/MANIFEST.json`. So:
+
+- **Train from a clean tree** (commit first), or the recorded commit is not the code that ran; the record
+  says `dirty` and lists the files, but a rebuild cannot check out uncommitted edits.
+- **A source must be kept as long as anything built on it is.** `--warm-start` and `--abstraction-from`
+  make a chain; the manifest's `built_on_by` shows it.
+- **Deleting: never automatically, and never without the user's explicit go-ahead for that deletion.**
+  Show them `venv/bin/python scripts/solve_manifest.py --deletable` (not live, nothing built on it); that list
+  is a proposal, not permission. With a go-ahead, delete only from it, keep each `.json`, then rerun
+  `scripts/solve_manifest.py`. No lane or script may delete a solve.
+- A solve written outside `results/cfr` (scratch, smoke tests) is not in the record and may be lost.
+- Same commit and seed rebuild the same recipe; on more than one thread not the same bytes, so compare a
+  rebuilt solve by its measurements, never by its digest.
+
 ## Reporting a result
 
 State the hand count the measurement was taken at. A number without it is not
