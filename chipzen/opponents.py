@@ -107,6 +107,15 @@ OVER_FOLD_MAX_RAISE = 0.15
 #: re-raise at every depth, where any two break even at about 62%.
 RERAISE_MIN = 60
 EQUILIBRIUM_CALL_SHARE = 0.5
+#: "Their three-bet holds": its answers when we re-raised its re-raise of our open ("preflop:UrTrUr"), over at least
+#: FOUR_BET_MIN of them, with the Wilson upper bound of its fold share at most FOUR_BET_FOLD_BOUND. Blueprint, 7 Oct:
+#: 0 folds in 86 (73 calls, 13 raises; bound 4.3%), and it called all 8 of our 35bb jams, with QQ, QQ, TT, AA, ATs,
+#: ATo, A9o and 33. The light three-bettors fold far more: mr_hide 32 of 42, Shadow 4 of 11, hoops 3 of 28 (the last two
+#: under FOUR_BET_MIN as well). PoetAndCoder, 0 of 49 (bound 7.3%), also holds.
+#: The bound alone needs about 35 answers when none is a fold (0 of 34 is 0.102); the minimum is a floor under it
+#: should the bound ever be loosened, not the line that decides today.
+FOUR_BET_MIN = 30
+FOUR_BET_FOLD_BOUND = 0.10
 #: "Never calls" fires below this share of calls among the non-fold answers, in both of its rules. It was CALL_FLOOR
 #: and EQUILIBRIUM_CALL_SHARE (0.5), which on 3 Oct fired on bots calling 46 to 48% (Dronev4, drone, LazerTank): on
 #: Dronev4's copy the read cost 9.9 points (59.0 on, 68.9 off, 20,000 matches), and in the logs its 12 firings on
@@ -337,6 +346,17 @@ def _upper_bound(successes: int, trials: int) -> float:
         return 1.0
     rate = successes / trials
     return rate + 1.96 * (rate * (1.0 - rate) / trials) ** 0.5
+
+
+def _wilson_upper(successes: int, trials: int, z: float = 1.96) -> float:
+    """Upper end of the 95 percent Wilson interval. Wald's is zero at zero successes, which would make
+    "never folded in 30" as certain as "never folded in 300"; Wilson's is about 3.8/n there."""
+    if trials <= 0:
+        return 1.0
+    p = successes / trials
+    centre = p + z * z / (2 * trials)
+    spread = z * (p * (1.0 - p) / trials + z * z / (4.0 * trials * trials)) ** 0.5
+    return (centre + spread) / (1.0 + z * z / trials)
 
 
 def _lower_bound(successes: int, trials: int) -> float:
@@ -724,6 +744,23 @@ class Profiles:
         if self.posteriors:
             return self.lower(name, "open_reraise")
         return max(0.0, _lower_bound(node.get("raise", 0), n))
+
+    def three_bets_hold(self, name: Optional[str]) -> Optional[float]:
+        """
+        The share of our opens it re-raises (the lower bound, so the range it stands for is the tightest the count
+        allows), when its re-raise does not fold to ours; None otherwise.
+
+        A four-bet over its three-bet wins only by being called by worse when it never folds, so the share is
+        what the player weighs our equity against. A frequent re-raiser that holds is the case "their re-raise is
+        value" cannot see: that rule needs a bot that almost never re-raises, and Blueprint re-raises 15%.
+        """
+        if not self.scout_reads or not self.exploits_allowed(name):
+            return None
+        node = (self.rows.get(name or "") or {}).get("by_history", {}).get("preflop:UrTrUr", {})
+        n = sum(node.values())
+        if n < FOUR_BET_MIN or _wilson_upper(node.get("fold", 0), n) > FOUR_BET_FOLD_BOUND:
+            return None
+        return self.reraise_floor(name)
 
     def exploits_allowed(self, name: Optional[str]) -> bool:
         """With the bankroll rule on, only while we are not behind against them."""
