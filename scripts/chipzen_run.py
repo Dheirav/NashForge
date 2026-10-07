@@ -160,6 +160,7 @@ async def _main(args, config):
         "exploit_bankroll": bool(args.exploit_bankroll),
         "withhold_preflop": player.withhold_preflop,
         "price_misread": player.price_misread,
+        "covering_call": bool(args.covering_call),
         "capped_price": player.capped_price,
         "offtree_preflop": player.offtree_preflop,
         "size_aware_bluffs": player.size_aware_bluffs,
