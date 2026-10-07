@@ -41,9 +41,11 @@ def code_version(root: str) -> Dict:
     commit = _git(root, "rev-parse", "HEAD")
     if commit is None:
         return {"commit": None}
-    dirty = [line[3:] for line in (_git(root, "status", "--porcelain", "--untracked-files=no") or "").splitlines()]
+    changed = [line[3:] for line in (_git(root, "status", "--porcelain", "--untracked-files=no") or "").splitlines()]
+    # The match ledger and the docs change under every run without changing what trains; only code makes it dirty.
+    dirty = [f for f in changed if not f.startswith(("results/", "docs/")) and not f.endswith(".md")]
     return {"commit": commit, "branch": _git(root, "rev-parse", "--abbrev-ref", "HEAD"),
-            "dirty": bool(dirty), "dirty_files": dirty[:50]}
+            "dirty": bool(dirty), "dirty_files": dirty[:50], "data_changed": [f for f in changed if f not in dirty][:20]}
 
 
 def file_digest(path: str, chunk: int = 1 << 22) -> str:
