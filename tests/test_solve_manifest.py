@@ -102,3 +102,17 @@ def test_provenance_names_this_checkout_s_commit_and_digests_each_source(tmp_pat
     assert record["sources"]["warm_start"]["blake2b"] == file_digest(str(source))
     assert record["sources"]["abstraction_from"]["missing"]
     assert record["code"]["commit"] == head and record["started"]
+
+
+def test_dirty_files_are_named_whole_and_data_does_not_make_a_run_dirty(tmp_path):
+    repo = str(tmp_path)
+    git = lambda *a: subprocess.run(["git", "-C", repo, *a], capture_output=True, check=True)
+    git("init", "-q"); git("config", "user.email", "t@t"); git("config", "user.name", "t")
+    os.makedirs(os.path.join(repo, "cfr")); os.makedirs(os.path.join(repo, "results"))
+    for f in ("cfr/solver.py", "results/ledger.md"):
+        open(os.path.join(repo, f), "w").write("a")
+    git("add", "."); git("commit", "-qm", "x")
+    open(os.path.join(repo, "results/ledger.md"), "w").write("b")
+    assert code_version(repo)["dirty"] is False and code_version(repo)["data_changed"] == ["results/ledger.md"]
+    open(os.path.join(repo, "cfr/solver.py"), "w").write("b")
+    assert code_version(repo)["dirty_files"] == ["cfr/solver.py"]

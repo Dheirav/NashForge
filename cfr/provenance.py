@@ -27,12 +27,15 @@ from typing import Dict, Optional
 SOURCE_ARGS = ("warm_start", "abstraction_from")
 
 
-def _git(root: str, *args: str) -> Optional[str]:
+def _git(root: str, *args: str, strip: bool = True) -> Optional[str]:
     try:
         out = subprocess.run(["git", "-C", root, *args], capture_output=True, text=True, timeout=30)
     except (OSError, subprocess.SubprocessError):
         return None
-    return out.stdout.strip() if out.returncode == 0 else None
+    if out.returncode != 0:
+        return None
+    # Porcelain status is column-aligned: stripping the whole output eats the first line's status column.
+    return out.stdout.strip() if strip else out.stdout
 
 
 def code_version(root: str) -> Dict:
@@ -41,7 +44,8 @@ def code_version(root: str) -> Dict:
     commit = _git(root, "rev-parse", "HEAD")
     if commit is None:
         return {"commit": None}
-    changed = [line[3:] for line in (_git(root, "status", "--porcelain", "--untracked-files=no") or "").splitlines()]
+    changed = [line[3:] for line in (_git(root, "status", "--porcelain", "--untracked-files=no", strip=False)
+                                     or "").splitlines() if line.strip()]
     # The match ledger and the docs change under every run without changing what trains; only code makes it dirty.
     dirty = [f for f in changed if not f.startswith(("results/", "docs/")) and not f.endswith(".md")]
     return {"commit": commit, "branch": _git(root, "rev-parse", "--abbrev-ref", "HEAD"),
