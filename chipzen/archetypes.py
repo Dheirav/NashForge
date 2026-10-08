@@ -258,7 +258,13 @@ class Archetype:
                     return self._raise_to(state, p["third_raise_frac"])
                 return self._raise_to(state, 1.0, allin=self._short(state) or raises >= 2)
             defend = p["defend3_eq"] if raises >= 2 else p["defend_eq"]
-            if e >= defend and e >= price + p["fold_margin"]:
+            margin = p["fold_margin"]
+            if raises >= 3 and p.get("defend4_eq") is not None:
+                # Our four-bet over its three-bet, apart from its answer to our three-bet: the fitted copies fold 88 to
+                # 100% of their three-bets here (defend3_eq far over threebet_eq) while Blueprint and PoetAndCoder
+                # folded none of 86 and 49 (7 Oct). Unset in every shape, so they play as they did.
+                defend, margin = p["defend4_eq"], p.get("fold4_margin", margin)
+            if e >= defend and e >= price + margin:
                 return self._passive(valid)
             return self._fold(valid)
 
