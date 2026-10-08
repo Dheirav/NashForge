@@ -256,6 +256,10 @@ class Archetype:
                 if raises >= 2 and p.get("third_raise_frac") is not None and not self._short(state):
                     # A sized third raise, the one the (4,2,1) tree cannot express; jams only once short.
                     return self._raise_to(state, p["third_raise_frac"])
+                if p.get("reraise_frac") is not None and not self._short(state):
+                    # A sized re-raise, for the small ones traced LBR exploits (8 Oct): the shapes and copies all
+                    # re-raise the pot, so the small-raise defence could not be measured on them. Unset in every shape.
+                    return self._raise_to(state, p["reraise_frac"])
                 return self._raise_to(state, 1.0, allin=self._short(state) or raises >= 2)
             defend = p["defend3_eq"] if raises >= 2 else p["defend_eq"]
             if e >= defend and e >= price + p["fold_margin"]:
