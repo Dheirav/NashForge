@@ -87,6 +87,7 @@ class Stats:
     fallbacks: int = 0
     short_stack_answers: int = 0   # a preflop all-in answered by the exact solution
     reraises_believed: int = 0     # a re-raise from a bot that never re-raises
+    threebets_held: int = 0        # a light four-bet over a three-bet that does not fold, called or folded
     collapsed_hits: int = 0            # answered on a re-read history after a pseudo all-in
     river_bluffs_caught: int = 0   # a river fold turned into a call against an over-bluffer
     overfolders_bet: int = 0       # a flop or turn check turned into a half-pot bet
@@ -296,6 +297,9 @@ class ArenaPlayer:
         #: gives up the blind a station would often have folded to: turning it off gained 1.6 (hoops) and 0.8
         #: (PoetAndCoder copy) points at 20,000 matches, 30 Sept, and lost nowhere. On until gated and burst.
         self.withhold_preflop = True
+        #: "Their three-bet holds" (E6, 7 Oct): against a bot whose re-raise of our open does not fold to our
+        #: re-raise, four-bet only with a hand that is ahead of its re-raising range. Off unless asked for.
+        self.threebet_holds = False
 
     #: A raise with a hand this weak or weaker is a bluff for the purpose of
     #: withholding it: the bottom two of six strength classes.
@@ -325,6 +329,11 @@ class ArenaPlayer:
     #: so a third is the break-even and 0.30 keeps a margin. On 23 September the
     #: price was 0.27, which is a call for 510 chips; the jam cost 7,935.
     VALUE_RERAISE_PRICE = 0.30
+    #: Against a three-bet that never folds to a four-bet, a four-bet keeps only this equity against the
+    #: three-betting range or more: with no fold equity every chip the raise adds is a coin we must be ahead on.
+    #: Against Blueprint's top 13.6% (its re-raise floor, 7 Oct): A2o to A9o 0.36 to 0.40, ATo 0.43, AJo 0.48, which
+    #: the live 35bb rung jammed; AQo and 99 0.53, AKo 0.60, QQ 0.67 keep the raise.
+    THREE_BET_HOLD_EQUITY = 0.50
     #: The exact push-fold solution answers a preflop all-in at this effective
     #: stack or shorter. Fourteen blinds is where the solved game stops being
     #: the whole hand: deeper than that a shove is a real decision with a flop
@@ -622,6 +631,26 @@ class ArenaPlayer:
                 (FOLD if arena[FOLD] else CHECK_CALL)
             adjusted = "their re-raise is value"
             self.stats.reraises_believed += 1
+        if self.threebet_holds and choice in RAISE_ACTIONS and not board and to_call > 0 \
+                and self.profiles is not None and hand.effective_bb >= self.SHOVE_RULE_MIN_BB:
+            pre = [a for a in state.get("action_history") or []
+                   if a.get("phase") == "preflop" and not str(a.get("action", "")).startswith("post")]
+            share = self.profiles.three_bets_hold(self.opponent) \
+                if len(pre) == 2 and pre[0].get("seat") == seat and pre[0].get("action") == "raise" \
+                and pre[1].get("seat") != seat and pre[1].get("action") == "raise" else None
+            if share is not None:
+                from chipzen.ranges import equity_vs_top
+                equity = equity_vs_top([c.index for c in hole], share)
+                if equity < self.THREE_BET_HOLD_EQUITY:
+                    # Blueprint, 7 Oct: it called all 8 of our 35bb jams over its three-bet, with QQ, QQ, TT, AA,
+                    # ATs, ATo, A9o and 33, and the jams were weak aces. Our four-bet there wins only when called by
+                    # worse, so below a half against its range the raise goes; what stays is a call the equity
+                    # pays for (the price is the call we can make, as the re-raise defence prices it) or the fold.
+                    price = price_call / float(price_pot + price_call)
+                    choice = CHECK_CALL if arena[CHECK_CALL] and equity >= price + self.RERAISE_MARGIN else \
+                        (FOLD if arena[FOLD] else CHECK_CALL)
+                    adjusted = "their three-bet holds"
+                    self.stats.threebets_held += 1
         withheld = None
         if choice in RAISE_ACTIONS and arena[CHECK_CALL] and self.profiles is not None \
                 and (self.withhold_preflop or board) \
