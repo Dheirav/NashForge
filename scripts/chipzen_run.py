@@ -130,6 +130,7 @@ async def _main(args, config):
                          short_solution=not args.no_short_solution)
     player.withhold_preflop = not args.no_preflop_withhold
     player.price_misread = args.price_misread
+    player.small_raise_defence = args.small_raise_defence
     player.capped_price = args.capped_price
     player.offtree_preflop = args.offtree_preflop
     player.size_aware_bluffs = args.size_aware_bluffs
@@ -160,6 +161,7 @@ async def _main(args, config):
         "exploit_bankroll": bool(args.exploit_bankroll),
         "withhold_preflop": player.withhold_preflop,
         "price_misread": player.price_misread,
+        "small_raise_defence": player.small_raise_defence,
         "capped_price": player.capped_price,
         "offtree_preflop": player.offtree_preflop,
         "size_aware_bluffs": player.size_aware_bluffs,
@@ -340,6 +342,9 @@ def main():
     parser.add_argument("--exploit-bankroll", action="store_true",
                         help="fire the opponent rules only while our net against that opponent is "
                              "not negative (risk what you have won); off by default")
+    parser.add_argument("--small-raise-defence", action="store_true",
+                        help="facing a small preflop re-raise of our raise (price 0.25 or better), call a fold when 80%% "
+                             "of our equity against the raiser's range pays for it; off by default (8 Oct, traced LBR)")
     parser.add_argument("--price-misread", action="store_true",
                         help="call a fold the strategy made on a misread all-in (a collapsed re-read, or a raise "
                              "read as all-in while the bettor kept chips) at a real price of 25%% or better with "
