@@ -74,6 +74,12 @@ def build(ladder_dir: str, flags: str, label: str, rng: np.random.Generator,
         player = build_archetype(ladder_dir.split(":", 1)[1], rng)
         player.label = label
         return player
+    if ladder_dir.startswith("datacopy:"):
+        # A copy built from a bot's own decisions (chipzen/datacopy.py, scripts/fit_data_copy.py), not a scripted shape.
+        from chipzen.datacopy import DataCopy
+        player = DataCopy.from_file(ladder_dir.split(":", 1)[1], rng)
+        player.label = label
+        return player
     deep = "--deep-primary" in flags
     tokens = flags.split()
     # "--purify MODE" (cfr/purify.py): none, postflop, all or tNN; as chipzen_run.py's flag of the same name.
