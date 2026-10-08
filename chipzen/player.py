@@ -92,6 +92,7 @@ class Stats:
     river_bluffs_caught: int = 0   # a river fold turned into a call against an over-bluffer
     overfolders_bet: int = 0       # a flop or turn check turned into a half-pot bet
     reraises_defended: int = 0     # a fold of our open to a re-raise turned into a call
+    small_raises_defended: int = 0  # a fold to a small preflop re-raise turned into a call the price pays for
     misread_prices_called: int = 0  # a fold on a misread all-in turned into a call at the real price
     offtree_preflop_calls: int = 0  # a fold to a preflop raise read as all-in called against the solution's range
     miss_depths: Dict[int, int] = field(default_factory=dict)
@@ -300,6 +301,9 @@ class ArenaPlayer:
         #: "Their three-bet holds" (E6, 7 Oct): against a bot whose re-raise of our open does not fold to our
         #: re-raise, four-bet only with a hand that is ahead of its re-raising range. Off unless asked for.
         self.threebet_holds = False
+        #: The small-raise defence (8 Oct): facing a small preflop re-raise of our raise, call a fold the price pays for.
+        #: Off unless asked for.
+        self.small_raise_defence = False
 
     #: A raise with a hand this weak or weaker is a bluff for the purpose of
     #: withholding it: the bottom two of six strength classes.
@@ -359,6 +363,18 @@ class ArenaPlayer:
     #: Equity against the re-raising range needed beyond the price, for the
     #: equity a call does not realise after the flop.
     RERAISE_MARGIN = 0.03
+    #: The small-raise defence acts at this price or better: the call over the pot after it. A re-raise of about half
+    #: the pot gives 0.25, where folding more than about a fifth of a range already shows any raise a profit. Traced
+    #: LBR (8 Oct) found the exploiter folding 79% of its range to raises this small at 70bb (18.5% of all LBR won) and
+    #: the balanced set 67% at 35bb (21%), against a limit near 20%.
+    SMALL_RAISE_PRICE = 0.25
+    #: The share of its equity a call out of position after a re-raise is taken to realise: the call must pay for the
+    #: price on this share, not on the full equity, since the hands it rescues are the ones that realise least.
+    SMALL_RAISE_REALISE = 0.80
+    #: The raiser's range when its profile says nothing: the top quarter for a first re-raise of our raise, the top
+    #: tenth for a second (a four-bet of our three-bet).
+    SMALL_RAISE_RANGE = 0.25
+    SMALL_RAISE_RANGE_AGAIN = 0.10
     #: The misread-price guard calls at this price or better, the call over the
     #: pot after it. 5 October, mr_hide: a third raise on the turn was read as
     #: all-in although they kept 2,174, so the river shove of those 2,174 into
@@ -728,6 +744,30 @@ class ArenaPlayer:
                         choice = CHECK_CALL
                         adjusted = "re-raise defended"
                         self.stats.reraises_defended += 1
+        if self.small_raise_defence and choice == FOLD and not board and to_call > 0 and arena[CHECK_CALL] \
+                and hand.effective_bb >= self.SHOVE_RULE_MIN_BB:
+            pre = [a for a in state.get("action_history") or []
+                   if a.get("phase") == "preflop" and not str(a.get("action", "")).startswith("post")]
+            ours = [i for i, a in enumerate(pre) if a.get("seat") == seat and a.get("action") == "raise"]
+            theirs = [i for i, a in enumerate(pre) if a.get("seat") != seat and a.get("action") == "raise"]
+            price = price_call / float(price_pot + price_call)
+            # Their raise answers one of ours: they re-raised our open or our three-bet, and it is the last action.
+            if ours and theirs and theirs[-1] == len(pre) - 1 and theirs[-1] > ours[0] and price <= self.SMALL_RAISE_PRICE:
+                again = len(theirs) >= 2 or len(ours) >= 2       # a four-bet or more, from either side's raises
+                share = self.SMALL_RAISE_RANGE_AGAIN if again else self.SMALL_RAISE_RANGE
+                if not again and self.profiles is not None:
+                    floor = self.profiles.reraise_floor(self.opponent)
+                    if floor is not None:
+                        share = max(0.05, floor)     # their measured re-raise share, the tightest range it allows
+                from chipzen.ranges import equity_vs_top
+                equity = equity_vs_top([c.index for c in hole], share)
+                if self.SMALL_RAISE_REALISE * equity >= price:
+                    # A small re-raise is a good price, and folding to it lets any raise profit (traced LBR, 8 Oct):
+                    # call when the equity we can realise against their range pays for it. The price is the call we
+                    # can make, as the re-raise defence prices it.
+                    choice = CHECK_CALL
+                    adjusted = "small raise defended"
+                    self.stats.small_raises_defended += 1
         opponent_stack = int((state.get("opponent_stacks") or [0])[0])
         odds_pot, odds_call = price_pot, price_call
         last_chips = opponent_stack <= 0

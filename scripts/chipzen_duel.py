@@ -102,6 +102,7 @@ def build(ladder_dir: str, flags: str, label: str, rng: np.random.Generator,
     player.withhold_preflop = "--no-preflop-withhold" not in flags
     player.price_misread = "--price-misread" in flags
     player.threebet_holds = "--threebet-holds" in flags
+    player.small_raise_defence = "--small-raise-defence" in flags
     player.capped_price = "--capped-price" in flags
     player.offtree_preflop = "--offtree-preflop" in flags
     player.size_aware_bluffs = "--size-aware-bluffs" in flags
