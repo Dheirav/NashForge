@@ -717,3 +717,52 @@ def test_allin_edge_refuses_a_board_no_hand_can_have(board):
 def test_allin_edge_refuses_a_card_dealt_twice():
     with pytest.raises(ValueError):
         native.allin_edge([0, 1], [1, 3], [], True)
+
+
+def _reraiser_three_bets(legal, translate, seeds=range(800)):
+    """The reraiser in the big blind facing an open to 6 (blind 2): its three-bet is 1.0 pot plus the minimum
+    raise, 4 / 12 of the pot after the call, so 1.333 pots. Aces, so it three-bets whenever its draw allows."""
+    from chipzen.archetypes import PARAMS
+    params = {k: float(v) for k, v in PARAMS["reraiser"].items()}
+    if translate:
+        params["translate"] = 1.0
+    return [native.archetype_act(params, 2, 200, 1, [12, 25], [], [6, 2], [6, 2], [194, 198], "2", legal, s)
+            for s in seeds]
+
+
+def test_archetype_translation_splits_a_raise_between_its_neighbours_like_the_bridge():
+    # 9 Oct: snapped to the nearest size, a 1.33-pot three-bet was always "pot" in a pot-menu tree, while the live
+    # bridge reads it as 2x part of the time, so the exploit trained at one node only. With translate the archetype
+    # draws pot with the pseudo-harmonic weight, (2 - 1.333)(1 + 1) / ((2 - 1)(1 + 1.333)) = 0.571, else 2x.
+    from abstraction.translation import pseudo_harmonic_weight
+    acts = _reraiser_three_bets([0, 1, 2, 3, 4, 5], translate=True)
+    raises = [a for a in acts if a >= 2]
+    share_pot = raises.count(3) / len(raises)
+    expected = pseudo_harmonic_weight(1.0, 2.0, 1.0 + 4 / 12)
+    assert set(raises) <= {3, 4}, set(raises)
+    assert abs(share_pot - expected) < 0.06, (share_pot, expected)
+
+
+def test_archetype_translation_off_keeps_the_nearest_size():
+    acts = _reraiser_three_bets([0, 1, 2, 3, 4, 5], translate=False)
+    assert {a for a in acts if a >= 2} == {3}
+
+
+def test_archetype_translation_reads_a_raise_far_above_the_menu_as_all_in():
+    # The bridge reads a raise 1.5 times the largest sized raise or more as all-in; with only half-pot and jam
+    # legal, 1.33 pots is 2.7 times the half. Snapped to the nearest, it stays half.
+    on = _reraiser_three_bets([0, 1, 2, 5], translate=True, seeds=range(200))
+    off = _reraiser_three_bets([0, 1, 2, 5], translate=False, seeds=range(200))
+    assert {a for a in on if a >= 2} == {5}
+    assert {a for a in off if a >= 2} == {2}
+
+
+def test_archetype_translation_reads_a_raise_below_the_menu_as_the_smallest():
+    # With only 2x and jam legal, 1.33 pots is below the smallest sized raise: the bridge reads the smallest.
+    on = _reraiser_three_bets([0, 1, 4, 5], translate=True, seeds=range(200))
+    assert {a for a in on if a >= 2} == {4}
+
+
+def test_archetype_translation_with_no_sized_raise_is_all_in():
+    on = _reraiser_three_bets([0, 1, 5], translate=True, seeds=range(200))
+    assert {a for a in on if a >= 2} == {5}

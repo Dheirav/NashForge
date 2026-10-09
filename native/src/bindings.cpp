@@ -47,7 +47,7 @@ static ArchetypeParams archetype_params(const std::map<std::string, double>& par
         {"open_eq", &p.open_eq}, {"limp_eq", &p.limp_eq}, {"threebet_eq", &p.threebet_eq},
         {"fold_margin", &p.fold_margin}, {"raise_eq", &p.raise_eq}, {"raise_p", &p.raise_p},
         {"bluff_p", &p.bluff_p}, {"call_p", &p.call_p}, {"defend_eq", &p.defend_eq}, {"defend3_eq", &p.defend3_eq},
-        {"open_frac", &p.open_frac}};
+        {"open_frac", &p.open_frac}, {"translate", &p.translate}};
     for (const auto& [name, value] : params) {
         auto it = fields.find(name);
         if (it == fields.end()) throw std::invalid_argument("archetype parameters: unknown name " + name);
@@ -92,7 +92,7 @@ NB_MODULE(pokerbot_native, m) {
             {"open_eq", &p.open_eq}, {"limp_eq", &p.limp_eq}, {"threebet_eq", &p.threebet_eq},
             {"fold_margin", &p.fold_margin}, {"raise_eq", &p.raise_eq}, {"raise_p", &p.raise_p},
             {"bluff_p", &p.bluff_p}, {"call_p", &p.call_p}, {"defend_eq", &p.defend_eq}, {"defend3_eq", &p.defend3_eq},
-            {"open_frac", &p.open_frac}};
+            {"open_frac", &p.open_frac}, {"translate", &p.translate}};
         for (const auto& [name, value] : params) *fields.at(name) = value;
         ScriptedOpponent opponent(p, big_blind, samples);
         pokerbot::State s;

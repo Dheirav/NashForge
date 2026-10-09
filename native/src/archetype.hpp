@@ -30,6 +30,9 @@ namespace pokerbot {
 struct ArchetypeParams {
     double open_eq = 0.5, limp_eq = 0.5, threebet_eq = 0.6, fold_margin = 0.0, raise_eq = 0.6,
            raise_p = 0.5, bluff_p = 0.0, call_p = 0.5, defend_eq = 0.5, defend3_eq = 0.5, open_frac = 0.5;
+    /// 1 reads the archetype's raise the way the live bridge reads an off-tree one (see read_like_bridge); 0, the
+    /// default, keeps the nearest legal size, so every solve trained before 9 Oct rebuilds as it was.
+    double translate = 0.0;
 };
 
 class ScriptedOpponent {
@@ -46,7 +49,7 @@ public:
     /// first; the cause was the card-blind opponent, see nolimit_game.hpp's
     /// deal. The sizing match is still right, and measured secondary.)
     int8_t raise_like_python(const State& s, int player, const std::vector<int8_t>& legal,
-                             double fraction, bool allin) const {
+                             double fraction, bool allin, Rng& rng) const {
         if (allin && has(legal, ALL_IN)) return ALL_IN;
         const int opp = 1 - player;
         const int to_call = std::max(s.committed[static_cast<size_t>(opp)] - s.committed[static_cast<size_t>(player)], 0);
@@ -56,7 +59,28 @@ public:
         // theirs), and a big blind otherwise.
         const int min_raise_by = std::max(to_call, big_blind_);
         const double effective = pot_after_call > 0 ? fraction + static_cast<double>(min_raise_by) / pot_after_call : fraction;
-        return raise_to(legal, effective, false);
+        return p_.translate > 0.5 ? read_like_bridge(legal, effective, rng) : raise_to(legal, effective, false);
+    }
+
+    /// The abstract raise chipzen/bridge.py `_as_abstract` would read `fraction` as: the smallest sized raise below
+    /// the range, all-in from 1.5 times the largest, and between two sized raises a draw by the pseudo-harmonic weight
+    /// (abstraction/translation.py). 9 Oct: the reraiser's 1.3-pot three-bet always snapped to pot in a pot-menu
+    /// tree, so the exploit was learned at the pot node only, while the live bridge reads that size as 2x 40% of the
+    /// time; at 18bb the rung called those three-bets instead of jamming and won +100 against v5xT2's +257.
+    int8_t read_like_bridge(const std::vector<int8_t>& legal, double fraction, Rng& rng) const {
+        std::vector<int8_t> sized;
+        for (int8_t a : legal) if (a >= RAISE_HALF && a != ALL_IN) sized.push_back(a);
+        if (sized.empty()) return has(legal, ALL_IN) ? ALL_IN : passive(legal);
+        std::sort(sized.begin(), sized.end(), [](int8_t x, int8_t y) { return raise_fraction(x) < raise_fraction(y); });
+        const double smallest = raise_fraction(sized.front()), largest = raise_fraction(sized.back());
+        if (fraction >= largest * 1.5 && has(legal, ALL_IN)) return ALL_IN;
+        if (fraction <= smallest) return sized.front();
+        if (fraction >= largest) return sized.back();
+        size_t hi = 1;
+        while (raise_fraction(sized[hi]) < fraction) ++hi;
+        const double a = raise_fraction(sized[hi - 1]), b = raise_fraction(sized[hi]);
+        const double weight = ((b - fraction) * (1.0 + a)) / ((b - a) * (1.0 + fraction));
+        return unit(rng) < weight ? sized[hi - 1] : sized[hi];
     }
 
     /// The action this opponent takes as `player` in `s`, among `legal`.
@@ -78,22 +102,22 @@ public:
 
         if (preflop) {
             if (raises == 0) {
-                if (can_raise && e >= p_.open_eq) return raise_like_python(s, player, legal, p_.open_frac, false);
+                if (can_raise && e >= p_.open_eq) return raise_like_python(s, player, legal, p_.open_frac, false, rng);
                 if (e >= p_.limp_eq || !facing) return passive(legal);
                 return fold(legal);
             }
             if (can_raise && e >= p_.threebet_eq && u > p_.call_p * 0.5)
-                return raise_like_python(s, player, legal, 1.0, is_short || raises >= 2);
+                return raise_like_python(s, player, legal, 1.0, is_short || raises >= 2, rng);
             const double defend = raises >= 2 ? p_.defend3_eq : p_.defend_eq;
             if (e >= defend && e >= price + p_.fold_margin) return passive(legal);
             return fold(legal);
         }
         if (facing) {
             if (e < price + p_.fold_margin) return fold(legal);
-            if (can_raise && e >= p_.raise_eq && u > p_.call_p) return raise_like_python(s, player, legal, 1.0, is_short);
+            if (can_raise && e >= p_.raise_eq && u > p_.call_p) return raise_like_python(s, player, legal, 1.0, is_short, rng);
             return passive(legal);
         }
-        if (can_raise && ((e >= p_.raise_eq && u < p_.raise_p) || u < p_.bluff_p)) return raise_like_python(s, player, legal, 0.66, false);
+        if (can_raise && ((e >= p_.raise_eq && u < p_.raise_p) || u < p_.bluff_p)) return raise_like_python(s, player, legal, 0.66, false, rng);
         return passive(legal);
     }
 

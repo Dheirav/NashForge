@@ -130,6 +130,11 @@ def parse_args():
                         help="native only: train against several scripted shapes at once, e.g. station:0.25 maniac:0.15; "
                              "at each opponent node a script plays with the shares' total probability, split by share "
                              "(27 Sept: v5x trained against stations alone folds 79%% of its opens to a re-raise)")
+    parser.add_argument("--archetype-translation", action="store_true",
+                        help="native only: the scripted opponent's raise is read the way the live bridge reads an off-tree "
+                             "one (split between the two neighbouring sizes) instead of snapped to the nearest, so the "
+                             "exploit is learned at every node a real raise of that size lands on (9 Oct: a 1.3-pot "
+                             "three-bet snapped to pot in training was read as 2x 40%% of the time live)")
     parser.add_argument("--table-threads", type=int, default=None,
                         help="threads for building the bucket tables (default: --threads); the build is "
                              "embarrassingly parallel and the tables are built once")
@@ -300,6 +305,9 @@ def _train_native(args, abstraction, projected):
     solver.set_count_visits(bool(args.count_visits))
     if args.opponent_mix and args.opponent_archetype:
         raise SystemExit("--opponent-mix and --opponent-archetype are alternatives; give one")
+    translate = {"translate": 1.0} if args.archetype_translation else {}
+    if args.archetype_translation and not (args.opponent_mix or args.opponent_archetype):
+        raise SystemExit("--archetype-translation needs --opponent-mix or --opponent-archetype")
     if args.opponent_mix:
         from chipzen.archetypes import PARAMS
         mix = []
@@ -307,13 +315,13 @@ def _train_native(args, abstraction, projected):
             name, _, share = entry.partition(":")
             if name not in PARAMS or not share:
                 raise SystemExit(f"--opponent-mix: NAME:SHARE with NAME one of {sorted(PARAMS)}, not {entry}")
-            mix.append(({k: float(v) for k, v in PARAMS[name].items()}, float(share)))
+            mix.append(({k: float(v) for k, v in PARAMS[name].items()} | translate, float(share)))
         solver.set_opponent_mix(mix, args.big_blind)
         print("restricted best response against a mix: " + ", ".join(f"{e.partition(':')[0]} {100 * float(e.partition(':')[2]):.0f}%"
                                                                       for e in args.opponent_mix) + " of opponent decisions", flush=True)
     if args.opponent_archetype:
         from chipzen.archetypes import PARAMS
-        solver.set_opponent_archetype({k: float(v) for k, v in PARAMS[args.opponent_archetype].items()}, args.big_blind,
+        solver.set_opponent_archetype({k: float(v) for k, v in PARAMS[args.opponent_archetype].items()} | translate, args.big_blind,
                                       args.opponent_share)
         print(f"restricted best response: the opponent plays the {args.opponent_archetype} archetype "
               f"{100 * args.opponent_share:.0f}% of the time", flush=True)
